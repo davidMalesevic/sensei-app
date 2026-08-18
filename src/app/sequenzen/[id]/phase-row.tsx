@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Pencil, Trash2, Check, X, ChevronDown, ChevronRight, ChevronUp, Paperclip } from "lucide-react";
-import { updatePhase, deletePhase } from "../actions";
+import { updatePhase, deletePhase, reorderPhasen } from "../actions";
 import { MaterialSection } from "@/components/material-section";
 
 type MaterialItem = {
@@ -44,12 +44,18 @@ const sozialformLabels: Record<string, string> = {
 
 export function PhaseRow({
   phase,
-  onMoveUp,
-  onMoveDown,
+  lektionsblockId,
+  phaseIds,
+  phaseIndex,
+  isFirst,
+  isLast,
 }: {
   phase: Phase;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
+  lektionsblockId: string;
+  phaseIds: string[];
+  phaseIndex: number;
+  isFirst: boolean;
+  isLast: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -165,25 +171,27 @@ export function PhaseRow({
           <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
         )}
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          {onMoveUp && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={onMoveUp}
-            >
-              <ChevronUp className="h-3 w-3" />
-            </Button>
+          {!isFirst && (
+            <form action={async () => {
+              const ids = [...phaseIds];
+              [ids[phaseIndex - 1], ids[phaseIndex]] = [ids[phaseIndex], ids[phaseIndex - 1]];
+              await reorderPhasen(lektionsblockId, ids);
+            }}>
+              <Button type="submit" variant="ghost" size="icon" className="h-6 w-6">
+                <ChevronUp className="h-3 w-3" />
+              </Button>
+            </form>
           )}
-          {onMoveDown && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={onMoveDown}
-            >
-              <ChevronDown className="h-3 w-3" />
-            </Button>
+          {!isLast && (
+            <form action={async () => {
+              const ids = [...phaseIds];
+              [ids[phaseIndex], ids[phaseIndex + 1]] = [ids[phaseIndex + 1], ids[phaseIndex]];
+              await reorderPhasen(lektionsblockId, ids);
+            }}>
+              <Button type="submit" variant="ghost" size="icon" className="h-6 w-6">
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </form>
           )}
           <Button
             variant="ghost"
