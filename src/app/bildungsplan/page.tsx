@@ -18,12 +18,20 @@ import {
 } from "@/components/ui/table";
 import { CheckCircle, Circle } from "lucide-react";
 import { getBildungsplanMitHK } from "../sequenzen/actions";
-import { getCoverageData } from "./actions";
+import { getCoverageData, getKlassenForFilter } from "./actions";
+import { KlasseFilter } from "./klasse-filter";
 
-export default async function BildungsplanPage() {
-  const [bildungsplaene, coverageData] = await Promise.all([
+export default async function BildungsplanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ klasse?: string }>;
+}) {
+  const { klasse: klasseId } = await searchParams;
+
+  const [bildungsplaene, coverageData, klassen] = await Promise.all([
     getBildungsplanMitHK(),
-    getCoverageData(),
+    getCoverageData(klasseId),
+    getKlassenForFilter(),
   ]);
 
   const allHKs = bildungsplaene.flatMap((bp) =>
@@ -31,6 +39,10 @@ export default async function BildungsplanPage() {
   );
   const totalHKs = allHKs.length;
   const coveredHKs = allHKs.filter((hk) => coverageData[hk.id]).length;
+
+  const selectedKlasse = klasseId
+    ? klassen.find((k) => k.id === klasseId)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -133,12 +145,16 @@ export default async function BildungsplanPage() {
         <TabsContent value="coverage" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>
-                Coverage-Matrix
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  {coveredHKs} von {totalHKs} Handlungskompetenzen abgedeckt
-                </span>
-              </CardTitle>
+              <div className="flex items-center justify-between gap-4">
+                <CardTitle>
+                  Coverage-Matrix
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    {coveredHKs} von {totalHKs} abgedeckt
+                    {selectedKlasse && ` (${selectedKlasse.bezeichnung})`}
+                  </span>
+                </CardTitle>
+                <KlasseFilter klassen={klassen} />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

@@ -4,13 +4,13 @@ import { db } from "@/db";
 import { sequenzHandlungskompetenz, sequenz } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-export async function getCoverageData() {
+export async function getCoverageData(klasseId?: string) {
   const zuordnungen = await db.query.sequenzHandlungskompetenz.findMany({
     with: {
       sequenz: {
-        columns: { id: true, titel: true },
+        columns: { id: true, titel: true, klasseId: true },
         with: {
-          klasse: { columns: { bezeichnung: true } },
+          klasse: { columns: { id: true, bezeichnung: true } },
           semester: { columns: { bezeichnung: true } },
         },
       },
@@ -20,12 +20,16 @@ export async function getCoverageData() {
     },
   });
 
+  const filtered = klasseId
+    ? zuordnungen.filter((z) => z.sequenz.klasse.id === klasseId)
+    : zuordnungen;
+
   const coverageMap = new Map<
     string,
     { hkId: string; kuerzel: string; sequenzen: { id: string; titel: string; klasse: string; semester: string }[] }
   >();
 
-  for (const z of zuordnungen) {
+  for (const z of filtered) {
     const hkId = z.handlungskompetenz.id;
     if (!coverageMap.has(hkId)) {
       coverageMap.set(hkId, {
@@ -43,4 +47,11 @@ export async function getCoverageData() {
   }
 
   return Object.fromEntries(coverageMap);
+}
+
+export async function getKlassenForFilter() {
+  return db.query.klasse.findMany({
+    orderBy: (k, { asc }) => [asc(k.bezeichnung)],
+    columns: { id: true, bezeichnung: true },
+  });
 }
