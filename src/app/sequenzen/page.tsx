@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, CheckCircle, AlertCircle, Pencil } from "lucide-react";
 import { getSequenzen } from "./actions";
+import { SequenzDeleteButton } from "./[id]/sequenz-delete-button";
 
 export default async function SequenzenPage() {
   const sequenzenList = await getSequenzen();
@@ -99,13 +100,16 @@ export default async function SequenzenPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      render={<Link href={`/sequenzen/${s.id}/bearbeiten`} />}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        render={<Link href={`/sequenzen/${s.id}/bearbeiten`} />}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <SequenzDeleteButton id={s.id} />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
