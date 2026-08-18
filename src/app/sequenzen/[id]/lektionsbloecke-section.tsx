@@ -37,8 +37,7 @@ import {
   createLektionsblock,
   deleteLektionsblock,
   createPhase,
-  updatePhase,
-  deletePhase,
+  reorderPhasen,
 } from "../actions";
 import { PhaseRow } from "./phase-row";
 import { MaterialSection } from "@/components/material-section";
@@ -333,8 +332,29 @@ function LektionsblockCard({
           </p>
         ) : (
           <div className="space-y-1">
-            {block.phasen.map((p) => (
-              <PhaseRow key={p.id} phase={p} />
+            {block.phasen.map((p, idx) => (
+              <PhaseRow
+                key={p.id}
+                phase={p}
+                onMoveUp={
+                  idx > 0
+                    ? async () => {
+                        const ids = block.phasen.map((ph) => ph.id);
+                        [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+                        await reorderPhasen(block.id, ids);
+                      }
+                    : undefined
+                }
+                onMoveDown={
+                  idx < block.phasen.length - 1
+                    ? async () => {
+                        const ids = block.phasen.map((ph) => ph.id);
+                        [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+                        await reorderPhasen(block.id, ids);
+                      }
+                    : undefined
+                }
+              />
             ))}
           </div>
         )}

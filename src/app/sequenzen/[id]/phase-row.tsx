@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Trash2, Check, X, ChevronDown, ChevronRight, Paperclip } from "lucide-react";
+import { Pencil, Trash2, Check, X, ChevronDown, ChevronRight, ChevronUp, Paperclip } from "lucide-react";
 import { updatePhase, deletePhase } from "../actions";
 import { MaterialSection } from "@/components/material-section";
 
@@ -42,7 +42,15 @@ const sozialformLabels: Record<string, string> = {
   Plenum: "Plenum",
 };
 
-export function PhaseRow({ phase }: { phase: Phase }) {
+export function PhaseRow({
+  phase,
+  onMoveUp,
+  onMoveDown,
+}: {
+  phase: Phase;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -156,7 +164,27 @@ export function PhaseRow({ phase }: { phase: Phase }) {
         {phase.materialien.length > 0 && (
           <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
         )}
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {onMoveUp && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onMoveUp}
+            >
+              <ChevronUp className="h-3 w-3" />
+            </Button>
+          )}
+          {onMoveDown && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onMoveDown}
+            >
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
