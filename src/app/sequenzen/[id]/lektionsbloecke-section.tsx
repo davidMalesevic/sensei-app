@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -264,6 +264,7 @@ function LektionsblockCard({
 }: {
   block: Lektionsblock;
 }) {
+  const [isPending, startTransition] = useTransition();
   const maxMinuten = getBlockDauer(block.blockTyp);
   const totalMinuten = block.phasen.reduce(
     (sum, p) => sum + (p.dauerMinuten ?? 0),
@@ -338,19 +339,23 @@ function LektionsblockCard({
                 phase={p}
                 onMoveUp={
                   idx > 0
-                    ? async () => {
-                        const ids = block.phasen.map((ph) => ph.id);
-                        [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
-                        await reorderPhasen(block.id, ids);
+                    ? () => {
+                        startTransition(async () => {
+                          const ids = block.phasen.map((ph) => ph.id);
+                          [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+                          await reorderPhasen(block.id, ids);
+                        });
                       }
                     : undefined
                 }
                 onMoveDown={
                   idx < block.phasen.length - 1
-                    ? async () => {
-                        const ids = block.phasen.map((ph) => ph.id);
-                        [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
-                        await reorderPhasen(block.id, ids);
+                    ? () => {
+                        startTransition(async () => {
+                          const ids = block.phasen.map((ph) => ph.id);
+                          [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+                          await reorderPhasen(block.id, ids);
+                        });
                       }
                     : undefined
                 }
