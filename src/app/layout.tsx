@@ -4,6 +4,7 @@ import "./globals.css";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSidebar } from "@/components/app-sidebar";
+import { FeedbackButton } from "@/components/feedback-button";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <main className="flex-1 p-8 lg:p-10">{children}</main>
             </SidebarInset>
           </SidebarProvider>
+          <FeedbackButton />
         </TooltipProvider>
       </body>
     </html>
