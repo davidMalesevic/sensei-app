@@ -154,6 +154,7 @@ export async function createSequenz(formData: FormData) {
       blockTyp: string;
       phasenmodellId: string;
       thema: string;
+      datum: string;
     }[] = JSON.parse(bloeckeJson);
 
     for (let i = 0; i < bloecke.length; i++) {
@@ -168,6 +169,7 @@ export async function createSequenz(formData: FormData) {
           blockTyp,
           phasenmodellId: pmId,
           thema: b.thema || null,
+          datum: b.datum || null,
           sortierung: i,
         })
         .returning({ id: lektionsblock.id });
