@@ -696,10 +696,11 @@ export async function importLektionsbloecke(
 
   const validSozialformen = ["EA", "PA", "GA", "Plenum"];
 
-  const existing = await db.query.lektionsblock.findMany({
-    where: eq(lektionsblock.sequenzId, sequenzId),
-  });
-  let nextSortierung = existing.length;
+  await db
+    .delete(lektionsblock)
+    .where(eq(lektionsblock.sequenzId, sequenzId));
+
+  let nextSortierung = 0;
 
   for (const block of data.lektionsbloecke) {
     const blockTyp =
