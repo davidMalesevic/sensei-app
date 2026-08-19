@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/accordion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import { PromptButton } from "./prompt-dialog";
 
 type SemesterOption = { id: string; bezeichnung: string };
 type KlasseOption = { id: string; bezeichnung: string; lehrjahr: number };
@@ -216,6 +217,21 @@ export function SequenzForm({
                 : "Wähle zuerst eine Klasse, um die Module zu filtern."}
             </p>
           </div>
+
+          {selectedKlasseId && selectedModulId && (
+            <div className="rounded-lg border border-dashed p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">KI-Unterrichtsplanung</p>
+                <p className="text-xs text-muted-foreground">
+                  Generiere einen Prompt mit Klassen-, Modul- und Kontextdaten für die KI-gestützte Planung.
+                </p>
+              </div>
+              <PromptButton
+                klasseId={selectedKlasseId}
+                modulId={selectedModulId}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="beschreibung">Beschreibung</Label>

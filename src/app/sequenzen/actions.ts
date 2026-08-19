@@ -438,3 +438,237 @@ export async function reorderLektionsbloecke(
 
   revalidatePath(`/sequenzen/${sequenzId}`);
 }
+
+export async function generatePrompt(
+  klasseId: string,
+  modulId: string | null,
+  excludeSequenzId?: string
+): Promise<string> {
+  const klasseData = await db.query.klasse.findFirst({
+    where: eq(klasse.id, klasseId),
+  });
+  if (!klasseData) throw new Error("Klasse nicht gefunden");
+
+  let modulData: { nummer: number; bezeichnung: string | null } | null = null;
+  if (modulId) {
+    const m = await db.query.modul.findFirst({
+      where: eq(modul.id, modulId),
+    });
+    modulData = m ?? null;
+  }
+
+  const modulNummer = modulData?.nummer ?? null;
+
+  let relevantHks: { kuerzel: string; bezeichnung: string }[] = [];
+  if (modulNummer) {
+    const allHks = await db.query.handlungskompetenz.findMany({
+      with: { bereich: true },
+    });
+    relevantHks = allHks
+      .filter((hk) =>
+        (hk.moduleBerufsfachschule ?? []).includes(modulNummer)
+      )
+      .map((hk) => ({ kuerzel: hk.kuerzel, bezeichnung: hk.bezeichnung }));
+  }
+
+  let uebergabenotizText: string | null = null;
+  if (modulId) {
+    const conditions = excludeSequenzId
+      ? await db.query.sequenz.findFirst({
+          where: (s, { and, eq: eqFn, ne }) =>
+            and(
+              eqFn(s.klasseId, klasseId),
+              eqFn(s.modulId, modulId),
+              ne(s.id, excludeSequenzId)
+            ),
+          orderBy: (s, { desc: d }) => [d(s.createdAt)],
+          columns: { uebergabenotiz: true, titel: true },
+        })
+      : await db.query.sequenz.findFirst({
+          where: (s, { and, eq: eqFn }) =>
+            and(eqFn(s.klasseId, klasseId), eqFn(s.modulId, modulId)),
+          orderBy: (s, { desc: d }) => [d(s.createdAt)],
+          columns: { uebergabenotiz: true, titel: true },
+        });
+
+    if (conditions?.uebergabenotiz) {
+      uebergabenotizText = `Aus Sequenz «${conditions.titel}»:\n${conditions.uebergabenotiz}`;
+    }
+  }
+
+  const phasenmodelleData = await db.query.phasenmodell.findMany({
+    with: {
+      phasenTemplates: {
+        orderBy: (pt, { asc: a }) => [a(pt.sortierung)],
+      },
+    },
+  });
+
+  let prompt = `Du bist ein erfahrener Berufsschuldidaktiker für den Beruf «${klasseData.beruf}» in der Schweiz.
+
+## Kontext
+
+**Klasse:** ${klasseData.bezeichnung} (${klasseData.beruf}, ${klasseData.lehrjahr}. Lehrjahr)`;
+
+  if (modulData) {
+    prompt += `\n**Modul:** ${modulData.nummer}${modulData.bezeichnung ? ` – ${modulData.bezeichnung}` : ""}`;
+  }
+
+  if (relevantHks.length > 0) {
+    prompt += `\n\n**Relevante Handlungskompetenzen:**`;
+    for (const hk of relevantHks) {
+      prompt += `\n- **${hk.kuerzel}**: ${hk.bezeichnung}`;
+    }
+  }
+
+  if (uebergabenotizText) {
+    prompt += `\n\n**Übergabenotiz der letzten Sequenz:**\n${uebergabenotizText}`;
+  }
+
+  prompt += `\n\n## Verfügbare Phasenmodelle`;
+  for (const pm of phasenmodelleData) {
+    prompt += `\n\n### ${pm.name}`;
+    if (pm.beschreibung) prompt += `\n${pm.beschreibung}`;
+    prompt += `\nPhasen:`;
+    for (const pt of pm.phasenTemplates) {
+      const optional = pt.optional ? " *(optional)*" : "";
+      prompt += `\n- **${pt.kuerzel} – ${pt.bezeichnung}**${optional}${pt.zweck ? `: ${pt.zweck}` : ""}`;
+      if (pt.methodenVorschlaege && (pt.methodenVorschlaege as string[]).length > 0) {
+        prompt += ` (z.B. ${(pt.methodenVorschlaege as string[]).join(", ")})`;
+      }
+    }
+  }
+
+  prompt += `
+
+## Aufgabe
+
+Erstelle eine detaillierte Unterrichtssequenz mit mehreren Lektionsblöcken. Jeder Block besteht aus didaktischen Phasen nach einem der oben genannten Phasenmodelle.
+
+Berücksichtige dabei:
+- Die Handlungskompetenzen des Moduls
+- Praxisbezug zum Lehrbetrieb
+- Abwechslungsreiche Sozialformen und Methoden
+- Zeitliche Passung (2er-Block = 90 Min., 4er-Block = 180 Min.)
+${uebergabenotizText ? "- Die Übergabenotiz der letzten Sequenz\n" : ""}
+## Ausgabeformat
+
+Gib den Plan als **JSON** im folgenden Format aus (nur das JSON, keine zusätzliche Erklärung):
+
+\`\`\`json
+{
+  "lektionsbloecke": [
+    {
+      "thema": "Titel des Blocks",
+      "blockTyp": "2er",
+      "phasen": [
+        {
+          "bezeichnung": "A – Ankommen und einstimmen",
+          "beschreibung": "Beschreibung der Aktivität",
+          "dauerMinuten": 10,
+          "sozialform": "Plenum",
+          "methode": "Lehrvortrag"
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+**Regeln für das JSON:**
+- \`blockTyp\`: \`"2er"\` (90 Min.) oder \`"4er"\` (180 Min.)
+- \`sozialform\`: \`"EA"\`, \`"PA"\`, \`"GA"\`, \`"Plenum"\` oder \`null\`
+- \`dauerMinuten\`: Ganzzahl in Minuten
+- Die Summe der Phasen-Dauern soll den Block nicht überschreiten
+- Phasen-Bezeichnungen sollen dem gewählten Phasenmodell folgen (z.B. «A – Ankommen und einstimmen»)`;
+
+  return prompt;
+}
+
+export async function importLektionsbloecke(
+  sequenzId: string,
+  jsonString: string
+): Promise<{ success: boolean; count: number; error?: string }> {
+  let cleaned = jsonString.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
+
+  let data: {
+    lektionsbloecke: {
+      thema?: string;
+      blockTyp?: string;
+      phasen?: {
+        bezeichnung: string;
+        beschreibung?: string | null;
+        dauerMinuten?: number | null;
+        sozialform?: string | null;
+        methode?: string | null;
+      }[];
+    }[];
+  };
+
+  try {
+    data = JSON.parse(cleaned);
+  } catch {
+    return { success: false, count: 0, error: "Ungültiges JSON-Format." };
+  }
+
+  if (!data.lektionsbloecke || !Array.isArray(data.lektionsbloecke)) {
+    return {
+      success: false,
+      count: 0,
+      error: 'JSON muss ein Objekt mit "lektionsbloecke"-Array sein.',
+    };
+  }
+
+  const validSozialformen = ["EA", "PA", "GA", "Plenum"];
+
+  const existing = await db.query.lektionsblock.findMany({
+    where: eq(lektionsblock.sequenzId, sequenzId),
+  });
+  let nextSortierung = existing.length;
+
+  for (const block of data.lektionsbloecke) {
+    const blockTyp =
+      block.blockTyp === "4er" ? "4er" : "2er";
+
+    const [created] = await db
+      .insert(lektionsblock)
+      .values({
+        sequenzId,
+        blockTyp,
+        thema: block.thema || null,
+        sortierung: nextSortierung++,
+      })
+      .returning({ id: lektionsblock.id });
+
+    if (block.phasen && Array.isArray(block.phasen)) {
+      const phasenValues = block.phasen.map((p, i) => {
+        const sf = p.sozialform && validSozialformen.includes(p.sozialform)
+          ? (p.sozialform as "EA" | "PA" | "GA" | "Plenum")
+          : null;
+        return {
+          lektionsblockId: created.id,
+          bezeichnung: p.bezeichnung || `Phase ${i + 1}`,
+          beschreibung: p.beschreibung || null,
+          dauerMinuten:
+            typeof p.dauerMinuten === "number" ? p.dauerMinuten : null,
+          sozialform: sf,
+          methode: p.methode || null,
+          sortierung: i,
+        };
+      });
+
+      if (phasenValues.length > 0) {
+        await db.insert(phase).values(phasenValues);
+      }
+    }
+  }
+
+  revalidatePath(`/sequenzen/${sequenzId}`);
+  revalidatePath("/");
+
+  return { success: true, count: data.lektionsbloecke.length };
+}

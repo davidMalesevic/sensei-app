@@ -41,6 +41,8 @@ import {
 } from "../actions";
 import { PhaseRow } from "./phase-row";
 import { MaterialSection } from "@/components/material-section";
+import { PromptButton } from "../prompt-dialog";
+import { ImportDialog } from "./import-dialog";
 
 type MaterialItem = {
   id: string;
@@ -385,10 +387,14 @@ function LektionsblockCard({
 
 export function LektionsbloeckeSection({
   sequenzId,
+  klasseId,
+  modulId,
   lektionsbloecke,
   phasenmodelle,
 }: {
   sequenzId: string;
+  klasseId: string;
+  modulId: string | null;
   lektionsbloecke: Lektionsblock[];
   phasenmodelle: Phasenmodell[];
 }) {
@@ -396,7 +402,15 @@ export function LektionsbloeckeSection({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Lektionsblöcke</h2>
-        <NewBlockDialog sequenzId={sequenzId} phasenmodelle={phasenmodelle} />
+        <div className="flex gap-2">
+          <PromptButton
+            klasseId={klasseId}
+            modulId={modulId}
+            excludeSequenzId={sequenzId}
+          />
+          <ImportDialog sequenzId={sequenzId} />
+          <NewBlockDialog sequenzId={sequenzId} phasenmodelle={phasenmodelle} />
+        </div>
       </div>
 
       {lektionsbloecke.length === 0 ? (

@@ -125,6 +125,8 @@ export default async function SequenzDetailPage({
 
       <LektionsbloeckeSection
         sequenzId={id}
+        klasseId={seq.klasseId}
+        modulId={seq.modulId}
         lektionsbloecke={seq.lektionsbloecke}
         phasenmodelle={phasenmodelle}
       />
