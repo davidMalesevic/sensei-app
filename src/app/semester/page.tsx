@@ -11,9 +11,33 @@ import {
 import { Plus, Pencil } from "lucide-react";
 import { getSemester } from "./actions";
 import { SemesterDeleteButton } from "./semester-delete-button";
+import { SortableTableHead } from "@/components/sortable-table-head";
 
-export default async function SemesterPage() {
+const sortColumns: Record<string, (a: any, b: any) => number> = {
+  bezeichnung: (a, b) => a.bezeichnung.localeCompare(b.bezeichnung, "de-CH"),
+  start: (a, b) =>
+    new Date(a.startDatum).getTime() - new Date(b.startDatum).getTime(),
+  ende: (a, b) =>
+    new Date(a.endDatum).getTime() - new Date(b.endDatum).getTime(),
+};
+
+export default async function SemesterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const semesterList = await getSemester();
+  const { sort, order } = await searchParams;
+
+  const sortKey = typeof sort === "string" ? sort : undefined;
+  const sortOrder = order === "desc" ? "desc" : "asc";
+  const compareFn = sortKey ? sortColumns[sortKey] : undefined;
+
+  const sorted = compareFn
+    ? [...semesterList].sort((a, b) =>
+        sortOrder === "desc" ? compareFn(b, a) : compareFn(a, b)
+      )
+    : semesterList;
 
   return (
     <div className="space-y-6">
@@ -49,14 +73,16 @@ export default async function SemesterPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Bezeichnung</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>Ende</TableHead>
+                <SortableTableHead column="bezeichnung">
+                  Bezeichnung
+                </SortableTableHead>
+                <SortableTableHead column="start">Start</SortableTableHead>
+                <SortableTableHead column="ende">Ende</SortableTableHead>
                 <TableHead className="w-[100px]">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {semesterList.map((s) => (
+              {sorted.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">
                     <Link

@@ -11,9 +11,31 @@ import {
 import { Plus, Pencil } from "lucide-react";
 import { getKlassen } from "./actions";
 import { KlasseDeleteButton } from "./klasse-delete-button";
+import { SortableTableHead } from "@/components/sortable-table-head";
 
-export default async function KlassenPage() {
+const sortColumns: Record<string, (a: any, b: any) => number> = {
+  bezeichnung: (a, b) => a.bezeichnung.localeCompare(b.bezeichnung, "de-CH"),
+  beruf: (a, b) => a.beruf.localeCompare(b.beruf, "de-CH"),
+  lehrjahr: (a, b) => a.lehrjahr - b.lehrjahr,
+};
+
+export default async function KlassenPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const klassenList = await getKlassen();
+  const { sort, order } = await searchParams;
+
+  const sortKey = typeof sort === "string" ? sort : undefined;
+  const sortOrder = order === "desc" ? "desc" : "asc";
+  const compareFn = sortKey ? sortColumns[sortKey] : undefined;
+
+  const sorted = compareFn
+    ? [...klassenList].sort((a, b) =>
+        sortOrder === "desc" ? compareFn(b, a) : compareFn(a, b)
+      )
+    : klassenList;
 
   return (
     <div className="space-y-6">
@@ -49,14 +71,18 @@ export default async function KlassenPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Bezeichnung</TableHead>
-                <TableHead>Beruf</TableHead>
-                <TableHead>Lehrjahr</TableHead>
+                <SortableTableHead column="bezeichnung">
+                  Bezeichnung
+                </SortableTableHead>
+                <SortableTableHead column="beruf">Beruf</SortableTableHead>
+                <SortableTableHead column="lehrjahr">
+                  Lehrjahr
+                </SortableTableHead>
                 <TableHead className="w-[100px]">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {klassenList.map((k) => (
+              {sorted.map((k) => (
                 <TableRow key={k.id}>
                   <TableCell className="font-medium">
                     {k.bezeichnung}
