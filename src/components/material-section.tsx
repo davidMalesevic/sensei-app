@@ -113,7 +113,7 @@ function AddMaterialDialog({
 
           <div className="space-y-2">
             <Label htmlFor="typ">Typ</Label>
-            <Select name="typ" defaultValue="dokument" required>
+            <Select name="typ" defaultValue="dokument" required items={typLabels}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

@@ -65,6 +65,7 @@ export function KlasseForm({
             <Select
               name="lehrjahr"
               defaultValue={String(klasse?.lehrjahr ?? 1)}
+              items={{ "1": "1. Lehrjahr", "2": "2. Lehrjahr", "3": "3. Lehrjahr", "4": "4. Lehrjahr" }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Lehrjahr wählen" />

@@ -29,6 +29,12 @@ export function KlasseFilter({ klassen }: { klassen: Klasse[] }) {
           router.push(`/bildungsplan?klasse=${val}`);
         }
       }}
+      items={{
+        alle: "Alle Klassen",
+        ...Object.fromEntries(
+          klassen.map((k) => [k.id, k.bezeichnung])
+        ),
+      }}
     >
       <SelectTrigger className="w-48">
         <SelectValue placeholder="Alle Klassen" />

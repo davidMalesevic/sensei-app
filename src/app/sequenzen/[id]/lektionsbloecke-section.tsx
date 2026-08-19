@@ -130,7 +130,7 @@ function NewBlockDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="blockTyp">Blocktyp</Label>
-              <Select name="blockTyp" defaultValue="2er" required>
+              <Select name="blockTyp" defaultValue="2er" required items={{ "2er": "2er-Block (90 Min.)", "4er": "4er-Block (180 Min.)" }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -149,7 +149,19 @@ function NewBlockDialog({
 
           <div className="space-y-2">
             <Label htmlFor="phasenmodellId">Phasenmodell</Label>
-            <Select name="phasenmodellId" defaultValue="frei">
+            <Select
+              name="phasenmodellId"
+              defaultValue="frei"
+              items={{
+                frei: "Frei (kein Modell)",
+                ...Object.fromEntries(
+                  phasenmodelle.map((pm) => [
+                    pm.id,
+                    `${pm.name} (${pm.phasenTemplates.length} Phasen)`,
+                  ])
+                ),
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Kein Modell (frei)" />
               </SelectTrigger>
@@ -226,7 +238,7 @@ function NewPhaseDialog({ lektionsblockId }: { lektionsblockId: string }) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="sozialform">Sozialform</Label>
-              <Select name="sozialform" defaultValue="keine">
+              <Select name="sozialform" defaultValue="keine" items={{ keine: "–", EA: "EA (Einzelarbeit)", PA: "PA (Partnerarbeit)", GA: "GA (Gruppenarbeit)", Plenum: "Plenum" }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Wählen..." />
                 </SelectTrigger>

@@ -124,6 +124,9 @@ export function SequenzForm({
                 name="semesterId"
                 defaultValue={sequenzData?.semesterId}
                 required
+                items={Object.fromEntries(
+                  semesterList.map((s) => [s.id, s.bezeichnung])
+                )}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Semester wählen" />
@@ -144,6 +147,9 @@ export function SequenzForm({
                 name="klasseId"
                 defaultValue={sequenzData?.klasseId}
                 required
+                items={Object.fromEntries(
+                  klassenList.map((k) => [k.id, k.bezeichnung])
+                )}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Klasse wählen" />
@@ -167,6 +173,15 @@ export function SequenzForm({
               onValueChange={(val) =>
                 setSelectedModulId(val === "kein_modul" || !val ? "" : val)
               }
+              items={{
+                kein_modul: "– Kein Modul –",
+                ...Object.fromEntries(
+                  moduleList.map((m) => [
+                    m.id,
+                    `Modul ${m.nummer}${m.bezeichnung ? ` – ${m.bezeichnung}` : ""}`,
+                  ])
+                ),
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Modul wählen" />

@@ -90,7 +90,7 @@ export function KalenderEintraegeSection({
 
               <div className="space-y-2">
                 <Label htmlFor="typ">Typ</Label>
-                <Select name="typ" defaultValue="feiertag" required>
+                <Select name="typ" defaultValue="feiertag" required items={typLabels}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

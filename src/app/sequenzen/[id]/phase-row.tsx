@@ -87,7 +87,7 @@ export function PhaseRow({
               placeholder="Min."
               className="h-8 w-20"
             />
-            <Select name="sozialform" defaultValue={phase.sozialform ?? "keine"}>
+            <Select name="sozialform" defaultValue={phase.sozialform ?? "keine"} items={{ keine: "–", EA: "EA", PA: "PA", GA: "GA", Plenum: "Plenum" }}>
               <SelectTrigger className="h-8 w-28">
                 <SelectValue placeholder="Form" />
               </SelectTrigger>
