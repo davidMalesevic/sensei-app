@@ -35,6 +35,36 @@ Diese Version nutzt `@base-ui/react` statt Radix. Häufige Fehlerquellen:
   <Accordion type="multiple" defaultValue={[...]}>
   ```
 - **Select mit leeren Werten**: Leere Strings `""` als `value` vermeiden. Stattdessen Sentinel-Werte verwenden (z.B. `"keine"`, `"frei"`) und in Server Actions abfangen.
+- **Select Label-Auflösung**: `SelectValue` kann Labels nur auflösen, wenn `Select.Root` eine `items`-Prop erhält. Ohne `items` zeigt `SelectValue` den rohen `value` an (z.B. UUIDs). Immer `items` als `Record<string, string>` mitgeben:
+  ```tsx
+  // ✅ Richtig — items-Prop für Label-Auflösung
+  <Select items={{ uuid1: "Label 1", uuid2: "Label 2" }}>
+    <SelectTrigger><SelectValue placeholder="Wählen..." /></SelectTrigger>
+    ...
+  </Select>
+  
+  // Für dynamische Listen:
+  <Select items={Object.fromEntries(list.map(x => [x.id, x.name]))}>
+  
+  // ❌ Falsch — ohne items zeigt SelectValue den rohen value (UUID)
+  <Select>
+    <SelectTrigger><SelectValue placeholder="Wählen..." /></SelectTrigger>
+    ...
+  </Select>
+  ```
+
+## Server Actions — wichtige Patterns
+
+- **Form Actions statt onClick**: Server Actions aus `onClick`-Handlern lösen kein zuverlässiges `revalidatePath` aus. Stattdessen Form Actions verwenden (`<form action={...}>`), die automatisch `startTransition` nutzen.
+  ```tsx
+  // ✅ Richtig — Form Action
+  <form action={async () => { await serverAction(); }}>
+    <Button type="submit">Aktion</Button>
+  </form>
+  
+  // ❌ Unzuverlässig — onClick mit Server Action
+  <Button onClick={async () => { await serverAction(); }}>Aktion</Button>
+  ```
 
 ## Datenbank
 
