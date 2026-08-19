@@ -147,11 +147,11 @@ export default async function SequenzDruckenPage({
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-1 pr-2 font-medium">Phase</th>
-                        <th className="py-1 pr-2 font-medium w-16">Dauer</th>
-                        <th className="py-1 pr-2 font-medium w-24">
+                        <th className="py-1 pr-2 font-medium w-24">Dauer</th>
+                        <th className="py-1 pr-2 font-medium w-32">
                           Sozialform
                         </th>
-                        <th className="py-1 pr-2 font-medium w-32">Methode</th>
+                        <th className="py-1 pr-2 font-medium w-56">Methode</th>
                       </tr>
                     </thead>
                     <tbody>
