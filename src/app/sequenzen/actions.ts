@@ -193,12 +193,14 @@ export async function updateSequenz(id: string, formData: FormData) {
 
   revalidatePath("/sequenzen");
   revalidatePath(`/sequenzen/${id}`);
+  revalidatePath("/");
   redirect(`/sequenzen/${id}`);
 }
 
 export async function deleteSequenz(id: string) {
   await db.delete(sequenz).where(eq(sequenz.id, id));
   revalidatePath("/sequenzen");
+  revalidatePath("/");
   redirect("/sequenzen");
 }
 
@@ -252,6 +254,7 @@ export async function createLektionsblock(formData: FormData) {
   }
 
   revalidatePath(`/sequenzen/${sequenzId}`);
+  revalidatePath("/");
 }
 
 export async function updateLektionsblock(id: string, formData: FormData) {
@@ -274,6 +277,7 @@ export async function updateLektionsblock(id: string, formData: FormData) {
   });
   if (block) {
     revalidatePath(`/sequenzen/${block.sequenzId}`);
+    revalidatePath("/");
   }
 }
 
@@ -286,6 +290,7 @@ export async function deleteLektionsblock(id: string) {
 
   if (block) {
     revalidatePath(`/sequenzen/${block.sequenzId}`);
+    revalidatePath("/");
   }
 }
 
