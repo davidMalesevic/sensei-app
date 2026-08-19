@@ -299,19 +299,28 @@ async function seed() {
   // ─── Module (Berufsfachschule) ───
   console.log("Seeding Module...");
 
-  const moduleNummern = [
-    119, 134, 162, 164, 168, 213, 218, 219, 220, 224,
-    229, 230, 231, 235, 254, 278, 279, 282, 319, 325,
-    331, 332, 333, 336, 337, 338, 339, 349, 367, 370,
-    371, 372, 373, 374, 375, 377, 378, 379, 392, 394,
-    395, 396,
+  const moduleMitLehrjahr: { nummer: number; lehrjahr: number }[] = [
+    // 1. Lehrjahr
+    ...[119, 134, 162, 224, 230, 254, 319, 331, 332, 370, 374, 375].map(
+      (nr) => ({ nummer: nr, lehrjahr: 1 })
+    ),
+    // 2. Lehrjahr
+    ...[164, 213, 218, 231, 278, 279, 325, 333, 336, 338, 349, 367, 371, 377, 395].map(
+      (nr) => ({ nummer: nr, lehrjahr: 2 })
+    ),
+    // 3. Lehrjahr
+    ...[168, 219, 220, 282, 337, 372, 378, 392, 394].map(
+      (nr) => ({ nummer: nr, lehrjahr: 3 })
+    ),
+    // 4. Lehrjahr
+    ...[229, 235, 339, 373, 379, 396].map(
+      (nr) => ({ nummer: nr, lehrjahr: 4 })
+    ),
   ];
 
-  await db.insert(modul).values(
-    moduleNummern.map((nr) => ({ nummer: nr }))
-  );
+  await db.insert(modul).values(moduleMitLehrjahr);
 
-  console.log(`${moduleNummern.length} Module geseedet.`);
+  console.log(`${moduleMitLehrjahr.length} Module geseedet.`);
 
   // ─── Phasenmodell AVIVA ───
   console.log("Seeding Phasenmodelle...");

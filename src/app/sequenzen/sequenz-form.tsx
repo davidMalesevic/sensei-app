@@ -23,8 +23,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 
 type SemesterOption = { id: string; bezeichnung: string };
-type KlasseOption = { id: string; bezeichnung: string };
-type ModulOption = { id: string; nummer: number; bezeichnung: string | null };
+type KlasseOption = { id: string; bezeichnung: string; lehrjahr: number };
+type ModulOption = { id: string; nummer: number; bezeichnung: string | null; lehrjahr: number | null };
 type HK = {
   id: string;
   kuerzel: string;
@@ -70,11 +70,21 @@ export function SequenzForm({
   bildungsplaene: BildungsplanData[];
 }) {
   const isEdit = !!sequenzData?.id;
+  const [selectedKlasseId, setSelectedKlasseId] = useState<string>(
+    sequenzData?.klasseId ?? ""
+  );
   const [selectedModulId, setSelectedModulId] = useState<string>(
     sequenzData?.modulId ?? ""
   );
 
-  const selectedModul = moduleList.find((m) => m.id === selectedModulId);
+  const selectedKlasse = klassenList.find((k) => k.id === selectedKlasseId);
+  const filteredModules = selectedKlasse
+    ? moduleList.filter(
+        (m) => m.lehrjahr === null || m.lehrjahr === selectedKlasse.lehrjahr
+      )
+    : moduleList;
+
+  const selectedModul = filteredModules.find((m) => m.id === selectedModulId);
   const selectedModulNummer = selectedModul?.nummer;
 
   const filteredBildungsplaene = bildungsplaene
@@ -145,7 +155,11 @@ export function SequenzForm({
               <Label htmlFor="klasseId">Klasse</Label>
               <Select
                 name="klasseId"
-                defaultValue={sequenzData?.klasseId}
+                value={selectedKlasseId || undefined}
+                onValueChange={(val) => {
+                  setSelectedKlasseId(val ?? "");
+                  setSelectedModulId("");
+                }}
                 required
                 items={Object.fromEntries(
                   klassenList.map((k) => [k.id, k.bezeichnung])
@@ -176,7 +190,7 @@ export function SequenzForm({
               items={{
                 kein_modul: "– Kein Modul –",
                 ...Object.fromEntries(
-                  moduleList.map((m) => [
+                  filteredModules.map((m) => [
                     m.id,
                     `Modul ${m.nummer}${m.bezeichnung ? ` – ${m.bezeichnung}` : ""}`,
                   ])
@@ -188,7 +202,7 @@ export function SequenzForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="kein_modul">– Kein Modul –</SelectItem>
-                {moduleList.map((m) => (
+                {filteredModules.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     Modul {m.nummer}
                     {m.bezeichnung ? ` – ${m.bezeichnung}` : ""}
@@ -197,7 +211,9 @@ export function SequenzForm({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Die Handlungskompetenzen werden nach dem gewählten Modul gefiltert.
+              {selectedKlasseId
+                ? "Module gefiltert nach Lehrjahr der gewählten Klasse."
+                : "Wähle zuerst eine Klasse, um die Module zu filtern."}
             </p>
           </div>
 

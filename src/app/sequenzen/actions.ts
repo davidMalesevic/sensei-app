@@ -77,6 +77,7 @@ export async function getSemesterList() {
 
 export async function getKlassenList() {
   return db.query.klasse.findMany({
+    columns: { id: true, bezeichnung: true, lehrjahr: true },
     orderBy: (k, { asc }) => [asc(k.bezeichnung)],
   });
 }

@@ -199,6 +199,7 @@ export const modul = pgTable("modul", {
   id: uuid("id").defaultRandom().primaryKey(),
   nummer: integer("nummer").notNull().unique(),
   bezeichnung: varchar("bezeichnung", { length: 300 }),
+  lehrjahr: integer("lehrjahr"),
 });
 
 export const modulRelations = relations(modul, ({ many }) => ({
