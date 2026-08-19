@@ -5,15 +5,17 @@ import {
   getKlassenList,
   getBildungsplanMitHK,
   getModule,
+  getPhasenmodelle,
 } from "../actions";
 
 export default async function NeueSequenzPage() {
-  const [semesterList, klassenList, bildungsplaene, moduleList] =
+  const [semesterList, klassenList, bildungsplaene, moduleList, phasenmodelle] =
     await Promise.all([
       getSemesterList(),
       getKlassenList(),
       getBildungsplanMitHK(),
       getModule(),
+      getPhasenmodelle(),
     ]);
 
   return (
@@ -30,6 +32,7 @@ export default async function NeueSequenzPage() {
         klassenList={klassenList}
         moduleList={moduleList}
         bildungsplaene={bildungsplaene}
+        phasenmodelle={phasenmodelle}
       />
     </div>
   );

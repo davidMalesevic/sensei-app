@@ -12,15 +12,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, Copy, Check, Loader2 } from "lucide-react";
 import { generatePrompt } from "./actions";
 
+export type BlockConfigForPrompt = {
+  blockTyp: string;
+  phasenmodellName: string | null;
+  thema: string;
+};
+
 export function PromptButton({
   klasseId,
   modulId,
   excludeSequenzId,
+  blockConfigs,
   disabled,
 }: {
   klasseId: string;
   modulId: string | null;
   excludeSequenzId?: string;
+  blockConfigs?: BlockConfigForPrompt[];
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,7 +38,12 @@ export function PromptButton({
 
   function handleGenerate() {
     startTransition(async () => {
-      const result = await generatePrompt(klasseId, modulId, excludeSequenzId);
+      const result = await generatePrompt(
+        klasseId,
+        modulId,
+        excludeSequenzId,
+        blockConfigs
+      );
       setPrompt(result);
       setOpen(true);
     });

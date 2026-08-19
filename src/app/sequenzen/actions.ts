@@ -122,6 +122,7 @@ export async function createSequenz(formData: FormData) {
   const modulIdRaw = formData.get("modulId") as string;
   const modulId = modulIdRaw && modulIdRaw !== "kein_modul" ? modulIdRaw : null;
   const hkIds = formData.getAll("handlungskompetenzen") as string[];
+  const bloeckeJson = formData.get("bloecke") as string;
 
   if (!titel || !semesterId || !klasseId) {
     throw new Error("Titel, Semester und Klasse sind erforderlich.");
@@ -146,6 +147,51 @@ export async function createSequenz(formData: FormData) {
         handlungskompetenzId: hkId,
       }))
     );
+  }
+
+  if (bloeckeJson) {
+    const bloecke: {
+      blockTyp: string;
+      phasenmodellId: string;
+      thema: string;
+    }[] = JSON.parse(bloeckeJson);
+
+    for (let i = 0; i < bloecke.length; i++) {
+      const b = bloecke[i];
+      const blockTyp = b.blockTyp === "4er" ? "4er" as const : "2er" as const;
+      const pmId = b.phasenmodellId === "frei" ? null : b.phasenmodellId;
+
+      const [createdBlock] = await db
+        .insert(lektionsblock)
+        .values({
+          sequenzId: created.id,
+          blockTyp,
+          phasenmodellId: pmId,
+          thema: b.thema || null,
+          sortierung: i,
+        })
+        .returning({ id: lektionsblock.id });
+
+      if (pmId) {
+        const templates = await db.query.phasenTemplate.findMany({
+          where: eq(phasenTemplate.phasenmodellId, pmId),
+          orderBy: (pt, { asc: a }) => [a(pt.sortierung)],
+        });
+
+        const phasenValues = templates
+          .filter((t) => !t.optional)
+          .map((t, j) => ({
+            lektionsblockId: createdBlock.id,
+            bezeichnung: `${t.kuerzel} – ${t.bezeichnung}`,
+            beschreibung: t.zweck,
+            sortierung: j,
+          }));
+
+        if (phasenValues.length > 0) {
+          await db.insert(phase).values(phasenValues);
+        }
+      }
+    }
   }
 
   revalidatePath("/sequenzen");
@@ -442,7 +488,8 @@ export async function reorderLektionsbloecke(
 export async function generatePrompt(
   klasseId: string,
   modulId: string | null,
-  excludeSequenzId?: string
+  excludeSequenzId?: string,
+  blockConfigs?: { blockTyp: string; phasenmodellName: string | null; thema: string }[]
 ): Promise<string> {
   const klasseData = await db.query.klasse.findFirst({
     where: eq(klasse.id, klasseId),
@@ -525,8 +572,19 @@ export async function generatePrompt(
     prompt += `\n\n**Übergabenotiz der letzten Sequenz:**\n${uebergabenotizText}`;
   }
 
-  prompt += `\n\n## Verfügbare Phasenmodelle`;
-  for (const pm of phasenmodelleData) {
+  const usedModelNames = new Set(
+    (blockConfigs ?? [])
+      .map((b) => b.phasenmodellName)
+      .filter((n): n is string => n !== null)
+  );
+
+  const relevantModelle =
+    blockConfigs && blockConfigs.length > 0 && usedModelNames.size > 0
+      ? phasenmodelleData.filter((pm) => usedModelNames.has(pm.name))
+      : phasenmodelleData;
+
+  prompt += `\n\n## Phasenmodelle`;
+  for (const pm of relevantModelle) {
     prompt += `\n\n### ${pm.name}`;
     if (pm.beschreibung) prompt += `\n${pm.beschreibung}`;
     prompt += `\nPhasen:`;
@@ -539,11 +597,24 @@ export async function generatePrompt(
     }
   }
 
+  if (blockConfigs && blockConfigs.length > 0) {
+    prompt += `\n\n## Geplante Lektionsblöcke\n`;
+    prompt += `Die Sequenz besteht aus **${blockConfigs.length} Lektionsblöcken** in genau dieser Reihenfolge:\n`;
+    blockConfigs.forEach((b, i) => {
+      const dauer = b.blockTyp === "4er" ? "180" : "90";
+      const modell = b.phasenmodellName ?? "Frei (kein Modell)";
+      const thema = b.thema ? ` – Thema: «${b.thema}»` : "";
+      prompt += `\n${i + 1}. **${b.blockTyp}-Block** (${dauer} Min.) mit **${modell}**${thema}`;
+    });
+  }
+
   prompt += `
 
 ## Aufgabe
 
-Erstelle eine detaillierte Unterrichtssequenz mit mehreren Lektionsblöcken. Jeder Block besteht aus didaktischen Phasen nach einem der oben genannten Phasenmodelle.
+${blockConfigs && blockConfigs.length > 0
+    ? "Erstelle für die oben definierten Lektionsblöcke detaillierte Phasen mit Aktivitäten, Sozialformen und Methoden. Halte dich an die Reihenfolge und die zugewiesenen Phasenmodelle."
+    : "Erstelle eine detaillierte Unterrichtssequenz mit mehreren Lektionsblöcken. Jeder Block besteht aus didaktischen Phasen nach einem der oben genannten Phasenmodelle."}
 
 Berücksichtige dabei:
 - Die Handlungskompetenzen des Moduls
@@ -580,7 +651,7 @@ Gib den Plan als **JSON** im folgenden Format aus (nur das JSON, keine zusätzli
 - \`sozialform\`: \`"EA"\`, \`"PA"\`, \`"GA"\`, \`"Plenum"\` oder \`null\`
 - \`dauerMinuten\`: Ganzzahl in Minuten
 - Die Summe der Phasen-Dauern soll den Block nicht überschreiten
-- Phasen-Bezeichnungen sollen dem gewählten Phasenmodell folgen (z.B. «A – Ankommen und einstimmen»)`;
+- Phasen-Bezeichnungen sollen dem gewählten Phasenmodell folgen (z.B. «A – Ankommen und einstimmen»)${blockConfigs && blockConfigs.length > 0 ? `\n- Genau **${blockConfigs.length} Lektionsblöcke** in der oben definierten Reihenfolge` : ""}`;
 
   return prompt;
 }
