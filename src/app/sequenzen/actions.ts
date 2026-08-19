@@ -121,6 +121,8 @@ export async function createSequenz(formData: FormData) {
   const klasseId = formData.get("klasseId") as string;
   const modulIdRaw = formData.get("modulId") as string;
   const modulId = modulIdRaw && modulIdRaw !== "kein_modul" ? modulIdRaw : null;
+  const startDatum = formData.get("startDatum") as string;
+  const endDatum = formData.get("endDatum") as string;
   const hkIds = formData.getAll("handlungskompetenzen") as string[];
   const bloeckeJson = formData.get("bloecke") as string;
 
@@ -137,6 +139,8 @@ export async function createSequenz(formData: FormData) {
       semesterId,
       klasseId,
       modulId,
+      startDatum: startDatum || null,
+      endDatum: endDatum || null,
     })
     .returning({ id: sequenz.id });
 
@@ -154,7 +158,6 @@ export async function createSequenz(formData: FormData) {
       blockTyp: string;
       phasenmodellId: string;
       thema: string;
-      datum: string;
     }[] = JSON.parse(bloeckeJson);
 
     for (let i = 0; i < bloecke.length; i++) {
@@ -169,7 +172,6 @@ export async function createSequenz(formData: FormData) {
           blockTyp,
           phasenmodellId: pmId,
           thema: b.thema || null,
-          datum: b.datum || null,
           sortierung: i,
         })
         .returning({ id: lektionsblock.id });
@@ -208,6 +210,8 @@ export async function updateSequenz(id: string, formData: FormData) {
   const klasseId = formData.get("klasseId") as string;
   const modulIdRaw = formData.get("modulId") as string;
   const modulId = modulIdRaw && modulIdRaw !== "kein_modul" ? modulIdRaw : null;
+  const startDatum = formData.get("startDatum") as string;
+  const endDatum = formData.get("endDatum") as string;
   const hkIds = formData.getAll("handlungskompetenzen") as string[];
 
   if (!titel || !semesterId || !klasseId) {
@@ -223,6 +227,8 @@ export async function updateSequenz(id: string, formData: FormData) {
       semesterId,
       klasseId,
       modulId,
+      startDatum: startDatum || null,
+      endDatum: endDatum || null,
       updatedAt: new Date(),
     })
     .where(eq(sequenz.id, id));

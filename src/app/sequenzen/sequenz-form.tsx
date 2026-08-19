@@ -55,7 +55,6 @@ type BlockConfig = {
   blockTyp: "2er" | "4er";
   phasenmodellId: string;
   thema: string;
-  datum: string;
 };
 
 type SequenzData = {
@@ -66,6 +65,8 @@ type SequenzData = {
   semesterId: string;
   klasseId: string;
   modulId: string | null;
+  startDatum: string | null;
+  endDatum: string | null;
   selectedHKIds: string[];
 };
 
@@ -128,7 +129,7 @@ export function SequenzForm({
   function addBlock() {
     setBlocks((prev) => [
       ...prev,
-      { blockTyp: "2er", phasenmodellId: "frei", thema: "", datum: "" },
+      { blockTyp: "2er", phasenmodellId: "frei", thema: "" },
     ]);
   }
 
@@ -220,6 +221,27 @@ export function SequenzForm({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="startDatum">Startdatum</Label>
+              <Input
+                id="startDatum"
+                name="startDatum"
+                type="date"
+                defaultValue={sequenzData?.startDatum ?? ""}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="endDatum">Enddatum</Label>
+              <Input
+                id="endDatum"
+                name="endDatum"
+                type="date"
+                defaultValue={sequenzData?.endDatum ?? ""}
+              />
             </div>
           </div>
 
@@ -326,7 +348,7 @@ export function SequenzForm({
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <Select
                           value={block.blockTyp}
                           onValueChange={(val) =>
@@ -379,14 +401,6 @@ export function SequenzForm({
                           value={block.thema}
                           onChange={(e) =>
                             updateBlock(i, "thema", e.target.value)
-                          }
-                        />
-                        <Input
-                          type="date"
-                          className="text-xs"
-                          value={block.datum}
-                          onChange={(e) =>
-                            updateBlock(i, "datum", e.target.value)
                           }
                         />
                       </div>
