@@ -46,7 +46,6 @@ export default async function SequenzBearbeitenPage({
           klasseId: seq.klasseId,
           modulId: seq.modulId,
           startDatum: seq.startDatum,
-          endDatum: seq.endDatum,
           selectedHKIds: seq.handlungskompetenzen.map(
             (shk) => shk.handlungskompetenzId
           ),

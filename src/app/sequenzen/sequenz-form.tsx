@@ -66,7 +66,6 @@ type SequenzData = {
   klasseId: string;
   modulId: string | null;
   startDatum: string | null;
-  endDatum: string | null;
   selectedHKIds: string[];
 };
 
@@ -224,25 +223,14 @@ export function SequenzForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startDatum">Startdatum</Label>
-              <Input
-                id="startDatum"
-                name="startDatum"
-                type="date"
-                defaultValue={sequenzData?.startDatum ?? ""}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDatum">Enddatum</Label>
-              <Input
-                id="endDatum"
-                name="endDatum"
-                type="date"
-                defaultValue={sequenzData?.endDatum ?? ""}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="datum">Datum</Label>
+            <Input
+              id="datum"
+              name="datum"
+              type="date"
+              defaultValue={sequenzData?.startDatum ?? ""}
+            />
           </div>
 
           <div className="space-y-2">
