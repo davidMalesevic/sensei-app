@@ -220,6 +220,7 @@ export const sequenz = pgTable("sequenz", {
   titel: varchar("titel", { length: 300 }).notNull(),
   beschreibung: text("beschreibung"),
   praxisbezug: text("praxisbezug"),
+  uebergabenotiz: text("uebergabenotiz"),
   startDatum: date("start_datum"),
   endDatum: date("end_datum"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

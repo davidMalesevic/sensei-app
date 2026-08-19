@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pencil, Briefcase, Paperclip, Printer } from "lucide-react";
-import { getSequenzById, getPhasenmodelle } from "../actions";
+import { getSequenzById, getPhasenmodelle, getVorherigeNotiz, saveUebergabenotiz } from "../actions";
 import { SequenzDeleteButton } from "./sequenz-delete-button";
 import { LektionsbloeckeSection } from "./lektionsbloecke-section";
 import { MaterialSection } from "@/components/material-section";
+import { UebergabenotizSection } from "./uebergabenotiz-section";
 
 export default async function SequenzDetailPage({
   params,
@@ -21,6 +22,9 @@ export default async function SequenzDetailPage({
   ]);
 
   if (!seq) return notFound();
+
+  const vorherigeNotiz = await getVorherigeNotiz(seq.klasseId, seq.modulId, id);
+  const saveNotizAction = saveUebergabenotiz.bind(null, id);
 
   return (
     <div className="space-y-6">
@@ -123,6 +127,13 @@ export default async function SequenzDetailPage({
         sequenzId={id}
         lektionsbloecke={seq.lektionsbloecke}
         phasenmodelle={phasenmodelle}
+      />
+
+      <UebergabenotizSection
+        sequenzId={id}
+        currentNotiz={seq.uebergabenotiz}
+        vorherigeNotiz={vorherigeNotiz}
+        saveAction={saveNotizAction}
       />
     </div>
   );

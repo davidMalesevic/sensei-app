@@ -8,7 +8,10 @@ async function main() {
   const { eq } = await import("drizzle-orm");
 
   await db.execute(sql`ALTER TABLE modul ADD COLUMN IF NOT EXISTS lehrjahr integer`);
-  console.log("Column lehrjahr added");
+  console.log("Column modul.lehrjahr added");
+
+  await db.execute(sql`ALTER TABLE sequenz ADD COLUMN IF NOT EXISTS uebergabenotiz text`);
+  console.log("Column sequenz.uebergabenotiz added");
 
   const mapping: Record<number, number> = {
     119: 1, 134: 1, 162: 1, 224: 1, 230: 1, 254: 1, 319: 1, 331: 1, 332: 1, 370: 1, 374: 1, 375: 1,

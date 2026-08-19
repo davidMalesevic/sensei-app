@@ -198,6 +198,35 @@ export async function updateSequenz(id: string, formData: FormData) {
   redirect(`/sequenzen/${id}`);
 }
 
+export async function saveUebergabenotiz(id: string, formData: FormData) {
+  const notiz = formData.get("uebergabenotiz") as string;
+
+  await db
+    .update(sequenz)
+    .set({ uebergabenotiz: notiz || null, updatedAt: new Date() })
+    .where(eq(sequenz.id, id));
+
+  revalidatePath(`/sequenzen/${id}`);
+}
+
+export async function getVorherigeNotiz(klasseId: string, modulId: string | null, currentSequenzId: string) {
+  if (!modulId) return null;
+
+  const vorherige = await db.query.sequenz.findFirst({
+    where: (s, { and, eq, ne }) =>
+      and(
+        eq(s.klasseId, klasseId),
+        eq(s.modulId, modulId),
+        ne(s.id, currentSequenzId)
+      ),
+    orderBy: (s, { desc }) => [desc(s.createdAt)],
+    columns: { uebergabenotiz: true, titel: true },
+  });
+
+  if (!vorherige?.uebergabenotiz) return null;
+  return { notiz: vorherige.uebergabenotiz, titel: vorherige.titel };
+}
+
 export async function deleteSequenz(id: string) {
   await db.delete(sequenz).where(eq(sequenz.id, id));
   revalidatePath("/sequenzen");
