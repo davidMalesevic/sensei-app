@@ -2,9 +2,9 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 async function main() {
-  const { db } = await import("../src/db/index.ts");
+  const { db } = await import("../src/db/index");
   const { sql } = await import("drizzle-orm");
-  const { modul } = await import("../src/db/schema.ts");
+  const { modul } = await import("../src/db/schema");
   const { eq } = await import("drizzle-orm");
 
   await db.execute(sql`ALTER TABLE modul ADD COLUMN IF NOT EXISTS lehrjahr integer`);
