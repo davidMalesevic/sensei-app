@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { sequenzHandlungskompetenz, sequenz } from "@/db/schema";
+import { sequenzHandlungskompetenz, sequenz, modul } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function getCoverageData(klasseId?: string) {
@@ -54,4 +54,11 @@ export async function getKlassenForFilter() {
     orderBy: (k, { asc }) => [asc(k.bezeichnung)],
     columns: { id: true, bezeichnung: true },
   });
+}
+
+export async function getModulLookup(): Promise<Record<number, string | null>> {
+  const module = await db.query.modul.findMany({
+    columns: { nummer: true, bezeichnung: true },
+  });
+  return Object.fromEntries(module.map((m) => [m.nummer, m.bezeichnung]));
 }

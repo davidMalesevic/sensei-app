@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { CheckCircle, Circle } from "lucide-react";
 import { getBildungsplanMitHK } from "../sequenzen/actions";
-import { getCoverageData, getKlassenForFilter } from "./actions";
+import { getCoverageData, getKlassenForFilter, getModulLookup } from "./actions";
 import { KlasseFilter } from "./klasse-filter";
 
 export default async function BildungsplanPage({
@@ -28,10 +28,11 @@ export default async function BildungsplanPage({
 }) {
   const { klasse: klasseId } = await searchParams;
 
-  const [bildungsplaene, coverageData, klassen] = await Promise.all([
+  const [bildungsplaene, coverageData, klassen, modulLookup] = await Promise.all([
     getBildungsplanMitHK(),
     getCoverageData(klasseId),
     getKlassenForFilter(),
+    getModulLookup(),
   ]);
 
   const allHKs = bildungsplaene.flatMap((bp) =>
@@ -91,48 +92,56 @@ export default async function BildungsplanPage({
                         </span>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="space-y-3">
+                        <Accordion>
                           {hkb.handlungskompetenzen.map((hk) => (
-                            <div
-                              key={hk.id}
-                              className="border rounded p-3 space-y-1"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <span className="font-medium">
-                                    {hk.kuerzel}
-                                  </span>{" "}
-                                  – {hk.bezeichnung}
+                            <AccordionItem key={hk.id} value={hk.id}>
+                              <AccordionTrigger className="text-sm py-2">
+                                <span className="text-left">
+                                  <strong>{hk.kuerzel}</strong> –{" "}
+                                  {hk.bezeichnung}
+                                </span>
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="space-y-3 pl-2">
+                                  {hk.beschreibung && (
+                                    <div>
+                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                        Beschreibung / Lernziele
+                                      </h4>
+                                      <p className="text-sm whitespace-pre-wrap">
+                                        {hk.beschreibung}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {hk.moduleBerufsfachschule &&
+                                    (hk.moduleBerufsfachschule as number[])
+                                      .length > 0 && (
+                                      <div>
+                                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                          Module Berufsfachschule
+                                        </h4>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {(
+                                            hk.moduleBerufsfachschule as number[]
+                                          ).map((mod) => (
+                                            <Badge
+                                              key={mod}
+                                              variant="outline"
+                                              className="text-xs"
+                                            >
+                                              {mod}
+                                              {modulLookup[mod] &&
+                                                ` – ${modulLookup[mod]}`}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                 </div>
-                              </div>
-                              {hk.beschreibung && (
-                                <p className="text-sm text-muted-foreground">
-                                  {hk.beschreibung}
-                                </p>
-                              )}
-                              {hk.moduleBerufsfachschule &&
-                                (hk.moduleBerufsfachschule as number[])
-                                  .length > 0 && (
-                                  <div className="flex items-center gap-1 pt-1">
-                                    <span className="text-xs text-muted-foreground">
-                                      Module:
-                                    </span>
-                                    {(
-                                      hk.moduleBerufsfachschule as number[]
-                                    ).map((mod) => (
-                                      <Badge
-                                        key={mod}
-                                        variant="outline"
-                                        className="text-xs"
-                                      >
-                                        {mod}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                            </div>
+                              </AccordionContent>
+                            </AccordionItem>
                           ))}
-                        </div>
+                        </Accordion>
                       </AccordionContent>
                     </AccordionItem>
                   ))}
