@@ -10,13 +10,22 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 const MAX_SIZE = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
-  const formData = await request.formData();
+  let formData;
+  try {
+    formData = await request.formData();
+  } catch (err) {
+    console.error("[upload] formData parse error:", err);
+    return NextResponse.json({ error: "FormData ungültig." }, { status: 400 });
+  }
   const file = formData.get("file") as File | null;
   const modulId = formData.get("modulId") as string | null;
   const titel = formData.get("titel") as string | null;
   const typ = (formData.get("typ") as string) || "dokument";
 
+  console.log(`[upload] file=${file?.name} size=${file?.size} modulId=${modulId}`);
+
   if (!file || !modulId) {
+    console.error("[upload] missing file or modulId");
     return NextResponse.json(
       { error: "Datei und Modul sind erforderlich." },
       { status: 400 }
@@ -51,5 +60,6 @@ export async function POST(request: NextRequest) {
     })
     .returning({ id: material.id });
 
+  console.log(`[upload] success: ${titel} -> ${relativePath}`);
   return NextResponse.json({ id: created.id, dateiPfad: relativePath });
 }

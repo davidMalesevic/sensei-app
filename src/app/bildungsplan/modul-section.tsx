@@ -92,18 +92,26 @@ function DropZone({
   async function uploadFiles(prepared: { name: string; blob: Blob }[]) {
     if (prepared.length === 0) return;
 
+    console.log(`[upload] starting ${prepared.length} files:`, prepared.map(p => `${p.name} (${p.blob.size}b)`));
     setIsUploading(true);
     setUploadCount(prepared.length);
     try {
-      for (const { name, blob } of prepared) {
+      for (let i = 0; i < prepared.length; i++) {
+        const { name, blob } = prepared[i];
+        console.log(`[upload] ${i + 1}/${prepared.length}: ${name} (${blob.size}b)`);
         const formData = new FormData();
         formData.append("file", blob, name);
         formData.append("modulId", modulId);
         formData.append("titel", name);
         formData.append("typ", "dokument");
-        await fetch("/api/upload", { method: "POST", body: formData });
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        const json = await res.json();
+        console.log(`[upload] ${i + 1}/${prepared.length} response:`, res.status, json);
       }
+      console.log("[upload] all done, refreshing");
       router.refresh();
+    } catch (err) {
+      console.error("[upload] error:", err);
     } finally {
       setIsUploading(false);
       setUploadCount(0);
