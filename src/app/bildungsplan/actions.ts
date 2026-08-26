@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { sequenzHandlungskompetenz, sequenz, modul } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { sequenzHandlungskompetenz, sequenz, modul, material } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 
 export async function getCoverageData(klasseId?: string) {
   const zuordnungen = await db.query.sequenzHandlungskompetenz.findMany({
@@ -61,4 +61,17 @@ export async function getModulLookup(): Promise<Record<number, string | null>> {
     columns: { nummer: true, bezeichnung: true },
   });
   return Object.fromEntries(module.map((m) => [m.nummer, m.bezeichnung]));
+}
+
+export async function getModuleGrouped() {
+  const module = await db.query.modul.findMany({
+    orderBy: (m, { asc }) => [asc(m.nummer)],
+    with: {
+      materialien: {
+        columns: { id: true, titel: true, typ: true, dateiPfad: true, url: true, notiz: true, createdAt: true },
+        orderBy: (m, { desc }) => [desc(m.createdAt)],
+      },
+    },
+  });
+  return module;
 }

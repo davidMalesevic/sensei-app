@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/table";
 import { CheckCircle, Circle } from "lucide-react";
 import { getBildungsplanMitHK } from "../sequenzen/actions";
-import { getCoverageData, getKlassenForFilter, getModulLookup } from "./actions";
+import { getCoverageData, getKlassenForFilter, getModulLookup, getModuleGrouped } from "./actions";
 import { KlasseFilter } from "./klasse-filter";
+import { ModulSection } from "./modul-section";
 
 export default async function BildungsplanPage({
   searchParams,
@@ -28,11 +29,12 @@ export default async function BildungsplanPage({
 }) {
   const { klasse: klasseId } = await searchParams;
 
-  const [bildungsplaene, coverageData, klassen, modulLookup] = await Promise.all([
+  const [bildungsplaene, coverageData, klassen, modulLookup, moduleGrouped] = await Promise.all([
     getBildungsplanMitHK(),
     getCoverageData(klasseId),
     getKlassenForFilter(),
     getModulLookup(),
+    getModuleGrouped(),
   ]);
 
   const allHKs = bildungsplaene.flatMap((bp) =>
@@ -58,6 +60,9 @@ export default async function BildungsplanPage({
       <Tabs defaultValue="uebersicht">
         <TabsList>
           <TabsTrigger value="uebersicht">Übersicht</TabsTrigger>
+          <TabsTrigger value="module">
+            Module ({moduleGrouped.length})
+          </TabsTrigger>
           <TabsTrigger value="coverage">
             Coverage-Matrix ({coveredHKs}/{totalHKs})
           </TabsTrigger>
@@ -149,6 +154,10 @@ export default async function BildungsplanPage({
               </CardContent>
             </Card>
           ))}
+        </TabsContent>
+
+        <TabsContent value="module" className="mt-4">
+          <ModulSection module={moduleGrouped} />
         </TabsContent>
 
         <TabsContent value="coverage" className="mt-4">

@@ -72,6 +72,7 @@ export async function createMaterial(formData: FormData) {
   });
 
   if (sequenzId) revalidatePath(`/sequenzen/${sequenzId}`);
+  if (modulId) revalidatePath("/bildungsplan");
   revalidatePath("/materialien");
 }
 
@@ -92,5 +93,6 @@ export async function deleteMaterial(id: string) {
   }
 
   if (mat?.sequenzId) revalidatePath(`/sequenzen/${mat.sequenzId}`);
+  if (mat?.modulId) revalidatePath("/bildungsplan");
   revalidatePath("/materialien");
 }

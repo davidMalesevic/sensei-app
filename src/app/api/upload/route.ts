@@ -4,6 +4,7 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
 import { material } from "@/db/schema";
+import { revalidatePath } from "next/cache";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest) {
       dateiPfad: relativePath,
     })
     .returning({ id: material.id });
+
+  revalidatePath("/bildungsplan");
+  revalidatePath("/materialien");
 
   return NextResponse.json({ id: created.id, dateiPfad: relativePath });
 }
