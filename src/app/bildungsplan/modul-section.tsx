@@ -87,18 +87,17 @@ function DropZone({
   const [uploadCount, setUploadCount] = useState(0);
   const dragCounter = useState(0);
 
-  async function uploadFiles(files: FileList | File[]) {
-    const fileArray = Array.from(files);
-    if (fileArray.length === 0) return;
+  async function uploadFiles(prepared: { name: string; blob: Blob }[]) {
+    if (prepared.length === 0) return;
 
     setIsUploading(true);
-    setUploadCount(fileArray.length);
+    setUploadCount(prepared.length);
     try {
-      for (const file of fileArray) {
+      for (const { name, blob } of prepared) {
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", blob, name);
         formData.append("modulId", modulId);
-        formData.append("titel", file.name);
+        formData.append("titel", name);
         formData.append("typ", "dokument");
         await fetch("/api/upload", { method: "POST", body: formData });
       }
@@ -107,6 +106,15 @@ function DropZone({
       setIsUploading(false);
       setUploadCount(0);
     }
+  }
+
+  function prepareFiles(files: FileList | File[]) {
+    const prepared: { name: string; blob: Blob }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      prepared.push({ name: f.name, blob: new Blob([f], { type: f.type }) });
+    }
+    return prepared;
   }
 
   function handleDragEnter(e: React.DragEvent) {
@@ -137,7 +145,8 @@ function DropZone({
     setIsDragging(false);
     dragCounter[1](0);
     if (e.dataTransfer.files?.length) {
-      uploadFiles(e.dataTransfer.files);
+      const prepared = prepareFiles(e.dataTransfer.files);
+      uploadFiles(prepared);
     }
   }
 
@@ -181,7 +190,10 @@ function DropZone({
             className="hidden"
             multiple
             onChange={(e) => {
-              if (e.target.files?.length) uploadFiles(e.target.files);
+              if (e.target.files?.length) {
+                const prepared = prepareFiles(e.target.files);
+                uploadFiles(prepared);
+              }
             }}
             disabled={isUploading}
           />
