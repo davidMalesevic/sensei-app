@@ -4,6 +4,13 @@
 # ready  
 
 # done
+* \~\~**Cockpit-Nachschärfung nach Interview-Abgleich** (KI-Bausteine als Anker im Cockpit, Prüfungen im Kontext-Hub, Smartlearn-Parser, Übergabenotiz-Vorschlag)\~\~ (2026-08-26)
+  * Smartlearn-HTML-Export wird deterministisch gelesen (`src/lib/smartlearn.ts`) — Modularbeitsplan inkl. «LB:»-Leistungsbeurteilungen, ohne KI
+  * KI-Bausteine erzeugen jetzt **Anker** (Tabelle `sequenz_anker`) im Cockpit statt Phasentabellen in der Planung
+  * Kontext-Hub zeigt anstehende Beurteilungen aus Semesterkalender (`typ=pruefung`) **und** Modulplan-LB
+  * Aufgaben behalten Original-Bezeichnung («Aufgabe 1 / Teilaufgabe 2») + Referenz springt bei PDFs via `#page=N`
+  * Übergabenotiz: KI-Vorschlag als Entwurf, «(?)» markiert Unsicherheiten, Speichern bleibt manuell
+  * Migration: `npx tsx src/db/migrate-anker.ts`
 * \~\~**Sensei-Cockpit** (Datenmodell, Modulplan-Import, Kontext-Hub, KI-Material-Extraktion, Context-Header, Cockpit-Ansicht, Ansichts-Toggle, KI-Bausteine)\~\~ (2026-08-26)
   * Neue Tabellen: `modular_plan`, `material_task`, zusätzlich `pendenz` (für Klassen-Pendenzen im Kontext-Hub) und Spalte `sequenz.cockpit_notiz` (freie Cockpit-Notizen). Migration: `npx tsx src/db/migrate-cockpit.ts`
   * Modulplan-Import: JSON direkt, HTML/PDF/Freitext per KI normalisiert (`unpdf` für PDF-Text). UI unter Bildungsplan → Module → Modul wählen

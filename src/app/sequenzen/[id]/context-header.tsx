@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Plus,
   Trash2,
+  GraduationCap,
 } from "lucide-react";
 import type { SequenzKontext } from "@/lib/kontext";
 import {
@@ -185,10 +186,50 @@ export function ContextHeader({
           wert={zielText}
           badge={kontext.modulLabel ?? undefined}
         >
-          {ziel?.beschreibung && (
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {ziel.beschreibung}
-            </p>
+          <div className="space-y-1">
+            {ziel?.lbHinweis && (
+              <p className="text-sm font-medium">
+                Leistungsbeurteilung: {ziel.lbHinweis}
+              </p>
+            )}
+            {ziel?.beschreibung && (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {ziel.beschreibung}
+              </p>
+            )}
+          </div>
+        </Abschnitt>
+
+        <Abschnitt
+          icon={GraduationCap}
+          label="Beurteilungen"
+          badge={
+            kontext.pruefungen.length > 0
+              ? String(kontext.pruefungen.length)
+              : undefined
+          }
+          wert={
+            kontext.pruefungen.length > 0
+              ? kontext.pruefungen
+                  .map((p) => `${p.wann}: ${p.bezeichnung}`)
+                  .join(" · ")
+              : "Keine anstehenden Beurteilungen"
+          }
+        >
+          {kontext.pruefungen.length > 0 && (
+            <ul className="space-y-1">
+              {kontext.pruefungen.map((p, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <Badge variant="outline" className="shrink-0 text-xs">
+                    {p.wann}
+                  </Badge>
+                  <span className="flex-1 min-w-0">{p.bezeichnung}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {p.quelle === "kalender" ? "Kalender" : "Modulplan"}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </Abschnitt>
 

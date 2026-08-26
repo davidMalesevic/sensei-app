@@ -135,14 +135,24 @@ Gib ausschliesslich JSON in diesem Format zurueck (keine Erklaerung):
 ` + "```json" + `
 {
   "aufgaben": [
-    { "text": "Was die Lernenden tun muessen", "referenz": "Folie 4" }
+    {
+      "bezeichnung": "Aufgabe 1 / Teilaufgabe 2",
+      "text": "Was die Lernenden tun muessen",
+      "referenz": "Seite 4"
+    }
   ]
 }
 ` + "```" + `
 
 Regeln:
-- "text" ist eine handlungsorientierte Formulierung in der Du-Form oder im Infinitiv.
-- "referenz" nennt Fundstelle (z.B. "Folie 4", "Seite 2", "Kapitel 3") oder ist null.
+- "bezeichnung" ist die **Original-Bezeichnung aus dem Material**, exakt so wie
+  sie dort steht (z.B. "Aufgabe 1", "Aufgabe 1 / Teilaufgabe 2", "Auftrag 4.2").
+  Erfinde keine eigene Nummerierung. Gibt es keine, setze null.
+- "text" fasst den Auftrag knapp zusammen und behaelt die Fachbegriffe des
+  Materials bei. Formuliere nicht um, wenn das Material bereits klar ist.
+- "referenz" nennt die Fundstelle zum Nachschlagen: "Seite 4", "Folie 12",
+  ein Kapitel oder der Code des Lern- und Arbeitsauftrags (z.B.
+  "LA_119_1000_Kommunikationstechniken"). Sonst null.
 - Gibt es keine Aufgaben, liefere ein leeres Array.
 
 Material:
@@ -209,7 +219,7 @@ export async function extractMaterialTasks(
   if (!ai.success) return { success: false, count: 0, error: ai.error };
 
   const parsed = parseJsonFromAI<{
-    aufgaben?: { text?: unknown; referenz?: unknown }[];
+    aufgaben?: { bezeichnung?: unknown; text?: unknown; referenz?: unknown }[];
   }>(ai.content);
 
   if (!parsed || !Array.isArray(parsed.aufgaben)) {
@@ -223,6 +233,10 @@ export async function extractMaterialTasks(
   const values = parsed.aufgaben
     .map((a, i) => ({
       materialId,
+      bezeichnung:
+        typeof a.bezeichnung === "string" && a.bezeichnung.trim()
+          ? a.bezeichnung.trim().slice(0, 200)
+          : null,
       taskText: typeof a.text === "string" ? a.text.trim() : "",
       referenz:
         typeof a.referenz === "string" && a.referenz.trim()

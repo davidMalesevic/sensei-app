@@ -44,7 +44,6 @@ import { MaterialSection } from "@/components/material-section";
 import { PromptButton } from "../prompt-dialog";
 import { ImportDialog } from "./import-dialog";
 import { GenerateButton } from "../generate-dialog";
-import { BausteinButtons } from "./baustein-buttons";
 
 type MaterialItem = {
   id: string;
@@ -418,7 +417,6 @@ export function LektionsbloeckeSection({
             excludeSequenzId={sequenzId}
           />
           <ImportDialog sequenzId={sequenzId} />
-          <BausteinButtons sequenzId={sequenzId} />
           <NewBlockDialog sequenzId={sequenzId} phasenmodelle={phasenmodelle} />
         </div>
       </div>

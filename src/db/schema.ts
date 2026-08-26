@@ -247,6 +247,7 @@ export const sequenzRelations = relations(sequenz, ({ one, many }) => ({
   lektionsbloecke: many(lektionsblock),
   handlungskompetenzen: many(sequenzHandlungskompetenz),
   materialien: many(material),
+  anker: many(sequenzAnker),
 }));
 
 // ─── Sequenz ↔ Handlungskompetenz (n:m) ───
@@ -385,6 +386,8 @@ export const modularPlan = pgTable("modular_plan", {
   kw: integer("kw").notNull(),
   ziel: varchar("ziel", { length: 300 }).notNull(),
   beschreibung: text("beschreibung"),
+  /** Leistungsbeurteilung dieser Woche (aus «LB:»-Zeilen des Modulplans). */
+  lbHinweis: text("lb_hinweis"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -402,6 +405,8 @@ export const materialTask = pgTable("material_task", {
   materialId: uuid("material_id")
     .references(() => material.id, { onDelete: "cascade" })
     .notNull(),
+  /** Original-Bezeichnung aus der Quelle, z.B. «Aufgabe 1 / Teilaufgabe 2». */
+  bezeichnung: varchar("bezeichnung", { length: 200 }),
   taskText: text("task_text").notNull(),
   referenz: varchar("referenz", { length: 200 }),
   sortierung: integer("sortierung").default(0).notNull(),
@@ -431,5 +436,35 @@ export const pendenzRelations = relations(pendenz, ({ one }) => ({
   klasse: one(klasse, {
     fields: [pendenz.klasseId],
     references: [klasse.id],
+  }),
+}));
+
+// ─── Sequenz-Anker (Cockpit: Orientierungspunkte statt Phasenplan) ───
+
+export const ankerArtEnum = pgEnum("anker_art", [
+  "einstieg",
+  "repetition",
+  "aufgabe",
+  "referenz",
+  "modus",
+  "notiz",
+]);
+
+export const sequenzAnker = pgTable("sequenz_anker", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sequenzId: uuid("sequenz_id")
+    .references(() => sequenz.id, { onDelete: "cascade" })
+    .notNull(),
+  art: ankerArtEnum("art").notNull(),
+  titel: varchar("titel", { length: 300 }).notNull(),
+  text: text("text"),
+  sortierung: integer("sortierung").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sequenzAnkerRelations = relations(sequenzAnker, ({ one }) => ({
+  sequenz: one(sequenz, {
+    fields: [sequenzAnker.sequenzId],
+    references: [sequenz.id],
   }),
 }));

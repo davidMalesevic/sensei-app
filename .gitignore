@@ -42,3 +42,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code local settings (Server-IP / Key-Pfad)
+.claude/settings.local.json

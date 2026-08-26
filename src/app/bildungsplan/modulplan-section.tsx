@@ -34,6 +34,7 @@ export type ModularPlanEintragItem = {
   kw: number;
   ziel: string;
   beschreibung: string | null;
+  lbHinweis: string | null;
 };
 
 function ImportDialog({ modulId }: { modulId: string }) {
@@ -59,7 +60,10 @@ function ImportDialog({ modulId }: { modulId: string }) {
     if (result.success) {
       setFeedback({
         ok: true,
-        message: `${result.count} Wochenziele importiert.`,
+        message:
+          result.quelle === "smartlearn"
+            ? `${result.count} Wochenziele direkt aus dem Smartlearn-Export gelesen.`
+            : `${result.count} Wochenziele importiert.`,
       });
       setText("");
       router.refresh();
@@ -84,7 +88,10 @@ function ImportDialog({ modulId }: { modulId: string }) {
       if (res.ok && data.success) {
         setFeedback({
           ok: true,
-          message: `${data.count} Wochenziele aus «${file.name}» importiert.`,
+          message:
+            data.quelle === "smartlearn"
+              ? `${data.count} Wochenziele direkt aus dem Smartlearn-Export «${file.name}» gelesen.`
+              : `${data.count} Wochenziele aus «${file.name}» importiert.`,
         });
         router.refresh();
       } else {
@@ -119,8 +126,9 @@ function ImportDialog({ modulId }: { modulId: string }) {
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Bestehende Wochenziele dieses Moduls werden ersetzt. JSON wird direkt
-          übernommen, HTML und PDF werden per KI in Wochenziele übersetzt.
+          Bestehende Wochenziele dieses Moduls werden ersetzt. Smartlearn-Exporte
+          und JSON werden direkt gelesen, übriges HTML und PDF per KI in
+          Wochenziele übersetzt.
         </p>
 
         <div className="space-y-2">
@@ -233,6 +241,15 @@ function NeuerEintragDialog({ modulId }: { modulId: string }) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="lbHinweis">Leistungsbeurteilung</Label>
+            <Input
+              id="lbHinweis"
+              name="lbHinweis"
+              placeholder="z.B. Abgabe Transferarbeit Kommunikation"
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="beschreibung">Beschreibung</Label>
             <Textarea
               id="beschreibung"
@@ -298,6 +315,11 @@ export function ModulplanSection({
               </Badge>
               <div className="flex-1 min-w-0">
                 <p className="font-medium">{e.ziel}</p>
+                {e.lbHinweis && (
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    LB: {e.lbHinweis}
+                  </p>
+                )}
                 {e.beschreibung && (
                   <p className="text-xs text-muted-foreground whitespace-pre-wrap">
                     {e.beschreibung}

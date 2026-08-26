@@ -16,12 +16,15 @@ import {
   modul,
   material,
   modularPlan,
+  sequenzAnker,
+  materialTask,
 } from "@/db/schema";
 import { eq, asc, desc, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { htmlToText } from "@/lib/dokument-text";
+import { isSmartlearnExport, parseModularbeitsplan } from "@/lib/smartlearn";
 
 export async function getSequenzen() {
   return db.query.sequenz.findMany({
@@ -959,6 +962,7 @@ type ModularPlanEintrag = {
   kw: number;
   ziel: string;
   beschreibung?: string | null;
+  lbHinweis?: string | null;
 };
 
 /** Normalisiert beliebige Eingabeformen auf `{ kw, ziel, beschreibung }`. */
@@ -993,6 +997,7 @@ function normalisiereEintraege(raw: unknown): ModularPlanEintrag[] {
     if (!Number.isFinite(kw) || kw < 1 || kw > 53 || !ziel) continue;
 
     const beschreibungRaw = o.beschreibung ?? o.inhalt ?? o.details;
+    const lbRaw = o.lbHinweis ?? o.lb ?? o.leistungsbeurteilung ?? o.pruefung;
     eintraege.push({
       kw,
       ziel: ziel.slice(0, 300),
@@ -1000,6 +1005,8 @@ function normalisiereEintraege(raw: unknown): ModularPlanEintrag[] {
         typeof beschreibungRaw === "string" && beschreibungRaw.trim()
           ? beschreibungRaw.trim()
           : null,
+      lbHinweis:
+        typeof lbRaw === "string" && lbRaw.trim() ? lbRaw.trim() : null,
     });
   }
 
@@ -1037,7 +1044,12 @@ export async function importModularPlan(
   modulId: string,
   input: string,
   options?: { ersetzen?: boolean }
-): Promise<{ success: boolean; count: number; error?: string }> {
+): Promise<{
+  success: boolean;
+  count: number;
+  quelle?: "json" | "smartlearn" | "ki";
+  error?: string;
+}> {
   const roh = input?.trim();
   if (!modulId) {
     return { success: false, count: 0, error: "Kein Modul gewaehlt." };
@@ -1047,13 +1059,24 @@ export async function importModularPlan(
   }
 
   let eintraege: ModularPlanEintrag[] = [];
+  let quelle: "json" | "smartlearn" | "ki" = "json";
 
   // 1. Direktes JSON (auch in Markdown-Fences)
   const direkt = parseJsonFromAI<unknown>(roh);
   if (direkt) eintraege = normalisiereEintraege(direkt);
 
-  // 2. HTML/Freitext -> KI-Normalisierung
+  // 2. Smartlearn-Export deterministisch lesen (keine KI nötig)
   if (eintraege.length === 0) {
+    const text = /<[a-z][\s\S]*>/i.test(roh) ? htmlToText(roh) : roh;
+    if (isSmartlearnExport(text)) {
+      eintraege = parseModularbeitsplan(text);
+      if (eintraege.length > 0) quelle = "smartlearn";
+    }
+  }
+
+  // 3. Sonstiges HTML/Freitext -> KI-Normalisierung
+  if (eintraege.length === 0) {
+    quelle = "ki";
     const text = /<[a-z][\s\S]*>/i.test(roh) ? htmlToText(roh) : roh;
     if (!text.trim()) {
       return { success: false, count: 0, error: "Kein lesbarer Inhalt gefunden." };
@@ -1094,13 +1117,14 @@ export async function importModularPlan(
       kw: e.kw,
       ziel: e.ziel,
       beschreibung: e.beschreibung ?? null,
+      lbHinweis: e.lbHinweis ?? null,
     }))
   );
 
   revalidatePath("/bildungsplan");
   revalidatePath("/sequenzen");
 
-  return { success: true, count: eintraege.length };
+  return { success: true, count: eintraege.length, quelle };
 }
 
 export async function createModularPlanEintrag(formData: FormData) {
@@ -1118,6 +1142,7 @@ export async function createModularPlanEintrag(formData: FormData) {
     kw,
     ziel,
     beschreibung: beschreibung || null,
+    lbHinweis: (formData.get("lbHinweis") as string) || null,
   });
 
   revalidatePath("/bildungsplan");
@@ -1139,31 +1164,27 @@ const BAUSTEIN_LABELS: Record<BausteinArt, string> = {
 
 const BAUSTEIN_TEMPLATES: Record<
   BausteinArt,
-  { auftrag: string; dauerHinweis: string; blockTyp: "2er" | "4er" }
+  { auftrag: string; umfang: string }
 > = {
   einstieg: {
     auftrag: `Entwirf einen **aktivierenden Einstieg** in das Thema.
 
 Der Einstieg soll:
-- die Lernenden innerhalb der ersten Minuten kognitiv aktivieren (nicht Lehrervortrag),
+- die Lernenden in den ersten Minuten kognitiv aktivieren (kein Lehrervortrag),
 - an Vorwissen und an den Berufsalltag im Lehrbetrieb anknuepfen,
 - eine Frage, ein Problem oder einen Widerspruch aufwerfen, der neugierig macht,
-- in eine Sicherung bzw. Ueberleitung zum eigentlichen Inhalt muenden.`,
-    dauerHinweis:
-      "Der Baustein umfasst 15-25 Minuten und besteht aus 2-4 kurzen Phasen.",
-    blockTyp: "2er",
+- in eine kurze Sicherung bzw. Ueberleitung zum Inhalt muenden.`,
+    umfang: "15-25 Minuten.",
   },
   repetition: {
     auftrag: `Entwirf einen **Repetitionsblock** zur Sicherung des bisher Gelernten.
 
 Der Repetitionsblock soll:
-- die zentralen Inhalte der bisherigen Lektionen aktiv abrufen lassen (Retrieval Practice),
-- verschiedene Sozialformen kombinieren (z.B. EA-Abruf, PA-Vergleich, Plenum-Klaerung),
+- die zentralen Inhalte aktiv abrufen lassen (Retrieval Practice),
+- verschiedene Sozialformen kombinieren (EA-Abruf, PA-Vergleich, Plenum-Klaerung),
 - Lernstaende sichtbar machen und typische Fehlvorstellungen aufgreifen,
 - mit einer kurzen Selbsteinschaetzung der Lernenden abschliessen.`,
-    dauerHinweis:
-      "Der Baustein umfasst 45-90 Minuten und besteht aus 3-6 Phasen.",
-    blockTyp: "2er",
+    umfang: "20-45 Minuten.",
   },
 };
 
@@ -1179,6 +1200,7 @@ async function buildBausteinKontext(sequenzId: string): Promise<string | null> {
         orderBy: (lb, { asc: a }) => [a(lb.sortierung)],
         with: { phasen: { orderBy: (ph, { asc: a }) => [a(ph.sortierung)] } },
       },
+      anker: { orderBy: (an, { asc: a }) => [a(an.sortierung)] },
     },
   });
 
@@ -1204,12 +1226,16 @@ async function buildBausteinKontext(sequenzId: string): Promise<string | null> {
     text += `\n\n**Bereits geplante Lektionsblöcke:**`;
     seq.lektionsbloecke.forEach((lb, i) => {
       text += `\n${i + 1}. ${lb.thema || `Block ${i + 1}`} (${lb.blockTyp})`;
-      const phasen = lb.phasen
-        .map((ph) => ph.bezeichnung)
-        .filter(Boolean)
-        .join(", ");
+      const phasen = lb.phasen.map((ph) => ph.bezeichnung).filter(Boolean).join(", ");
       if (phasen) text += ` – Phasen: ${phasen}`;
     });
+  }
+
+  if (seq.anker.length > 0) {
+    text += `\n\n**Bereits vorhandene Anker:**`;
+    for (const an of seq.anker) {
+      text += `\n- [${an.art}] ${an.titel}`;
+    }
   }
 
   return text;
@@ -1217,13 +1243,13 @@ async function buildBausteinKontext(sequenzId: string): Promise<string | null> {
 
 /**
  * Generiert per KI einen didaktischen Baustein (aktivierender Einstieg oder
- * Repetitionsblock) und haengt ihn als neuen Lektionsblock an die Sequenz an.
- * Bestehende Bloecke bleiben unveraendert.
+ * Repetitionsblock) und legt ihn als **Anker** im Cockpit ab — kompakt zum
+ * Überfliegen, nicht als Phasentabelle.
  */
 export async function generateBaustein(
   sequenzId: string,
   art: BausteinArt
-): Promise<{ success: boolean; thema?: string; error?: string }> {
+): Promise<{ success: boolean; titel?: string; error?: string }> {
   const template = BAUSTEIN_TEMPLATES[art];
   if (!template) {
     return { success: false, error: "Unbekannter Baustein-Typ." };
@@ -1242,95 +1268,181 @@ ${kontext}
 
 ${template.auftrag}
 
-${template.dauerHinweis}
-Knuepfe inhaltlich an die bereits geplanten Bloecke an und wiederhole sie nicht.
+Umfang: ${template.umfang}
+Knuepfe an das bereits Geplante an und wiederhole es nicht.
 
 ## Ausgabeformat
 
-Gib ausschliesslich JSON in diesem Format zurueck (keine Erklaerung):
+Die Lehrperson liest das waehrend des Unterrichts im Vorbeigehen. Schreibe
+deshalb **kompakt**: einen praegnanten Titel und maximal fuenf kurze Zeilen,
+die man in zehn Sekunden erfassen kann. Keine Phasentabelle, keine Floskeln.
+
+Gib ausschliesslich JSON zurueck (keine Erklaerung):
 
 ` + "```json" + `
 {
-  "thema": "Titel des Bausteins",
-  "blockTyp": "2er",
-  "phasen": [
-    {
-      "bezeichnung": "Kurzer Phasenname",
-      "beschreibung": "Was Lehrperson und Lernende konkret tun",
-      "dauerMinuten": 10,
-      "sozialform": "Plenum",
-      "methode": "Think-Pair-Share"
-    }
-  ]
+  "titel": "Kurzer, konkreter Titel",
+  "schritte": [
+    "Zeile 1 – was passiert, in Stichworten",
+    "Zeile 2 – naechster Schritt"
+  ],
+  "dauerMinuten": 20,
+  "sozialform": "PA"
 }
 ` + "```" + `
 
 **Regeln:**
-- \`blockTyp\`: \`"2er"\` (90 Min.) oder \`"4er"\` (180 Min.)
-- \`sozialform\`: \`"EA"\`, \`"PA"\`, \`"GA"\`, \`"Plenum"\` oder \`null\`
-- \`dauerMinuten\`: Ganzzahl in Minuten
-- \`beschreibung\` ist konkret und direkt umsetzbar, keine Floskeln`;
+- \`schritte\`: 2-5 Eintraege, je maximal ein kurzer Satz.
+- \`sozialform\`: "EA", "PA", "GA", "Plenum" oder null.
+- \`dauerMinuten\`: Ganzzahl.`;
 
   const ai = await callAI(prompt, 0.7);
   if (!ai.success) return { success: false, error: ai.error };
 
   const parsed = parseJsonFromAI<{
-    thema?: string;
-    blockTyp?: string;
-    phasen?: {
-      bezeichnung?: string;
-      beschreibung?: string | null;
-      dauerMinuten?: number | null;
-      sozialform?: string | null;
-      methode?: string | null;
-    }[];
+    titel?: string;
+    schritte?: unknown;
+    dauerMinuten?: unknown;
+    sozialform?: unknown;
   }>(ai.content);
 
-  if (!parsed || !Array.isArray(parsed.phasen) || parsed.phasen.length === 0) {
+  const schritte = Array.isArray(parsed?.schritte)
+    ? parsed.schritte.filter((z): z is string => typeof z === "string" && z.trim().length > 0)
+    : [];
+
+  if (!parsed || schritte.length === 0) {
     return {
       success: false,
       error: "Die KI hat keinen verwertbaren Baustein geliefert. Bitte erneut versuchen.",
     };
   }
 
-  const existing = await db.query.lektionsblock.findMany({
-    where: eq(lektionsblock.sequenzId, sequenzId),
-    columns: { id: true },
+  const meta: string[] = [];
+  if (typeof parsed.dauerMinuten === "number") meta.push(`${parsed.dauerMinuten} Min.`);
+  if (typeof parsed.sozialform === "string" && parsed.sozialform.trim()) {
+    meta.push(parsed.sozialform.trim());
+  }
+
+  const text =
+    schritte.map((z) => `• ${z.trim()}`).join("\n") +
+    (meta.length > 0 ? `\n\n(${meta.join(" · ")})` : "");
+
+  const existing = await db
+    .select({ id: sequenzAnker.id })
+    .from(sequenzAnker)
+    .where(eq(sequenzAnker.sequenzId, sequenzId));
+
+  const titel = parsed.titel?.trim() || BAUSTEIN_LABELS[art];
+
+  await db.insert(sequenzAnker).values({
+    sequenzId,
+    art,
+    titel: titel.slice(0, 300),
+    text,
+    sortierung: existing.length,
   });
 
-  const thema = parsed.thema?.trim() || BAUSTEIN_LABELS[art];
+  revalidatePath(`/sequenzen/${sequenzId}`);
 
-  const [created] = await db
-    .insert(lektionsblock)
-    .values({
-      sequenzId,
-      blockTyp: parsed.blockTyp === "4er" ? "4er" : template.blockTyp,
-      thema,
-      sortierung: existing.length,
-    })
-    .returning({ id: lektionsblock.id });
+  return { success: true, titel };
+}
 
-  const validSozialformen = ["EA", "PA", "GA", "Plenum"];
+// ─── Anker-Verwaltung ────────────────────────────────────────────────────
 
-  await db.insert(phase).values(
-    parsed.phasen.map((p, i) => ({
-      lektionsblockId: created.id,
-      bezeichnung: p.bezeichnung?.trim() || `Phase ${i + 1}`,
-      beschreibung: p.beschreibung || null,
-      dauerMinuten: typeof p.dauerMinuten === "number" ? p.dauerMinuten : null,
-      sozialform:
-        p.sozialform && validSozialformen.includes(p.sozialform)
-          ? (p.sozialform as "EA" | "PA" | "GA" | "Plenum")
-          : null,
-      methode: p.methode || null,
-      sortierung: i,
-    }))
-  );
+export async function createAnker(formData: FormData) {
+  const sequenzId = formData.get("sequenzId") as string;
+  const art = formData.get("art") as string;
+  const titel = formData.get("titel") as string;
+  const text = formData.get("text") as string;
+
+  const gueltigeArten = ["einstieg", "repetition", "aufgabe", "referenz", "modus", "notiz"];
+  if (!sequenzId || !titel?.trim() || !gueltigeArten.includes(art)) {
+    throw new Error("Sequenz, Art und Titel sind erforderlich.");
+  }
+
+  const existing = await db
+    .select({ id: sequenzAnker.id })
+    .from(sequenzAnker)
+    .where(eq(sequenzAnker.sequenzId, sequenzId));
+
+  await db.insert(sequenzAnker).values({
+    sequenzId,
+    art: art as "einstieg" | "repetition" | "aufgabe" | "referenz" | "modus" | "notiz",
+    titel: titel.trim().slice(0, 300),
+    text: text?.trim() || null,
+    sortierung: existing.length,
+  });
 
   revalidatePath(`/sequenzen/${sequenzId}`);
-  revalidatePath("/");
+}
 
-  return { success: true, thema };
+export async function deleteAnker(id: string) {
+  const [entfernt] = await db
+    .delete(sequenzAnker)
+    .where(eq(sequenzAnker.id, id))
+    .returning({ sequenzId: sequenzAnker.sequenzId });
+
+  if (entfernt) revalidatePath(`/sequenzen/${entfernt.sequenzId}`);
+}
+
+// ─── Übergabenotiz: KI-Vorschlag ─────────────────────────────────────────
+
+/**
+ * Schlägt eine Übergabenotiz für die nächste Sequenz vor — aus Wochenziel,
+ * geplanten Blöcken, Ankern und den Aufgaben der Materialien.
+ * Der Text wird nicht gespeichert, sondern zur Kontrolle zurückgegeben.
+ */
+export async function suggestUebergabenotiz(
+  sequenzId: string
+): Promise<{ success: boolean; notiz?: string; error?: string }> {
+  const kontext = await buildBausteinKontext(sequenzId);
+  if (!kontext) return { success: false, error: "Sequenz nicht gefunden." };
+
+  const tasks = await db
+    .select({
+      bezeichnung: materialTask.bezeichnung,
+      taskText: materialTask.taskText,
+    })
+    .from(materialTask)
+    .innerJoin(material, eq(material.id, materialTask.materialId))
+    .where(eq(material.sequenzId, sequenzId));
+
+  let aufgabenText = "";
+  if (tasks.length > 0) {
+    aufgabenText =
+      `\n\n**Aufgaben aus den Materialien:**` +
+      tasks
+        .map((t) => `\n- ${t.bezeichnung ? `${t.bezeichnung}: ` : ""}${t.taskText}`)
+        .join("");
+  }
+
+  const prompt = `Du hilfst einer Berufsschullehrperson beim Abschluss einer Unterrichtssequenz.
+
+## Kontext
+
+${kontext}${aufgabenText}
+
+## Auftrag
+
+Formuliere eine **Übergabenotiz** für die nächste Sequenz mit derselben Klasse
+im selben Modul. Sie beantwortet: Wo stehen wir, was ist offen, worauf muss die
+nächste Lektion aufbauen?
+
+Schreibe 3-6 kurze Stichpunkte in der Ich-Form der Lehrperson, konkret und
+ohne Floskeln. Markiere Unsicherheiten mit «(?)», damit die Lehrperson sie
+korrigieren kann.
+
+Gib **nur** den Notiztext zurueck, kein JSON, keine Ueberschrift.`;
+
+  const ai = await callAI(prompt, 0.5);
+  if (!ai.success) return { success: false, error: ai.error };
+
+  const notiz = ai.content.trim();
+  if (!notiz) {
+    return { success: false, error: "Die KI hat keinen Vorschlag geliefert." };
+  }
+
+  return { success: true, notiz };
 }
 
 /** Speichert die freien Cockpit-Notizen einer Sequenz. */
@@ -1355,7 +1467,19 @@ export type CockpitMaterial = {
   notiz: string | null;
   dateiPfad: string | null;
   herkunft: "sequenz" | "block" | "phase" | "modul";
-  tasks: { id: string; taskText: string; referenz: string | null }[];
+  tasks: {
+    id: string;
+    bezeichnung: string | null;
+    taskText: string;
+    referenz: string | null;
+  }[];
+};
+
+export type CockpitAnker = {
+  id: string;
+  art: "einstieg" | "repetition" | "aufgabe" | "referenz" | "modus" | "notiz";
+  titel: string;
+  text: string | null;
 };
 
 /**
@@ -1373,6 +1497,7 @@ export async function getCockpitData(sequenzId: string) {
         orderBy: (lb, { asc: a }) => [a(lb.sortierung)],
         columns: { id: true, thema: true, blockTyp: true, datum: true, sortierung: true },
       },
+      anker: { orderBy: (an, { asc: a }) => [a(an.sortierung)] },
     },
   });
 
@@ -1419,6 +1544,7 @@ export async function getCockpitData(sequenzId: string) {
           : "modul",
     tasks: m.tasks.map((t) => ({
       id: t.id,
+      bezeichnung: t.bezeichnung,
       taskText: t.taskText,
       referenz: t.referenz,
     })),
@@ -1439,6 +1565,12 @@ export async function getCockpitData(sequenzId: string) {
       bezeichnung: shk.handlungskompetenz.bezeichnung,
     })),
     lektionsbloecke: seq.lektionsbloecke,
+    anker: seq.anker.map((an) => ({
+      id: an.id,
+      art: an.art,
+      titel: an.titel,
+      text: an.text,
+    })) satisfies CockpitAnker[],
     materialien,
   };
 }

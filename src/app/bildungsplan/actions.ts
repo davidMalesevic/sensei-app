@@ -72,7 +72,7 @@ export async function getModuleGrouped() {
         orderBy: (m, { desc }) => [desc(m.createdAt)],
       },
       modularPlan: {
-        columns: { id: true, kw: true, ziel: true, beschreibung: true },
+        columns: { id: true, kw: true, ziel: true, beschreibung: true, lbHinweis: true },
         orderBy: (mp, { asc }) => [asc(mp.kw)],
       },
     },

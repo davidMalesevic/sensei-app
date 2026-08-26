@@ -1,16 +1,37 @@
 import { db } from "@/db";
-import { modularPlan, pendenz, sequenz } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { kalenderEintrag, modularPlan, pendenz, sequenz } from "@/db/schema";
+import { and, asc, eq, gte } from "drizzle-orm";
 import { getKW, getKWFromDateString } from "@/lib/kw";
+
+export type ModulplanZiel = {
+  kw: number;
+  ziel: string;
+  beschreibung: string | null;
+  lbHinweis: string | null;
+};
+
+export type Pruefung = {
+  quelle: "kalender" | "modulplan";
+  bezeichnung: string;
+  /** Datum (Kalender) bzw. KW-Angabe (Modulplan). */
+  wann: string;
+  /** Sortierschlüssel: KW der Prüfung. */
+  kw: number;
+};
 
 export type SequenzKontext = {
   kw: number;
   kwQuelle: "sequenz" | "block" | "heute";
   modulLabel: string | null;
   /** Wochenziel des Modulplans für die aktuelle KW. */
-  aktuellesZiel: { kw: number; ziel: string; beschreibung: string | null } | null;
+  aktuellesZiel: ModulplanZiel | null;
   /** Nächstes geplantes Wochenziel, falls für die aktuelle KW keines existiert. */
-  naechstesZiel: { kw: number; ziel: string; beschreibung: string | null } | null;
+  naechstesZiel: ModulplanZiel | null;
+  /**
+   * Anstehende Beurteilungen: Prüfungstermine aus dem Semesterkalender und
+   * «LB:»-Einträge des Modulplans ab der aktuellen KW.
+   */
+  pruefungen: Pruefung[];
   vorherigeNotiz: { titel: string; notiz: string } | null;
   pendenzen: { id: string; text: string }[];
 };
@@ -55,6 +76,7 @@ export async function getSequenzKontext(
   // Wochenziel aus dem Modulplan
   let aktuellesZiel: SequenzKontext["aktuellesZiel"] = null;
   let naechstesZiel: SequenzKontext["naechstesZiel"] = null;
+  const pruefungen: Pruefung[] = [];
 
   if (seq.modul) {
     const eintraege = await db
@@ -62,6 +84,7 @@ export async function getSequenzKontext(
         kw: modularPlan.kw,
         ziel: modularPlan.ziel,
         beschreibung: modularPlan.beschreibung,
+        lbHinweis: modularPlan.lbHinweis,
       })
       .from(modularPlan)
       .where(eq(modularPlan.modulId, seq.modul.id))
@@ -70,6 +93,18 @@ export async function getSequenzKontext(
     aktuellesZiel = eintraege.find((e) => e.kw === kw) ?? null;
     if (!aktuellesZiel) {
       naechstesZiel = eintraege.find((e) => e.kw > kw!) ?? null;
+    }
+
+    // Leistungsbeurteilungen aus dem Modulplan ab der aktuellen Woche
+    for (const e of eintraege) {
+      if (e.lbHinweis && e.kw >= kw) {
+        pruefungen.push({
+          quelle: "modulplan",
+          bezeichnung: e.lbHinweis,
+          wann: `KW ${e.kw}`,
+          kw: e.kw,
+        });
+      }
     }
   }
 
@@ -94,6 +129,38 @@ export async function getSequenzKontext(
     }
   }
 
+  // Prüfungstermine aus dem Semesterkalender (ab heute)
+  const heute = new Date().toISOString().slice(0, 10);
+  const kalenderPruefungen = await db
+    .select({
+      bezeichnung: kalenderEintrag.bezeichnung,
+      startDatum: kalenderEintrag.startDatum,
+    })
+    .from(kalenderEintrag)
+    .where(
+      and(
+        eq(kalenderEintrag.semesterId, seq.semesterId),
+        eq(kalenderEintrag.typ, "pruefung"),
+        gte(kalenderEintrag.endDatum, heute)
+      )
+    )
+    .orderBy(asc(kalenderEintrag.startDatum));
+
+  for (const p of kalenderPruefungen) {
+    pruefungen.push({
+      quelle: "kalender",
+      bezeichnung: p.bezeichnung,
+      wann: new Date(p.startDatum).toLocaleDateString("de-CH", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }),
+      kw: getKWFromDateString(p.startDatum) ?? 99,
+    });
+  }
+
+  pruefungen.sort((a, b) => a.kw - b.kw);
+
   // Offene Pendenzen der Klasse
   const pendenzen = await db
     .select({ id: pendenz.id, text: pendenz.text })
@@ -108,6 +175,7 @@ export async function getSequenzKontext(
       : null,
     aktuellesZiel,
     naechstesZiel,
+    pruefungen,
     vorherigeNotiz,
     pendenzen,
   };
