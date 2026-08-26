@@ -4,25 +4,42 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pencil, Briefcase, Paperclip, Printer } from "lucide-react";
-import { getSequenzById, getPhasenmodelle, getVorherigeNotiz, saveUebergabenotiz } from "../actions";
+import {
+  getSequenzById,
+  getPhasenmodelle,
+  getVorherigeNotiz,
+  getCockpitData,
+  saveUebergabenotiz,
+} from "../actions";
+import { getSequenzKontext } from "@/lib/kontext";
 import { SequenzDeleteButton } from "./sequenz-delete-button";
 import { LektionsbloeckeSection } from "./lektionsbloecke-section";
 import { MaterialSection } from "@/components/material-section";
 import { UebergabenotizSection } from "./uebergabenotiz-section";
+import { ContextHeader } from "./context-header";
+import { CockpitView } from "./cockpit-view";
+import { AnsichtToggle, type Ansicht } from "./ansicht-toggle";
 
 export default async function SequenzDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ ansicht?: string }>;
 }) {
   const { id } = await params;
-  const [seq, phasenmodelle] = await Promise.all([
+  const { ansicht: ansichtParam } = await searchParams;
+  const ansicht: Ansicht = ansichtParam === "cockpit" ? "cockpit" : "planung";
+
+  const [seq, phasenmodelle, kontext] = await Promise.all([
     getSequenzById(id),
     getPhasenmodelle(),
+    getSequenzKontext(id),
   ]);
 
-  if (!seq) return notFound();
+  if (!seq || !kontext) return notFound();
 
+  const cockpitData = ansicht === "cockpit" ? await getCockpitData(id) : null;
   const vorherigeNotiz = await getVorherigeNotiz(seq.klasseId, seq.modulId, id);
   const saveNotizAction = saveUebergabenotiz.bind(null, id);
 
@@ -55,81 +72,92 @@ export default async function SequenzDetailPage({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {seq.beschreibung && (
+      <ContextHeader kontext={kontext} klasseId={seq.klasseId} />
+
+      <AnsichtToggle sequenzId={id} aktiv={ansicht} />
+
+      {ansicht === "cockpit" && cockpitData ? (
+        <CockpitView data={cockpitData} kontext={kontext} />
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            {seq.beschreibung && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Beschreibung</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {seq.beschreibung}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Briefcase className="h-4 w-4" />
+                  Praxisbezug
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {seq.praxisbezug ? (
+                  <p className="text-sm whitespace-pre-wrap">
+                    {seq.praxisbezug}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Noch kein Praxisbezug dokumentiert.{" "}
+                    <Link
+                      href={`/sequenzen/${id}/bearbeiten`}
+                      className="underline"
+                    >
+                      Jetzt hinzufügen
+                    </Link>
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {seq.handlungskompetenzen.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Zugeordnete Handlungskompetenzen
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {seq.handlungskompetenzen.map((shk) => (
+                  <Badge key={shk.id} variant="secondary">
+                    {shk.handlungskompetenz.kuerzel} –{" "}
+                    {shk.handlungskompetenz.bezeichnung}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Beschreibung</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                Materialien (Sequenz)
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm whitespace-pre-wrap">{seq.beschreibung}</p>
+              <MaterialSection materialien={seq.materialien} sequenzId={id} />
             </CardContent>
           </Card>
-        )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Briefcase className="h-4 w-4" />
-              Praxisbezug
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {seq.praxisbezug ? (
-              <p className="text-sm whitespace-pre-wrap">{seq.praxisbezug}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Noch kein Praxisbezug dokumentiert.{" "}
-                <Link
-                  href={`/sequenzen/${id}/bearbeiten`}
-                  className="underline"
-                >
-                  Jetzt hinzufügen
-                </Link>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {seq.handlungskompetenzen.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            Zugeordnete Handlungskompetenzen
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {seq.handlungskompetenzen.map((shk) => (
-              <Badge key={shk.id} variant="secondary">
-                {shk.handlungskompetenz.kuerzel} –{" "}
-                {shk.handlungskompetenz.bezeichnung}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Paperclip className="h-4 w-4" />
-            Materialien (Sequenz)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MaterialSection
-            materialien={seq.materialien}
+          <LektionsbloeckeSection
             sequenzId={id}
+            klasseId={seq.klasseId}
+            modulId={seq.modulId}
+            lektionsbloecke={seq.lektionsbloecke}
+            phasenmodelle={phasenmodelle}
           />
-        </CardContent>
-      </Card>
-
-      <LektionsbloeckeSection
-        sequenzId={id}
-        klasseId={seq.klasseId}
-        modulId={seq.modulId}
-        lektionsbloecke={seq.lektionsbloecke}
-        phasenmodelle={phasenmodelle}
-      />
+        </>
+      )}
 
       <UebergabenotizSection
         sequenzId={id}

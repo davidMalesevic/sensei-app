@@ -15,10 +15,13 @@ import {
   klasse,
   modul,
   material,
+  modularPlan,
 } from "@/db/schema";
 import { eq, asc, desc, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { callAI, parseJsonFromAI } from "@/lib/ai";
+import { htmlToText } from "@/lib/dokument-text";
 
 export async function getSequenzen() {
   return db.query.sequenz.findMany({
@@ -940,4 +943,502 @@ async function createSequenzWithAI(formData: FormData) {
 
   revalidatePath("/sequenzen");
   redirect(`/sequenzen/${created.id}`);
+}
+
+
+// ─── Modulplan (Wochenziele) ──────────────────────────────────────────────
+
+export async function getModularPlan(modulId: string) {
+  return db.query.modularPlan.findMany({
+    where: eq(modularPlan.modulId, modulId),
+    orderBy: (mp, { asc: a }) => [a(mp.kw)],
+  });
+}
+
+type ModularPlanEintrag = {
+  kw: number;
+  ziel: string;
+  beschreibung?: string | null;
+};
+
+/** Normalisiert beliebige Eingabeformen auf `{ kw, ziel, beschreibung }`. */
+function normalisiereEintraege(raw: unknown): ModularPlanEintrag[] {
+  const liste = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as { eintraege?: unknown })?.eintraege)
+      ? (raw as { eintraege: unknown[] }).eintraege
+      : Array.isArray((raw as { modularPlan?: unknown })?.modularPlan)
+        ? (raw as { modularPlan: unknown[] }).modularPlan
+        : Array.isArray((raw as { wochen?: unknown })?.wochen)
+          ? (raw as { wochen: unknown[] }).wochen
+          : [];
+
+  const eintraege: ModularPlanEintrag[] = [];
+
+  for (const item of liste) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+
+    const kwRaw = o.kw ?? o.KW ?? o.woche ?? o.kalenderwoche;
+    const kw =
+      typeof kwRaw === "number"
+        ? kwRaw
+        : typeof kwRaw === "string"
+          ? parseInt(kwRaw.replace(/\D/g, ""), 10)
+          : NaN;
+
+    const zielRaw = o.ziel ?? o.thema ?? o.titel ?? o.lernziel;
+    const ziel = typeof zielRaw === "string" ? zielRaw.trim() : "";
+
+    if (!Number.isFinite(kw) || kw < 1 || kw > 53 || !ziel) continue;
+
+    const beschreibungRaw = o.beschreibung ?? o.inhalt ?? o.details;
+    eintraege.push({
+      kw,
+      ziel: ziel.slice(0, 300),
+      beschreibung:
+        typeof beschreibungRaw === "string" && beschreibungRaw.trim()
+          ? beschreibungRaw.trim()
+          : null,
+    });
+  }
+
+  return eintraege;
+}
+
+const MODULPLAN_JSON_PROMPT = `Du erhaeltst den Modulplan einer Berufsfachschule als Rohtext.
+Extrahiere daraus die Wochenplanung.
+
+Gib ausschliesslich JSON in diesem Format zurueck (keine Erklaerung):
+
+\`\`\`json
+{
+  "eintraege": [
+    { "kw": 34, "ziel": "Kurzes Wochenziel", "beschreibung": "Optionale Details" }
+  ]
+}
+\`\`\`
+
+Regeln:
+- "kw" ist die Kalenderwoche als Ganzzahl (1-53).
+- "ziel" ist eine knappe Formulierung (max. 300 Zeichen).
+- "beschreibung" darf null sein.
+- Zeilen ohne erkennbare Kalenderwoche werden weggelassen.
+
+Rohtext:
+`;
+
+/**
+ * Importiert einen Modulplan aus JSON, HTML oder PDF-/Freitext.
+ * JSON wird direkt gemappt, HTML zuerst zu Text reduziert; alles, was sich
+ * nicht direkt mappen laesst, wird von der KI in das Zielschema uebersetzt.
+ */
+export async function importModularPlan(
+  modulId: string,
+  input: string,
+  options?: { ersetzen?: boolean }
+): Promise<{ success: boolean; count: number; error?: string }> {
+  const roh = input?.trim();
+  if (!modulId) {
+    return { success: false, count: 0, error: "Kein Modul gewaehlt." };
+  }
+  if (!roh) {
+    return { success: false, count: 0, error: "Keine Daten zum Importieren." };
+  }
+
+  let eintraege: ModularPlanEintrag[] = [];
+
+  // 1. Direktes JSON (auch in Markdown-Fences)
+  const direkt = parseJsonFromAI<unknown>(roh);
+  if (direkt) eintraege = normalisiereEintraege(direkt);
+
+  // 2. HTML/Freitext -> KI-Normalisierung
+  if (eintraege.length === 0) {
+    const text = /<[a-z][\s\S]*>/i.test(roh) ? htmlToText(roh) : roh;
+    if (!text.trim()) {
+      return { success: false, count: 0, error: "Kein lesbarer Inhalt gefunden." };
+    }
+
+    const ai = await callAI(
+      `${MODULPLAN_JSON_PROMPT}${text.slice(0, 40000)}`,
+      0.2
+    );
+    if (!ai.success) return { success: false, count: 0, error: ai.error };
+
+    const parsed = parseJsonFromAI<unknown>(ai.content);
+    if (!parsed) {
+      return {
+        success: false,
+        count: 0,
+        error: "Die KI hat kein gueltiges JSON geliefert. Bitte erneut versuchen.",
+      };
+    }
+    eintraege = normalisiereEintraege(parsed);
+  }
+
+  if (eintraege.length === 0) {
+    return {
+      success: false,
+      count: 0,
+      error: "Keine Eintraege mit Kalenderwoche und Ziel erkannt.",
+    };
+  }
+
+  if (options?.ersetzen !== false) {
+    await db.delete(modularPlan).where(eq(modularPlan.modulId, modulId));
+  }
+
+  await db.insert(modularPlan).values(
+    eintraege.map((e) => ({
+      modulId,
+      kw: e.kw,
+      ziel: e.ziel,
+      beschreibung: e.beschreibung ?? null,
+    }))
+  );
+
+  revalidatePath("/bildungsplan");
+  revalidatePath("/sequenzen");
+
+  return { success: true, count: eintraege.length };
+}
+
+export async function createModularPlanEintrag(formData: FormData) {
+  const modulId = formData.get("modulId") as string;
+  const kw = parseInt(formData.get("kw") as string, 10);
+  const ziel = formData.get("ziel") as string;
+  const beschreibung = formData.get("beschreibung") as string;
+
+  if (!modulId || !Number.isFinite(kw) || !ziel) {
+    throw new Error("Modul, Kalenderwoche und Ziel sind erforderlich.");
+  }
+
+  await db.insert(modularPlan).values({
+    modulId,
+    kw,
+    ziel,
+    beschreibung: beschreibung || null,
+  });
+
+  revalidatePath("/bildungsplan");
+}
+
+export async function deleteModularPlanEintrag(id: string) {
+  await db.delete(modularPlan).where(eq(modularPlan.id, id));
+  revalidatePath("/bildungsplan");
+}
+
+// ─── KI-Bausteine (Aktivierende Einstiege / Repetitionsbloecke) ──────────
+
+export type BausteinArt = "einstieg" | "repetition";
+
+const BAUSTEIN_LABELS: Record<BausteinArt, string> = {
+  einstieg: "Aktivierender Einstieg",
+  repetition: "Repetitionsblock",
+};
+
+const BAUSTEIN_TEMPLATES: Record<
+  BausteinArt,
+  { auftrag: string; dauerHinweis: string; blockTyp: "2er" | "4er" }
+> = {
+  einstieg: {
+    auftrag: `Entwirf einen **aktivierenden Einstieg** in das Thema.
+
+Der Einstieg soll:
+- die Lernenden innerhalb der ersten Minuten kognitiv aktivieren (nicht Lehrervortrag),
+- an Vorwissen und an den Berufsalltag im Lehrbetrieb anknuepfen,
+- eine Frage, ein Problem oder einen Widerspruch aufwerfen, der neugierig macht,
+- in eine Sicherung bzw. Ueberleitung zum eigentlichen Inhalt muenden.`,
+    dauerHinweis:
+      "Der Baustein umfasst 15-25 Minuten und besteht aus 2-4 kurzen Phasen.",
+    blockTyp: "2er",
+  },
+  repetition: {
+    auftrag: `Entwirf einen **Repetitionsblock** zur Sicherung des bisher Gelernten.
+
+Der Repetitionsblock soll:
+- die zentralen Inhalte der bisherigen Lektionen aktiv abrufen lassen (Retrieval Practice),
+- verschiedene Sozialformen kombinieren (z.B. EA-Abruf, PA-Vergleich, Plenum-Klaerung),
+- Lernstaende sichtbar machen und typische Fehlvorstellungen aufgreifen,
+- mit einer kurzen Selbsteinschaetzung der Lernenden abschliessen.`,
+    dauerHinweis:
+      "Der Baustein umfasst 45-90 Minuten und besteht aus 3-6 Phasen.",
+    blockTyp: "2er",
+  },
+};
+
+/** Kompakter Kontexttext einer Sequenz für Baustein-Prompts. */
+async function buildBausteinKontext(sequenzId: string): Promise<string | null> {
+  const seq = await db.query.sequenz.findFirst({
+    where: eq(sequenz.id, sequenzId),
+    with: {
+      klasse: true,
+      modul: true,
+      handlungskompetenzen: { with: { handlungskompetenz: true } },
+      lektionsbloecke: {
+        orderBy: (lb, { asc: a }) => [a(lb.sortierung)],
+        with: { phasen: { orderBy: (ph, { asc: a }) => [a(ph.sortierung)] } },
+      },
+    },
+  });
+
+  if (!seq) return null;
+
+  let text = `**Klasse:** ${seq.klasse.bezeichnung} (${seq.klasse.beruf}, ${seq.klasse.lehrjahr}. Lehrjahr)
+**Sequenz:** ${seq.titel}`;
+
+  if (seq.modul) {
+    text += `\n**Modul:** ${seq.modul.nummer}${seq.modul.bezeichnung ? ` – ${seq.modul.bezeichnung}` : ""}`;
+  }
+  if (seq.beschreibung) text += `\n**Beschreibung:** ${seq.beschreibung}`;
+  if (seq.praxisbezug) text += `\n**Praxisbezug:** ${seq.praxisbezug}`;
+
+  if (seq.handlungskompetenzen.length > 0) {
+    text += `\n\n**Handlungskompetenzen:**`;
+    for (const shk of seq.handlungskompetenzen) {
+      text += `\n- ${shk.handlungskompetenz.kuerzel}: ${shk.handlungskompetenz.bezeichnung}`;
+    }
+  }
+
+  if (seq.lektionsbloecke.length > 0) {
+    text += `\n\n**Bereits geplante Lektionsblöcke:**`;
+    seq.lektionsbloecke.forEach((lb, i) => {
+      text += `\n${i + 1}. ${lb.thema || `Block ${i + 1}`} (${lb.blockTyp})`;
+      const phasen = lb.phasen
+        .map((ph) => ph.bezeichnung)
+        .filter(Boolean)
+        .join(", ");
+      if (phasen) text += ` – Phasen: ${phasen}`;
+    });
+  }
+
+  return text;
+}
+
+/**
+ * Generiert per KI einen didaktischen Baustein (aktivierender Einstieg oder
+ * Repetitionsblock) und haengt ihn als neuen Lektionsblock an die Sequenz an.
+ * Bestehende Bloecke bleiben unveraendert.
+ */
+export async function generateBaustein(
+  sequenzId: string,
+  art: BausteinArt
+): Promise<{ success: boolean; thema?: string; error?: string }> {
+  const template = BAUSTEIN_TEMPLATES[art];
+  if (!template) {
+    return { success: false, error: "Unbekannter Baustein-Typ." };
+  }
+
+  const kontext = await buildBausteinKontext(sequenzId);
+  if (!kontext) return { success: false, error: "Sequenz nicht gefunden." };
+
+  const prompt = `Du bist ein erfahrener Berufsschuldidaktiker in der Schweiz.
+
+## Kontext
+
+${kontext}
+
+## Auftrag
+
+${template.auftrag}
+
+${template.dauerHinweis}
+Knuepfe inhaltlich an die bereits geplanten Bloecke an und wiederhole sie nicht.
+
+## Ausgabeformat
+
+Gib ausschliesslich JSON in diesem Format zurueck (keine Erklaerung):
+
+` + "```json" + `
+{
+  "thema": "Titel des Bausteins",
+  "blockTyp": "2er",
+  "phasen": [
+    {
+      "bezeichnung": "Kurzer Phasenname",
+      "beschreibung": "Was Lehrperson und Lernende konkret tun",
+      "dauerMinuten": 10,
+      "sozialform": "Plenum",
+      "methode": "Think-Pair-Share"
+    }
+  ]
+}
+` + "```" + `
+
+**Regeln:**
+- \`blockTyp\`: \`"2er"\` (90 Min.) oder \`"4er"\` (180 Min.)
+- \`sozialform\`: \`"EA"\`, \`"PA"\`, \`"GA"\`, \`"Plenum"\` oder \`null\`
+- \`dauerMinuten\`: Ganzzahl in Minuten
+- \`beschreibung\` ist konkret und direkt umsetzbar, keine Floskeln`;
+
+  const ai = await callAI(prompt, 0.7);
+  if (!ai.success) return { success: false, error: ai.error };
+
+  const parsed = parseJsonFromAI<{
+    thema?: string;
+    blockTyp?: string;
+    phasen?: {
+      bezeichnung?: string;
+      beschreibung?: string | null;
+      dauerMinuten?: number | null;
+      sozialform?: string | null;
+      methode?: string | null;
+    }[];
+  }>(ai.content);
+
+  if (!parsed || !Array.isArray(parsed.phasen) || parsed.phasen.length === 0) {
+    return {
+      success: false,
+      error: "Die KI hat keinen verwertbaren Baustein geliefert. Bitte erneut versuchen.",
+    };
+  }
+
+  const existing = await db.query.lektionsblock.findMany({
+    where: eq(lektionsblock.sequenzId, sequenzId),
+    columns: { id: true },
+  });
+
+  const thema = parsed.thema?.trim() || BAUSTEIN_LABELS[art];
+
+  const [created] = await db
+    .insert(lektionsblock)
+    .values({
+      sequenzId,
+      blockTyp: parsed.blockTyp === "4er" ? "4er" : template.blockTyp,
+      thema,
+      sortierung: existing.length,
+    })
+    .returning({ id: lektionsblock.id });
+
+  const validSozialformen = ["EA", "PA", "GA", "Plenum"];
+
+  await db.insert(phase).values(
+    parsed.phasen.map((p, i) => ({
+      lektionsblockId: created.id,
+      bezeichnung: p.bezeichnung?.trim() || `Phase ${i + 1}`,
+      beschreibung: p.beschreibung || null,
+      dauerMinuten: typeof p.dauerMinuten === "number" ? p.dauerMinuten : null,
+      sozialform:
+        p.sozialform && validSozialformen.includes(p.sozialform)
+          ? (p.sozialform as "EA" | "PA" | "GA" | "Plenum")
+          : null,
+      methode: p.methode || null,
+      sortierung: i,
+    }))
+  );
+
+  revalidatePath(`/sequenzen/${sequenzId}`);
+  revalidatePath("/");
+
+  return { success: true, thema };
+}
+
+/** Speichert die freien Cockpit-Notizen einer Sequenz. */
+export async function saveCockpitNotiz(id: string, formData: FormData) {
+  const notiz = formData.get("cockpitNotiz") as string;
+
+  await db
+    .update(sequenz)
+    .set({ cockpitNotiz: notiz || null, updatedAt: new Date() })
+    .where(eq(sequenz.id, id));
+
+  revalidatePath(`/sequenzen/${id}`);
+}
+
+// ─── Cockpit-Daten ───────────────────────────────────────────────────────
+
+export type CockpitMaterial = {
+  id: string;
+  titel: string;
+  typ: string;
+  url: string | null;
+  notiz: string | null;
+  dateiPfad: string | null;
+  herkunft: "sequenz" | "block" | "phase" | "modul";
+  tasks: { id: string; taskText: string; referenz: string | null }[];
+};
+
+/**
+ * Sammelt alles, was die Cockpit-Ansicht braucht: Grobziele der Sequenz und
+ * alle Materialien der Sequenz *und* des Moduls samt extrahierter Aufgaben.
+ */
+export async function getCockpitData(sequenzId: string) {
+  const seq = await db.query.sequenz.findFirst({
+    where: eq(sequenz.id, sequenzId),
+    with: {
+      klasse: true,
+      modul: true,
+      handlungskompetenzen: { with: { handlungskompetenz: true } },
+      lektionsbloecke: {
+        orderBy: (lb, { asc: a }) => [a(lb.sortierung)],
+        columns: { id: true, thema: true, blockTyp: true, datum: true, sortierung: true },
+      },
+    },
+  });
+
+  if (!seq) return null;
+
+  const blockIds = seq.lektionsbloecke.map((lb) => lb.id);
+
+  const phasenIds = blockIds.length
+    ? (
+        await db.query.phase.findMany({
+          where: inArray(phase.lektionsblockId, blockIds),
+          columns: { id: true },
+        })
+      ).map((p) => p.id)
+    : [];
+
+  const alleMaterialien = await db.query.material.findMany({
+    where: (m, { or, eq: e, inArray: ia }) => {
+      const bedingungen = [e(m.sequenzId, sequenzId)];
+      if (blockIds.length) bedingungen.push(ia(m.lektionsblockId, blockIds));
+      if (phasenIds.length) bedingungen.push(ia(m.phaseId, phasenIds));
+      if (seq.modulId) bedingungen.push(e(m.modulId, seq.modulId));
+      return or(...bedingungen);
+    },
+    with: {
+      tasks: { orderBy: (t, { asc: a }) => [a(t.sortierung)] },
+    },
+    orderBy: (m, { desc: d }) => [d(m.createdAt)],
+  });
+
+  const materialien: CockpitMaterial[] = alleMaterialien.map((m) => ({
+    id: m.id,
+    titel: m.titel,
+    typ: m.typ,
+    url: m.url,
+    notiz: m.notiz,
+    dateiPfad: m.dateiPfad,
+    herkunft: m.sequenzId
+      ? "sequenz"
+      : m.lektionsblockId
+        ? "block"
+        : m.phaseId
+          ? "phase"
+          : "modul",
+    tasks: m.tasks.map((t) => ({
+      id: t.id,
+      taskText: t.taskText,
+      referenz: t.referenz,
+    })),
+  }));
+
+  return {
+    id: seq.id,
+    titel: seq.titel,
+    beschreibung: seq.beschreibung,
+    praxisbezug: seq.praxisbezug,
+    cockpitNotiz: seq.cockpitNotiz,
+    modulLabel: seq.modul
+      ? `Modul ${seq.modul.nummer}${seq.modul.bezeichnung ? ` – ${seq.modul.bezeichnung}` : ""}`
+      : null,
+    handlungskompetenzen: seq.handlungskompetenzen.map((shk) => ({
+      id: shk.id,
+      kuerzel: shk.handlungskompetenz.kuerzel,
+      bezeichnung: shk.handlungskompetenz.bezeichnung,
+    })),
+    lektionsbloecke: seq.lektionsbloecke,
+    materialien,
+  };
 }

@@ -44,6 +44,7 @@ import { MaterialSection } from "@/components/material-section";
 import { PromptButton } from "../prompt-dialog";
 import { ImportDialog } from "./import-dialog";
 import { GenerateButton } from "../generate-dialog";
+import { BausteinButtons } from "./baustein-buttons";
 
 type MaterialItem = {
   id: string;
@@ -401,9 +402,9 @@ export function LektionsbloeckeSection({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <h2 className="text-xl font-semibold">Lektionsblöcke</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <GenerateButton
             sequenzId={sequenzId}
             klasseId={klasseId}
@@ -417,6 +418,7 @@ export function LektionsbloeckeSection({
             excludeSequenzId={sequenzId}
           />
           <ImportDialog sequenzId={sequenzId} />
+          <BausteinButtons sequenzId={sequenzId} />
           <NewBlockDialog sequenzId={sequenzId} phasenmodelle={phasenmodelle} />
         </div>
       </div>

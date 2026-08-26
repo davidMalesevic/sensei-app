@@ -37,6 +37,10 @@ import {
   Paperclip,
 } from "lucide-react";
 import { createMaterial, deleteMaterial } from "@/app/materialien/actions";
+import {
+  ModulplanSection,
+  type ModularPlanEintragItem,
+} from "./modulplan-section";
 
 type MaterialItem = {
   id: string;
@@ -54,6 +58,7 @@ type ModulData = {
   bezeichnung: string | null;
   lehrjahr: number | null;
   materialien: MaterialItem[];
+  modularPlan: ModularPlanEintragItem[];
 };
 
 const typLabels: Record<string, string> = {
@@ -477,6 +482,13 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                   </div>
                 )}
               </DropZone>
+
+              <div className="mt-6 border-t pt-4">
+                <ModulplanSection
+                  modulId={selectedModul.id}
+                  eintraege={selectedModul.modularPlan}
+                />
+              </div>
             </CardContent>
           </Card>
         ) : (

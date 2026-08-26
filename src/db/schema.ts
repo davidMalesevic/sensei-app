@@ -73,6 +73,7 @@ export const klasse = pgTable("klasse", {
 export const klasseRelations = relations(klasse, ({ many }) => ({
   semesterKlassen: many(semesterKlasse),
   sequenzen: many(sequenz),
+  pendenzen: many(pendenz),
 }));
 
 // ─── Semester ↔ Klasse (n:m) ───
@@ -205,6 +206,7 @@ export const modul = pgTable("modul", {
 export const modulRelations = relations(modul, ({ many }) => ({
   sequenzen: many(sequenz),
   materialien: many(material),
+  modularPlan: many(modularPlan),
 }));
 
 // ─── Sequenz ───
@@ -222,6 +224,7 @@ export const sequenz = pgTable("sequenz", {
   beschreibung: text("beschreibung"),
   praxisbezug: text("praxisbezug"),
   uebergabenotiz: text("uebergabenotiz"),
+  cockpitNotiz: text("cockpit_notiz"),
   startDatum: date("start_datum"),
   endDatum: date("end_datum"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -352,7 +355,7 @@ export const material = pgTable("material", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const materialRelations = relations(material, ({ one }) => ({
+export const materialRelations = relations(material, ({ one, many }) => ({
   sequenz: one(sequenz, {
     fields: [material.sequenzId],
     references: [sequenz.id],
@@ -368,5 +371,65 @@ export const materialRelations = relations(material, ({ one }) => ({
   modul: one(modul, {
     fields: [material.modulId],
     references: [modul.id],
+  }),
+  tasks: many(materialTask),
+}));
+
+// ─── Modulplan (Wochenziele pro Modul) ───
+
+export const modularPlan = pgTable("modular_plan", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  modulId: uuid("modul_id")
+    .references(() => modul.id, { onDelete: "cascade" })
+    .notNull(),
+  kw: integer("kw").notNull(),
+  ziel: varchar("ziel", { length: 300 }).notNull(),
+  beschreibung: text("beschreibung"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const modularPlanRelations = relations(modularPlan, ({ one }) => ({
+  modul: one(modul, {
+    fields: [modularPlan.modulId],
+    references: [modul.id],
+  }),
+}));
+
+// ─── Material-Task (aus Material extrahierte Schüler-Aufgaben) ───
+
+export const materialTask = pgTable("material_task", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  materialId: uuid("material_id")
+    .references(() => material.id, { onDelete: "cascade" })
+    .notNull(),
+  taskText: text("task_text").notNull(),
+  referenz: varchar("referenz", { length: 200 }),
+  sortierung: integer("sortierung").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const materialTaskRelations = relations(materialTask, ({ one }) => ({
+  material: one(material, {
+    fields: [materialTask.materialId],
+    references: [material.id],
+  }),
+}));
+
+// ─── Pendenz (offene Punkte pro Klasse) ───
+
+export const pendenz = pgTable("pendenz", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  klasseId: uuid("klasse_id")
+    .references(() => klasse.id, { onDelete: "cascade" })
+    .notNull(),
+  text: text("text").notNull(),
+  erledigt: boolean("erledigt").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const pendenzRelations = relations(pendenz, ({ one }) => ({
+  klasse: one(klasse, {
+    fields: [pendenz.klasseId],
+    references: [klasse.id],
   }),
 }));

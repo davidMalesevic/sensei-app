@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { klasse } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { klasse, pendenz } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -63,4 +63,41 @@ export async function updateKlasse(id: string, formData: FormData) {
 export async function deleteKlasse(id: string) {
   await db.delete(klasse).where(eq(klasse.id, id));
   revalidatePath("/klassen");
+}
+
+// ─── Pendenzen (offene Punkte pro Klasse) ────────────────────────────────
+
+export async function getPendenzen(klasseId: string, nurOffene = false) {
+  return db.query.pendenz.findMany({
+    where: nurOffene
+      ? and(eq(pendenz.klasseId, klasseId), eq(pendenz.erledigt, false))
+      : eq(pendenz.klasseId, klasseId),
+    orderBy: (p, { asc, desc }) => [asc(p.erledigt), desc(p.createdAt)],
+  });
+}
+
+export async function createPendenz(formData: FormData) {
+  const klasseId = formData.get("klasseId") as string;
+  const text = formData.get("text") as string;
+
+  if (!klasseId || !text?.trim()) {
+    throw new Error("Klasse und Text sind erforderlich.");
+  }
+
+  await db.insert(pendenz).values({ klasseId, text: text.trim() });
+
+  revalidatePath("/klassen");
+  revalidatePath("/sequenzen");
+}
+
+export async function togglePendenz(id: string, erledigt: boolean) {
+  await db.update(pendenz).set({ erledigt }).where(eq(pendenz.id, id));
+  revalidatePath("/klassen");
+  revalidatePath("/sequenzen");
+}
+
+export async function deletePendenz(id: string) {
+  await db.delete(pendenz).where(eq(pendenz.id, id));
+  revalidatePath("/klassen");
+  revalidatePath("/sequenzen");
 }
