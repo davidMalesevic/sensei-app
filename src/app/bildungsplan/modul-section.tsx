@@ -94,16 +94,14 @@ function DropZone({
     setIsUploading(true);
     setUploadCount(fileArray.length);
     try {
-      await Promise.all(
-        fileArray.map(async (file) => {
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("modulId", modulId);
-          formData.append("titel", file.name);
-          formData.append("typ", "dokument");
-          await fetch("/api/upload", { method: "POST", body: formData });
-        })
-      );
+      for (const file of fileArray) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("modulId", modulId);
+        formData.append("titel", file.name);
+        formData.append("typ", "dokument");
+        await fetch("/api/upload", { method: "POST", body: formData });
+      }
       window.location.reload();
     } finally {
       setIsUploading(false);
