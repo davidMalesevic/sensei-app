@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { material } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { unlink } from "fs/promises";
+import { join } from "path";
 
 export async function getMaterialien() {
   return db.query.material.findMany({
@@ -37,6 +39,13 @@ export async function getMaterialienForPhase(phaseId: string) {
   });
 }
 
+export async function getMaterialienForModul(modulId: string) {
+  return db.query.material.findMany({
+    where: eq(material.modulId, modulId),
+    orderBy: (m, { desc }) => [desc(m.createdAt)],
+  });
+}
+
 export async function createMaterial(formData: FormData) {
   const titel = formData.get("titel") as string;
   const typ = formData.get("typ") as string;
@@ -45,6 +54,7 @@ export async function createMaterial(formData: FormData) {
   const sequenzId = formData.get("sequenzId") as string | null;
   const lektionsblockId = formData.get("lektionsblockId") as string | null;
   const phaseId = formData.get("phaseId") as string | null;
+  const modulId = formData.get("modulId") as string | null;
 
   if (!titel || !typ) {
     throw new Error("Titel und Typ sind erforderlich.");
@@ -58,6 +68,7 @@ export async function createMaterial(formData: FormData) {
     sequenzId: sequenzId || null,
     lektionsblockId: lektionsblockId || null,
     phaseId: phaseId || null,
+    modulId: modulId || null,
   });
 
   if (sequenzId) revalidatePath(`/sequenzen/${sequenzId}`);
@@ -70,6 +81,15 @@ export async function deleteMaterial(id: string) {
   });
 
   await db.delete(material).where(eq(material.id, id));
+
+  if (mat?.dateiPfad) {
+    const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+    try {
+      await unlink(join(uploadDir, mat.dateiPfad));
+    } catch {
+      // file may already be gone
+    }
+  }
 
   if (mat?.sequenzId) revalidatePath(`/sequenzen/${mat.sequenzId}`);
   revalidatePath("/materialien");

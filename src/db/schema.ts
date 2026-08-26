@@ -204,6 +204,7 @@ export const modul = pgTable("modul", {
 
 export const modulRelations = relations(modul, ({ many }) => ({
   sequenzen: many(sequenz),
+  materialien: many(material),
 }));
 
 // ─── Sequenz ───
@@ -346,6 +347,8 @@ export const material = pgTable("material", {
     onDelete: "cascade",
   }),
   phaseId: uuid("phase_id").references(() => phase.id, { onDelete: "cascade" }),
+  modulId: uuid("modul_id").references(() => modul.id, { onDelete: "cascade" }),
+  dateiPfad: text("datei_pfad"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -361,5 +364,9 @@ export const materialRelations = relations(material, ({ one }) => ({
   phase: one(phase, {
     fields: [material.phaseId],
     references: [phase.id],
+  }),
+  modul: one(modul, {
+    fields: [material.modulId],
+    references: [modul.id],
   }),
 }));

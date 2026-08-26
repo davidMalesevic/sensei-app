@@ -14,8 +14,9 @@ import {
   semester,
   klasse,
   modul,
+  material,
 } from "@/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -113,6 +114,54 @@ export async function getPhasenmodelle() {
   });
 }
 
+async function createBlocksFromConfig(
+  sequenzId: string,
+  bloeckeJson: string
+) {
+  const bloecke: {
+    blockTyp: string;
+    phasenmodellId: string;
+    thema: string;
+  }[] = JSON.parse(bloeckeJson);
+
+  for (let i = 0; i < bloecke.length; i++) {
+    const b = bloecke[i];
+    const blockTyp = b.blockTyp === "4er" ? ("4er" as const) : ("2er" as const);
+    const pmId = b.phasenmodellId === "frei" ? null : b.phasenmodellId;
+
+    const [createdBlock] = await db
+      .insert(lektionsblock)
+      .values({
+        sequenzId,
+        blockTyp,
+        phasenmodellId: pmId,
+        thema: b.thema || null,
+        sortierung: i,
+      })
+      .returning({ id: lektionsblock.id });
+
+    if (pmId) {
+      const templates = await db.query.phasenTemplate.findMany({
+        where: eq(phasenTemplate.phasenmodellId, pmId),
+        orderBy: (pt, { asc: a }) => [a(pt.sortierung)],
+      });
+
+      const phasenValues = templates
+        .filter((t) => !t.optional)
+        .map((t, j) => ({
+          lektionsblockId: createdBlock.id,
+          bezeichnung: `${t.kuerzel} – ${t.bezeichnung}`,
+          beschreibung: t.zweck,
+          sortierung: j,
+        }));
+
+      if (phasenValues.length > 0) {
+        await db.insert(phase).values(phasenValues);
+      }
+    }
+  }
+}
+
 export async function createSequenz(formData: FormData) {
   const titel = formData.get("titel") as string;
   const beschreibung = formData.get("beschreibung") as string;
@@ -127,6 +176,11 @@ export async function createSequenz(formData: FormData) {
 
   if (!titel || !semesterId || !klasseId) {
     throw new Error("Titel, Semester und Klasse sind erforderlich.");
+  }
+
+  const modeValue = formData.get("mode") as string;
+  if (modeValue === "ki") {
+    return createSequenzWithAI(formData);
   }
 
   const [created] = await db
@@ -152,48 +206,7 @@ export async function createSequenz(formData: FormData) {
   }
 
   if (bloeckeJson) {
-    const bloecke: {
-      blockTyp: string;
-      phasenmodellId: string;
-      thema: string;
-    }[] = JSON.parse(bloeckeJson);
-
-    for (let i = 0; i < bloecke.length; i++) {
-      const b = bloecke[i];
-      const blockTyp = b.blockTyp === "4er" ? "4er" as const : "2er" as const;
-      const pmId = b.phasenmodellId === "frei" ? null : b.phasenmodellId;
-
-      const [createdBlock] = await db
-        .insert(lektionsblock)
-        .values({
-          sequenzId: created.id,
-          blockTyp,
-          phasenmodellId: pmId,
-          thema: b.thema || null,
-          sortierung: i,
-        })
-        .returning({ id: lektionsblock.id });
-
-      if (pmId) {
-        const templates = await db.query.phasenTemplate.findMany({
-          where: eq(phasenTemplate.phasenmodellId, pmId),
-          orderBy: (pt, { asc: a }) => [a(pt.sortierung)],
-        });
-
-        const phasenValues = templates
-          .filter((t) => !t.optional)
-          .map((t, j) => ({
-            lektionsblockId: createdBlock.id,
-            bezeichnung: `${t.kuerzel} – ${t.bezeichnung}`,
-            beschreibung: t.zweck,
-            sortierung: j,
-          }));
-
-        if (phasenValues.length > 0) {
-          await db.insert(phase).values(phasenValues);
-        }
-      }
-    }
+    await createBlocksFromConfig(created.id, bloeckeJson);
   }
 
   revalidatePath("/sequenzen");
@@ -493,7 +506,12 @@ export async function generatePrompt(
   klasseId: string,
   modulId: string | null,
   excludeSequenzId?: string,
-  blockConfigs?: { blockTyp: string; phasenmodellName: string | null; thema: string }[]
+  blockConfigs?: { blockTyp: string; phasenmodellName: string | null; thema: string }[],
+  additionalContext?: {
+    materialBeschreibungen?: string[];
+    vorwissen?: string;
+    aufgaben?: string;
+  }
 ): Promise<string> {
   const klasseData = await db.query.klasse.findFirst({
     where: eq(klasse.id, klasseId),
@@ -610,6 +628,21 @@ export async function generatePrompt(
       const thema = b.thema ? ` – Thema: «${b.thema}»` : "";
       prompt += `\n${i + 1}. **${b.blockTyp}-Block** (${dauer} Min.) mit **${modell}**${thema}`;
     });
+  }
+
+  if (additionalContext?.materialBeschreibungen && additionalContext.materialBeschreibungen.length > 0) {
+    prompt += `\n\n## Verfügbare Unterrichtsmaterialien`;
+    for (const mat of additionalContext.materialBeschreibungen) {
+      prompt += `\n- ${mat}`;
+    }
+  }
+
+  if (additionalContext?.vorwissen) {
+    prompt += `\n\n## Vorwissen-Aktivierung\n${additionalContext.vorwissen}`;
+  }
+
+  if (additionalContext?.aufgaben) {
+    prompt += `\n\n## Geplante Aufgaben\n${additionalContext.aufgaben}`;
   }
 
   prompt += `
@@ -754,7 +787,12 @@ export async function generateWithAI(
   klasseId: string,
   modulId: string | null,
   excludeSequenzId?: string,
-  blockConfigs?: { blockTyp: string; phasenmodellName: string | null; thema: string }[]
+  blockConfigs?: { blockTyp: string; phasenmodellName: string | null; thema: string }[],
+  additionalContext?: {
+    materialBeschreibungen?: string[];
+    vorwissen?: string;
+    aufgaben?: string;
+  }
 ): Promise<{ success: boolean; count: number; error?: string }> {
   const apiKey = process.env.OLLAMA_API_KEY;
   if (!apiKey) {
@@ -762,7 +800,7 @@ export async function generateWithAI(
   }
 
   const model = process.env.OLLAMA_MODEL || "gemma4:31b";
-  const prompt = await generatePrompt(klasseId, modulId, excludeSequenzId, blockConfigs);
+  const prompt = await generatePrompt(klasseId, modulId, excludeSequenzId, blockConfigs, additionalContext);
 
   let content: string;
   try {
@@ -791,4 +829,115 @@ export async function generateWithAI(
   }
 
   return importLektionsbloecke(sequenzId, content);
+}
+
+async function createSequenzWithAI(formData: FormData) {
+  const titel = formData.get("titel") as string;
+  const beschreibung = formData.get("beschreibung") as string;
+  const praxisbezug = formData.get("praxisbezug") as string;
+  const semesterId = formData.get("semesterId") as string;
+  const klasseId = formData.get("klasseId") as string;
+  const modulIdRaw = formData.get("modulId") as string;
+  const modulId = modulIdRaw && modulIdRaw !== "kein_modul" ? modulIdRaw : null;
+  const datum = formData.get("datum") as string;
+  const hkIds = formData.getAll("handlungskompetenzen") as string[];
+  const bloeckeJson = formData.get("bloecke") as string;
+  const materialIdsJson = formData.get("materialIds") as string;
+  const vorwissen = formData.get("vorwissen") as string;
+  const aufgaben = formData.get("aufgaben") as string;
+
+  if (!titel || !semesterId || !klasseId) {
+    throw new Error("Titel, Semester und Klasse sind erforderlich.");
+  }
+
+  const [created] = await db
+    .insert(sequenz)
+    .values({
+      titel,
+      beschreibung: beschreibung || null,
+      praxisbezug: praxisbezug || null,
+      semesterId,
+      klasseId,
+      modulId,
+      startDatum: datum || null,
+    })
+    .returning({ id: sequenz.id });
+
+  if (hkIds.length > 0) {
+    await db.insert(sequenzHandlungskompetenz).values(
+      hkIds.map((hkId) => ({
+        sequenzId: created.id,
+        handlungskompetenzId: hkId,
+      }))
+    );
+  }
+
+  // Build additional context from KI fields
+  let materialBeschreibungen: string[] = [];
+  if (materialIdsJson) {
+    const materialIds: string[] = JSON.parse(materialIdsJson);
+    if (materialIds.length > 0) {
+      const mats = await db.query.material.findMany({
+        where: inArray(material.id, materialIds),
+        columns: { titel: true, typ: true, notiz: true, dateiPfad: true },
+      });
+      materialBeschreibungen = mats.map((m) => {
+        let desc = `${m.titel} (${m.typ})`;
+        if (m.dateiPfad) desc += ` [Datei: ${m.dateiPfad.split("/").pop()}]`;
+        if (m.notiz) desc += ` – ${m.notiz}`;
+        return desc;
+      });
+    }
+  }
+
+  const additionalContext = {
+    materialBeschreibungen:
+      materialBeschreibungen.length > 0 ? materialBeschreibungen : undefined,
+    vorwissen: vorwissen || undefined,
+    aufgaben: aufgaben || undefined,
+  };
+
+  // Build block configs for prompt
+  let blockConfigs:
+    | { blockTyp: string; phasenmodellName: string | null; thema: string }[]
+    | undefined;
+
+  if (bloeckeJson) {
+    const bloecke: {
+      blockTyp: string;
+      phasenmodellId: string;
+      thema: string;
+    }[] = JSON.parse(bloeckeJson);
+
+    if (bloecke.length > 0) {
+      const phasenmodelleData = await db.query.phasenmodell.findMany({
+        columns: { id: true, name: true },
+      });
+      const pmMap = new Map(phasenmodelleData.map((pm) => [pm.id, pm.name]));
+
+      blockConfigs = bloecke.map((b) => ({
+        blockTyp: b.blockTyp,
+        phasenmodellName:
+          b.phasenmodellId === "frei" ? null : pmMap.get(b.phasenmodellId) ?? null,
+        thema: b.thema,
+      }));
+    }
+  }
+
+  const result = await generateWithAI(
+    created.id,
+    klasseId,
+    modulId,
+    created.id,
+    blockConfigs,
+    additionalContext
+  );
+
+  if (!result.success) {
+    // Even on AI failure, the sequenz was created — redirect to it
+    // The user can retry from the detail page
+  }
+
+  revalidatePath("/sequenzen");
+  redirect(`/sequenzen/${created.id}`);
 }
