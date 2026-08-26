@@ -43,6 +43,7 @@ import { PhaseRow } from "./phase-row";
 import { MaterialSection } from "@/components/material-section";
 import { PromptButton } from "../prompt-dialog";
 import { ImportDialog } from "./import-dialog";
+import { GenerateButton } from "../generate-dialog";
 
 type MaterialItem = {
   id: string;
@@ -403,6 +404,13 @@ export function LektionsbloeckeSection({
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Lektionsblöcke</h2>
         <div className="flex gap-2">
+          <GenerateButton
+            sequenzId={sequenzId}
+            klasseId={klasseId}
+            modulId={modulId}
+            excludeSequenzId={sequenzId}
+            hasExistingBlocks={lektionsbloecke.length > 0}
+          />
           <PromptButton
             klasseId={klasseId}
             modulId={modulId}

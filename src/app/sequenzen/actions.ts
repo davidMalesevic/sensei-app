@@ -748,3 +748,47 @@ export async function importLektionsbloecke(
 
   return { success: true, count: data.lektionsbloecke.length };
 }
+
+export async function generateWithAI(
+  sequenzId: string,
+  klasseId: string,
+  modulId: string | null,
+  excludeSequenzId?: string,
+  blockConfigs?: { blockTyp: string; phasenmodellName: string | null; thema: string }[]
+): Promise<{ success: boolean; count: number; error?: string }> {
+  const apiKey = process.env.OLLAMA_API_KEY;
+  if (!apiKey) {
+    return { success: false, count: 0, error: "OLLAMA_API_KEY nicht konfiguriert." };
+  }
+
+  const model = process.env.OLLAMA_MODEL || "gemma4:31b";
+  const prompt = await generatePrompt(klasseId, modulId, excludeSequenzId, blockConfigs);
+
+  let content: string;
+  try {
+    const response = await fetch("https://ollama.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      return { success: false, count: 0, error: `Ollama API Fehler ${response.status}: ${body}` };
+    }
+
+    const data = await response.json();
+    content = data.choices[0].message.content;
+  } catch (e) {
+    return { success: false, count: 0, error: `API-Verbindungsfehler: ${e}` };
+  }
+
+  return importLektionsbloecke(sequenzId, content);
+}
