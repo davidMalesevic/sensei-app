@@ -75,51 +75,126 @@ const typIcons: Record<string, typeof FileText> = {
   sonstiges: File,
 };
 
-function UploadDialog({
+function DropZone({
   modulId,
-  modulNummer,
+  children,
 }: {
   modulId: string;
-  modulNummer: number;
+  children: React.ReactNode;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadCount, setUploadCount] = useState(0);
+  const dragCounter = useState(0);
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function uploadFiles(files: FileList | File[]) {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
 
     setIsUploading(true);
+    setUploadCount(fileArray.length);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("modulId", modulId);
-      formData.append("titel", file.name);
-      formData.append("typ", "dokument");
-
-      await fetch("/api/upload", { method: "POST", body: formData });
+      await Promise.all(
+        fileArray.map(async (file) => {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("modulId", modulId);
+          formData.append("titel", file.name);
+          formData.append("typ", "dokument");
+          await fetch("/api/upload", { method: "POST", body: formData });
+        })
+      );
       window.location.reload();
     } finally {
       setIsUploading(false);
+      setUploadCount(0);
+    }
+  }
+
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter[1]((c) => c + 1);
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter[1]((c) => {
+      const next = c - 1;
+      if (next <= 0) setIsDragging(false);
+      return Math.max(0, next);
+    });
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter[1](0);
+    if (e.dataTransfer.files?.length) {
+      uploadFiles(e.dataTransfer.files);
     }
   }
 
   return (
-    <label className="cursor-pointer">
-      <input
-        type="file"
-        className="hidden"
-        onChange={handleUpload}
-        disabled={isUploading}
-      />
-      <span className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-dashed hover:bg-muted transition-colors cursor-pointer">
-        {isUploading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Upload className="h-3.5 w-3.5" />
-        )}
-        {isUploading ? "Wird hochgeladen..." : "Datei hochladen"}
-      </span>
-    </label>
+    <div
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className={`relative rounded-lg transition-colors ${
+        isDragging ? "ring-2 ring-primary ring-offset-2 bg-primary/5" : ""
+      }`}
+    >
+      {isDragging && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10">
+          <div className="text-center">
+            <Upload className="h-8 w-8 mx-auto text-primary mb-2" />
+            <p className="text-sm font-medium text-primary">
+              Dateien hier ablegen
+            </p>
+          </div>
+        </div>
+      )}
+      {isUploading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
+          <div className="text-center">
+            <Loader2 className="h-6 w-6 mx-auto animate-spin text-primary mb-2" />
+            <p className="text-sm text-muted-foreground">
+              {uploadCount === 1
+                ? "Datei wird hochgeladen..."
+                : `${uploadCount} Dateien werden hochgeladen...`}
+            </p>
+          </div>
+        </div>
+      )}
+      {children}
+      <div className="flex gap-2 pt-2 border-t mt-4">
+        <label className="cursor-pointer">
+          <input
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => {
+              if (e.target.files?.length) uploadFiles(e.target.files);
+            }}
+            disabled={isUploading}
+          />
+          <span className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-dashed hover:bg-muted transition-colors cursor-pointer">
+            <Upload className="h-3.5 w-3.5" />
+            Datei hochladen
+          </span>
+        </label>
+        <AddLinkDialog modulId={modulId} />
+      </div>
+    </div>
   );
 }
 
@@ -309,9 +384,8 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                 </Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Materials list */}
-              <div>
+            <CardContent>
+              <DropZone modulId={selectedModul.id}>
                 <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
                   <Paperclip className="h-4 w-4" />
                   Materialien
@@ -375,20 +449,14 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                     })}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">
-                    Noch kein Material für dieses Modul vorhanden.
-                  </p>
+                  <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed rounded-lg">
+                    <Upload className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Dateien hierher ziehen oder unten hochladen
+                    </p>
+                  </div>
                 )}
-              </div>
-
-              {/* Upload + Add buttons */}
-              <div className="flex gap-2 pt-2 border-t">
-                <UploadDialog
-                  modulId={selectedModul.id}
-                  modulNummer={selectedModul.nummer}
-                />
-                <AddLinkDialog modulId={selectedModul.id} />
-              </div>
+              </DropZone>
             </CardContent>
           </Card>
         ) : (
