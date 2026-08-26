@@ -1,0 +1,3 @@
+sensei.maelu.fun {
+	reverse_proxy app:3000
+}
