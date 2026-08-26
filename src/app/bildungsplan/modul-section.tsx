@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,6 +83,7 @@ function DropZone({
   modulId: string;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
@@ -101,7 +103,7 @@ function DropZone({
         formData.append("typ", "dokument");
         await fetch("/api/upload", { method: "POST", body: formData });
       }
-      window.location.reload();
+      router.refresh();
     } finally {
       setIsUploading(false);
       setUploadCount(0);
