@@ -98,12 +98,14 @@ function DropZone({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
+  const [auswertung, setAuswertung] = useState<string | null>(null);
   const dragCounter = useState(0);
 
   async function uploadFiles(prepared: { name: string; blob: Blob }[]) {
     if (prepared.length === 0) return;
 
     console.log(`[upload] starting ${prepared.length} files:`, prepared.map(p => `${p.name} (${p.blob.size}b)`));
+    setAuswertung(null);
     setIsUploading(true);
     setUploadCount(prepared.length);
     try {
@@ -118,6 +120,20 @@ function DropZone({
         const res = await fetch("/api/upload", { method: "POST", body: formData });
         const json = await res.json();
         console.log(`[upload] ${i + 1}/${prepared.length} response:`, res.status, json);
+
+        // Smartlearn-Export erkannt: Ergebnis sichtbar machen, statt die
+        // Datei stumm liegen zu lassen.
+        const a = json?.auswertung;
+        if (a?.erkannt) {
+          setAuswertung(
+            a.uebernommen
+              ? `Smartlearn-Export erkannt: ${a.wochenziele} Wochenziele` +
+                  (a.bloecke ? `, ${a.bloecke} Blöcke, ${a.aufgaben} Aufgaben` : "") +
+                  " übernommen."
+              : "Smartlearn-Export erkannt. Das Modul hat bereits einen Modulplan — " +
+                  "zum Ersetzen das Scan-Symbol beim Material drücken."
+          );
+        }
       }
       console.log("[upload] all done, refreshing");
       router.refresh();
@@ -204,6 +220,11 @@ function DropZone({
         </div>
       )}
       {children}
+      {auswertung && (
+        <p className="text-sm text-muted-foreground mt-3 rounded-md bg-muted px-3 py-2">
+          {auswertung}
+        </p>
+      )}
       <div className="flex gap-2 pt-2 border-t mt-4">
         <label className="cursor-pointer">
           <input

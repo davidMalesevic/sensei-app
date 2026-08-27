@@ -3,7 +3,11 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
-import { material } from "@/db/schema";
+import { material, modularPlan } from "@/db/schema";
+import { count, eq } from "drizzle-orm";
+import { isSmartlearnExport } from "@/lib/smartlearn";
+import { htmlToText } from "@/lib/dokument-text";
+import { leseModulAusMaterial } from "@/app/bildungsplan/actions";
 
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
@@ -61,5 +65,46 @@ export async function POST(request: NextRequest) {
     .returning({ id: material.id });
 
   console.log(`[upload] success: ${titel} -> ${relativePath}`);
-  return NextResponse.json({ id: created.id, dateiPfad: relativePath });
+
+  // Sieht die Datei nach einem Smartlearn-Export aus, wird sie direkt
+  // ausgewertet — sonst liegt der Export im Material und nichts passiert.
+  //
+  // Nur, wenn das Modul noch keinen Modulplan hat: der Import ersetzt die
+  // Wochenziele, und ein versehentlich hochgeladener alter Export darf einen
+  // gepflegten Plan nicht überschreiben. Sonst wird der Fund nur gemeldet,
+  // auswerten geht dann per Knopf.
+  let auswertung: {
+    erkannt: boolean;
+    uebernommen: boolean;
+    wochenziele?: number;
+    bloecke?: number;
+    aufgaben?: number;
+  } | null = null;
+
+  const roh = buffer.toString("utf-8");
+  if (/<h[1-6][\s>]/i.test(roh) && isSmartlearnExport(htmlToText(roh))) {
+    const [vorhanden] = await db
+      .select({ n: count() })
+      .from(modularPlan)
+      .where(eq(modularPlan.modulId, modulId));
+
+    if ((vorhanden?.n ?? 0) > 0) {
+      auswertung = { erkannt: true, uebernommen: false };
+    } else {
+      const ergebnis = await leseModulAusMaterial(created.id);
+      auswertung = {
+        erkannt: true,
+        uebernommen: ergebnis.ok,
+        wochenziele: ergebnis.wochenziele,
+        bloecke: ergebnis.bloecke,
+        aufgaben: ergebnis.aufgaben,
+      };
+    }
+  }
+
+  return NextResponse.json({
+    id: created.id,
+    dateiPfad: relativePath,
+    auswertung,
+  });
 }
