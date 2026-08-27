@@ -13,6 +13,10 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { parseSmartlearnStruktur } from "@/lib/smartlearn";
+import { extractDokumentText } from "@/lib/dokument-text";
+import { importModularPlan } from "@/app/sequenzen/actions";
+import { readFile } from "fs/promises";
+import { join } from "path";
 
 export async function getCoverageData(klasseId?: string) {
   const zuordnungen = await db.query.sequenzHandlungskompetenz.findMany({
@@ -248,4 +252,74 @@ export async function setzeBlockSlides(
     .set({ slideMaterialId: materialId, slideVon: von, slideBis: bis })
     .where(eq(modulBlock.id, blockId));
   revalidatePath("/bildungsplan");
+}
+
+/**
+ * Liest Modulplan und Aufgabenbaum aus einem bereits hochgeladenen
+ * Modul-Material.
+ *
+ * Ohne das gäbe es zwei getrennte Wege für dieselbe Datei: einmal Drag & Drop
+ * in die Materialien, einmal der Modulplan-Dialog. Wer den Export ins Material
+ * zieht, erwartet zu Recht, ihn dort auch auswerten zu können.
+ */
+export async function leseModulAusMaterial(materialId: string): Promise<{
+  ok: boolean;
+  wochenziele?: number;
+  bloecke?: number;
+  aufgaben?: number;
+  fehler?: string;
+}> {
+  const eintrag = await db.query.material.findFirst({
+    where: eq(material.id, materialId),
+    columns: { id: true, titel: true, dateiPfad: true, modulId: true },
+  });
+
+  if (!eintrag) return { ok: false, fehler: "Material nicht gefunden." };
+  if (!eintrag.modulId) return { ok: false, fehler: "Material hängt an keinem Modul." };
+  if (!eintrag.dateiPfad) {
+    return { ok: false, fehler: "Zu diesem Eintrag gibt es keine Datei." };
+  }
+
+  const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(join(UPLOAD_DIR, eintrag.dateiPfad));
+  } catch {
+    return { ok: false, fehler: "Die Datei konnte nicht gelesen werden." };
+  }
+
+  let text: string | null;
+  try {
+    text = await extractDokumentText(eintrag.titel, bytes);
+  } catch (e) {
+    return { ok: false, fehler: `Datei konnte nicht gelesen werden: ${e}` };
+  }
+  if (!text) {
+    return {
+      ok: false,
+      fehler: "Dateityp wird nicht unterstützt. Möglich sind HTML, PDF, JSON, CSV, TXT.",
+    };
+  }
+
+  const plan = await importModularPlan(eintrag.modulId, text);
+  if (!plan.success) {
+    return { ok: false, fehler: plan.error ?? "Modulplan konnte nicht gelesen werden." };
+  }
+
+  // Der Aufgabenbaum braucht das rohe HTML — dort trägt die
+  // Überschriftenebene die Bedeutung, im geglätteten Text ist sie weg.
+  const roh = bytes.toString("utf-8");
+  const baum = /<h[1-6][\s>]/i.test(roh)
+    ? await importModulBaum(eintrag.modulId, roh)
+    : null;
+
+  revalidatePath("/bildungsplan");
+
+  return {
+    ok: true,
+    wochenziele: plan.count,
+    bloecke: baum?.ok ? baum.bloecke : 0,
+    aufgaben: baum?.ok ? baum.aufgaben : 0,
+    fehler: baum && !baum.ok ? baum.error : undefined,
+  };
 }

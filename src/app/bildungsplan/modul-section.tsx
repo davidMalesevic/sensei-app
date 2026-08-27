@@ -39,6 +39,7 @@ import {
 import { createMaterial, deleteMaterial } from "@/app/materialien/actions";
 import { ModulBaumSection, type BaumBlock } from "./modulbaum-section";
 import { MaterialBlockEtikett } from "./material-etikett";
+import { MaterialAuswerten } from "./material-auswerten";
 import {
   ModulplanSection,
   type ModularPlanEintragItem,
@@ -446,6 +447,10 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                             materialId={mat.id}
                             blockNummer={mat.blockNummer}
                             bloecke={selectedModul.bloecke}
+                          />
+                          <MaterialAuswerten
+                            materialId={mat.id}
+                            dateiPfad={mat.dateiPfad}
                           />
                           {mat.dateiPfad && (
                             <a
