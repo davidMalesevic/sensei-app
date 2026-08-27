@@ -27,7 +27,7 @@ import {
   importModularPlan,
   createModularPlanEintrag,
   deleteModularPlanEintrag,
-} from "@/app/sequenzen/actions";
+} from "@/app/bildungsplan/modulplan-actions";
 
 export type ModularPlanEintragItem = {
   id: string;

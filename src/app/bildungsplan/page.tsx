@@ -17,8 +17,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CheckCircle, Circle } from "lucide-react";
-import { getBildungsplanMitHK } from "../sequenzen/actions";
-import { getCoverageData, getKlassenForFilter, getModulLookup, getModuleGrouped } from "./actions";
+import {
+  getBildungsplanMitHK,
+  getCoverageData,
+  getKlassenForFilter,
+  getModulLookup,
+  getModuleGrouped,
+} from "./actions";
 import { KlasseFilter } from "./klasse-filter";
 import { ModulSection } from "./modul-section";
 

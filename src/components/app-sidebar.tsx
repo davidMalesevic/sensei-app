@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Calendar,
   CalendarDays,
   BookOpen,
   Layers,
@@ -30,11 +29,6 @@ const navigationItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Semester",
-    url: "/semester",
-    icon: Calendar,
   },
   {
     title: "Stundenplan",

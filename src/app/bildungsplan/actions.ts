@@ -14,7 +14,7 @@ import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { parseSmartlearnStruktur } from "@/lib/smartlearn";
 import { extractDokumentText } from "@/lib/dokument-text";
-import { importModularPlan } from "@/app/sequenzen/actions";
+import { importModularPlan } from "./modulplan-actions";
 import { readFile } from "fs/promises";
 import { join } from "path";
 
@@ -334,4 +334,20 @@ export async function leseModulAusMaterial(materialId: string): Promise<{
     aufgaben: baum?.ok ? baum.aufgaben : 0,
     fehler: !plan.success ? `Kein Modulplan: ${plan.error}` : undefined,
   };
+}
+
+/** Bildungsplan mit Handlungskompetenzbereichen und -kompetenzen. */
+export async function getBildungsplanMitHK() {
+  return db.query.bildungsplan.findMany({
+    with: {
+      handlungskompetenzbereiche: {
+        orderBy: (hkb, { asc }) => [asc(hkb.sortierung)],
+        with: {
+          handlungskompetenzen: {
+            orderBy: (hk, { asc }) => [asc(hk.sortierung)],
+          },
+        },
+      },
+    },
+  });
 }

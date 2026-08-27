@@ -1,226 +1,186 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  Calendar,
+  CalendarDays,
   Layers,
   BookOpen,
   GraduationCap,
-  Clock,
   ArrowRight,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { db } from "@/db";
-import { gte, asc, sql } from "drizzle-orm";
-import { lektionsblock } from "@/db/schema";
+import { and, asc, gte, isNotNull } from "drizzle-orm";
+import { sequenz } from "@/db/schema";
+import { getOffeneUebertraege } from "./sequenzen/uebertrag-actions";
+import { getKWFromDateString } from "@/lib/kw";
+
+export const dynamic = "force-dynamic";
 
 const quickLinks = [
   {
-    title: "Semester",
-    description: "Semester und Kalender verwalten",
-    href: "/semester",
-    icon: Calendar,
-  },
-  {
-    title: "Klassen",
-    description: "Klassen anlegen und verwalten",
-    href: "/klassen",
-    icon: GraduationCap,
+    title: "Stundenplan",
+    description: "Sequenzen aus dem Kalender, Entwürfe anstossen",
+    href: "/stundenplan",
+    icon: CalendarDays,
   },
   {
     title: "Sequenzen",
-    description: "Unterrichtssequenzen planen",
+    description: "Alle Unterrichtssequenzen",
     href: "/sequenzen",
     icon: Layers,
   },
   {
     title: "Bildungsplan",
-    description: "Handlungskompetenzen einsehen",
+    description: "Module, Modulpläne und Aufgabenbäume",
     href: "/bildungsplan",
     icon: BookOpen,
   },
+  {
+    title: "Klassen",
+    description: "Klassen und Pendenzen",
+    href: "/klassen",
+    icon: GraduationCap,
+  },
 ];
 
-async function getUpcomingBlocks() {
-  const today = new Date().toISOString().split("T")[0];
+const STATUS_LABEL: Record<string, string> = {
+  leer: "kein Ablauf",
+  entwurf: "Entwurf",
+  bestaetigt: "bestätigt",
+  gehalten: "gehalten",
+};
 
-  return db.query.lektionsblock.findMany({
-    where: gte(lektionsblock.datum, today),
-    orderBy: [asc(lektionsblock.datum), asc(lektionsblock.sortierung)],
-    limit: 10,
+const WOCHENTAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+function tag(datum: string): string {
+  const d = new Date(datum + "T00:00:00");
+  return `${WOCHENTAGE[d.getDay()]} ${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.`;
+}
+
+/** Die nächsten Unterrichtstage — die Sequenz ist die Einheit, nicht der Block. */
+async function getNaechsteSequenzen() {
+  const heute = new Date().toISOString().slice(0, 10);
+
+  return db.query.sequenz.findMany({
+    where: and(isNotNull(sequenz.kalenderKurs), gte(sequenz.startDatum, heute)),
+    orderBy: [asc(sequenz.startDatum), asc(sequenz.startZeit)],
+    limit: 8,
+    columns: {
+      id: true,
+      titel: true,
+      startDatum: true,
+      startZeit: true,
+      endZeit: true,
+      lektionen: true,
+      raum: true,
+      status: true,
+    },
     with: {
-      sequenz: {
-        columns: { id: true, titel: true },
-        with: {
-          klasse: { columns: { bezeichnung: true } },
-          modul: { columns: { nummer: true } },
-        },
-      },
-      phasen: {
-        orderBy: (p, { asc }) => [asc(p.sortierung)],
-        columns: { bezeichnung: true, dauerMinuten: true },
-      },
+      klasse: { columns: { bezeichnung: true } },
+      modul: { columns: { nummer: true } },
     },
   });
 }
 
-async function getStats() {
-  const [sequenzenCount, klassenCount, semesterCount] = await Promise.all([
-    db.query.sequenz.findMany({ columns: { id: true } }),
-    db.query.klasse.findMany({ columns: { id: true } }),
-    db.query.semester.findMany({ columns: { id: true } }),
-  ]);
-  return {
-    sequenzen: sequenzenCount.length,
-    klassen: klassenCount.length,
-    semester: semesterCount.length,
-  };
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("de-CH", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function daysUntil(dateStr: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
-}
-
-function daysLabel(days: number): string {
-  if (days === 0) return "Heute";
-  if (days === 1) return "Morgen";
-  return `In ${days} Tagen`;
-}
-
-export default async function DashboardPage() {
-  const [upcoming, stats] = await Promise.all([
-    getUpcomingBlocks(),
-    getStats(),
+export default async function Dashboard() {
+  const [naechste, offen] = await Promise.all([
+    getNaechsteSequenzen(),
+    getOffeneUebertraege(),
   ]);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bold tracking-tight">Sensei</h1>
-        <p className="text-muted-foreground mt-2 text-[15px] max-w-lg">
-          Planungstool für strukturierte Unterrichtssequenzen an der
-          Berufsfachschule.
+        <h1 className="text-3xl font-bold tracking-tight">Sensei</h1>
+        <p className="text-muted-foreground mt-1">
+          Unterrichtsplanung für Berufsfachschulen
         </p>
       </div>
 
-      <div className="grid gap-px bg-border md:grid-cols-2 lg:grid-cols-4 border border-border">
-        {quickLinks.map((link) => (
-          <Link key={link.href} href={link.href} className="group">
-            <div className="bg-card p-6 h-full transition-colors group-hover:bg-accent/50">
-              <link.icon className="h-5 w-5 text-primary mb-4" />
-              <h2 className="text-sm font-semibold tracking-tight">
-                {link.title}
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1">
-                {link.description}
-              </p>
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {upcoming.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              Bevorstehende Lektionsblöcke
-            </h2>
-            <Link
-              href="/sequenzen"
-              className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
-            >
-              Alle Sequenzen
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-
-          <div className="border border-border divide-y divide-border">
-            {upcoming.map((block) => {
-              const days = block.datum ? daysUntil(block.datum) : null;
-              const totalMin = block.phasen.reduce(
-                (sum, p) => sum + (p.dauerMinuten ?? 0),
-                0
-              );
-              return (
-                <Link
-                  key={block.id}
-                  href={`/sequenzen/${block.sequenz.id}`}
-                  className="flex items-center gap-4 p-4 hover:bg-accent/50 transition-colors"
-                >
-                  <div className="w-20 shrink-0">
-                    <div className="text-sm font-semibold">
-                      {block.datum ? formatDate(block.datum) : "–"}
-                    </div>
-                    {days !== null && (
-                      <div
-                        className={`text-xs ${days === 0 ? "text-primary font-medium" : "text-muted-foreground"}`}
-                      >
-                        {daysLabel(days)}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">
-                      {block.thema ?? block.sequenz.titel}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {block.sequenz.titel} · {block.sequenz.klasse.bezeichnung}
-                      {block.sequenz.modul && ` · M${block.sequenz.modul.nummer}`}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="outline">{block.blockTyp}-Block</Badge>
-                    {totalMin > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {totalMin} Min.
-                      </span>
-                    )}
-                    {block.phasen.length > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {block.phasen.length} Phasen
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+      {offen.length > 0 && (
+        <Card className="border-red-300 dark:border-red-900">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              {offen.length} Lektionen ohne Übertrag
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-2">
+              Ohne den Stand fehlt der Folgewoche der Ausgangspunkt.
+            </p>
+            <Button variant="outline" size="sm" render={<Link href="/stundenplan" />}>
+              Ansehen
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="grid gap-px bg-border md:grid-cols-3 border border-border">
-        <div className="bg-card p-6">
-          <div className="text-xs text-muted-foreground uppercase tracking-[0.15em]">
-            Sequenzen
-          </div>
-          <div className="text-3xl font-bold mt-1">{stats.sequenzen}</div>
-        </div>
-        <div className="bg-card p-6">
-          <div className="text-xs text-muted-foreground uppercase tracking-[0.15em]">
-            Klassen
-          </div>
-          <div className="text-3xl font-bold mt-1">{stats.klassen}</div>
-        </div>
-        <div className="bg-card p-6">
-          <div className="text-xs text-muted-foreground uppercase tracking-[0.15em]">
-            Semester
-          </div>
-          <div className="text-3xl font-bold mt-1">{stats.semester}</div>
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Nächste Sequenzen</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {naechste.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Keine anstehenden Sequenzen.{" "}
+              <Link href="/stundenplan" className="underline">
+                Stundenplan importieren
+              </Link>
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {naechste.map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/sequenzen/${s.id}`}
+                  className="flex flex-wrap items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted"
+                >
+                  <span className="w-20 shrink-0 text-muted-foreground">
+                    {s.startDatum ? tag(s.startDatum) : "—"}
+                  </span>
+                  <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
+                    {s.startZeit}–{s.endZeit}
+                  </span>
+                  <span className="w-24 shrink-0 font-medium">
+                    {s.klasse.bezeichnung}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {s.modul ? `Modul ${s.modul.nummer}` : "—"}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className="ml-auto shrink-0 text-[10px] font-normal"
+                  >
+                    {STATUS_LABEL[s.status] ?? s.status}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    KW {getKWFromDateString(s.startDatum) ?? "—"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {quickLinks.map((l) => (
+          <Link key={l.href} href={l.href}>
+            <Card className="h-full hover:bg-muted/50 transition-colors">
+              <CardContent className="pt-6">
+                <l.icon className="h-5 w-5 text-muted-foreground mb-2" />
+                <p className="font-medium text-sm">{l.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {l.description}
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
       </div>
     </div>
   );

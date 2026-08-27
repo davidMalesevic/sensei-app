@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractDokumentText } from "@/lib/dokument-text";
-import { importModularPlan } from "@/app/sequenzen/actions";
+import { importModularPlan } from "@/app/bildungsplan/modulplan-actions";
 import { importModulBaum } from "@/app/bildungsplan/actions";
 
 const MAX_SIZE = 20 * 1024 * 1024;

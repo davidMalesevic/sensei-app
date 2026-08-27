@@ -131,9 +131,7 @@ export default async function StundenplanPage() {
                           {e.lektionen} Lekt.
                         </Badge>
                         <Badge
-                          variant={
-                            e.status === "bestaetigt" ? "default" : "secondary"
-                          }
+                          variant="outline"
                           className="shrink-0 text-[10px] font-normal"
                         >
                           {STATUS_LABEL[e.status] ?? e.status}

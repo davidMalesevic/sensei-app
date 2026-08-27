@@ -118,23 +118,31 @@ Bestehende KI-Funktionen:
 | `extractMaterialTasks` | `materialien/actions.ts` | Schüler-Aufgaben aus Material |
 | `importModularPlan` | `sequenzen/actions.ts` | Modulplan aus Freitext/PDF |
 
-## Cockpit-Architektur
+## Sequenz-Seite
 
-Die Sequenz-Detailseite hat zwei Ansichten, umgeschaltet über den Query-Parameter
-`?ansicht=cockpit` (bewusst kein Client-State, damit die Seite Server Component
-bleibt). Hintergrund und Anforderungen: `redesign.md`.
+**Eine Ansicht, keine Umschaltung.** Die frühere Trennung Planung/Cockpit ist
+weg: der Ablauf *ist* die Planung und zugleich das, was im Unterricht zählt.
 
-- **Planung** — Lektionsblöcke mit Phasen, detaillierte Dokumentation
-- **Cockpit** — Orientierung während des Unterrichts: Anker-Liste, aus Materialien
-  extrahierte Aufgaben, freie Notizen
+Die Reihenfolge folgt dem Mittwoch-Durchgang:
 
-Darüber liegt in beiden Ansichten der **ContextHeader**: KW, Wochenziel aus dem
-Modulplan, anstehende Beurteilungen, Übergabenotiz der Vorsequenz, offene
-Pendenzen der Klasse. Die Aggregation macht `src/lib/kontext.ts`.
+1. **ContextHeader** — KW, Wochenziel aus dem Modulplan, anstehende
+   Beurteilungen, offene Pendenzen der Klasse (`src/lib/kontext.ts`)
+2. **Stand** — Übertrag der letzten Lektion derselben Klasse im selben Modul
+3. **Ablauf** — das Arbeitsergebnis, bearbeitbar
+4. **Geschwister** — dieselbe Woche in anderen Klassen
+5. **Stoff dieser Woche** — die Fakten dahinter, als Referenz
+6. **Übertrag** — die einzige Eingabe nach der Lektion
+7. **Notizen** — freier Text
 
-**Anker statt Phasen**: KI-generierte Einstiege und Repetitionsblöcke landen als
-kompakte Einträge in `sequenz_anker`, nicht als Phasentabelle — die Lehrperson
-soll sie im Unterricht in Sekunden überfliegen können.
+**Entfernt (Schritt 7 der Umsetzung):** Lektionsblöcke, Phasen, HK-Zuordnung,
+`/sequenzen/neu`, das Sequenz-Formular, die Bearbeiten-Seite, die alten
+KI-Dialoge und die Semesterverwaltung. Die zugehörigen **Tabellen bleiben
+bestehen** (`lektionsblock`, `phase`, `sequenz_handlungskompetenz`,
+`sequenz_anker`, `semester`) — dort hängen die drei Alt-Sequenzen als Archiv.
+Sie werden von keinem Code mehr gelesen.
+
+Damit fällt auch die **Coverage-Matrix** im Bildungsplan trocken: ohne
+HK-Zuordnung pro Sequenz hat sie keine Datenbasis mehr. Bewusst akzeptiert.
 
 ## Stundenplan-Import (.ics)
 
