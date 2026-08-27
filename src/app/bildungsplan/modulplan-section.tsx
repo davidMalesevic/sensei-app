@@ -86,12 +86,20 @@ function ImportDialog({ modulId }: { modulId: string }) {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        // Beim HTML-Export kommt der Aufgabenbaum mit — das muss sichtbar
+        // sein, sonst weiss man nicht, ob die Kette KW → Block → Aufgabe steht.
+        const baum = data.baum?.ok
+          ? ` Aufgabenbaum: ${data.baum.bloecke} Blöcke, ${data.baum.aufgaben} Aufgaben.`
+          : data.baum?.error
+            ? ` Kein Aufgabenbaum: ${data.baum.error}`
+            : "";
+
         setFeedback({
           ok: true,
           message:
-            data.quelle === "smartlearn"
+            (data.quelle === "smartlearn"
               ? `${data.count} Wochenziele direkt aus dem Smartlearn-Export «${file.name}» gelesen.`
-              : `${data.count} Wochenziele aus «${file.name}» importiert.`,
+              : `${data.count} Wochenziele aus «${file.name}» importiert.`) + baum,
         });
         router.refresh();
       } else {
