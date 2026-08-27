@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSidebar } from "@/components/app-sidebar";
 import { FeedbackButton } from "@/components/feedback-button";
 import { Analytics } from "@vercel/analytics/next";
+import { getOffeneUebertraege } from "@/app/sequenzen/uebertrag-actions";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -22,7 +23,13 @@ export const metadata: Metadata = {
   description: "Planungstool für Berufsschullehrpersonen",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// Das Layout zählt offene Überträge — der rote Punkt darf nicht aus der
+// Build-Zeit stammen.
+export const dynamic = "force-dynamic";
+
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const offen = await getOffeneUebertraege();
+
   return (
     <html
       lang="de"
@@ -31,7 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full">
         <TooltipProvider>
           <SidebarProvider>
-            <AppSidebar />
+            <AppSidebar offeneUebertraege={offen.length} />
             <SidebarInset>
               <header className="flex h-12 shrink-0 items-center border-b border-border/60 px-6">
                 <SidebarTrigger className="-ml-2" />

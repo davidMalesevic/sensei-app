@@ -160,6 +160,22 @@ Eine Sequenz ist **Klasse × Modul × Unterrichtstag**. Details und Begründung:
 - `sequenz.semesterId` ist dadurch **nullable** geworden; der Semesterbegriff
   fällt weg.
 
+## Übertrag
+
+Nach der Lektion die einzige verbleibende Eingabe: **bis wo sind wir gekommen**.
+Nicht ableitbar — die App kann nichts wissen, was nicht getippt wird
+(`erstellungsprozess.md`, Abschnitt 6.4).
+
+- Felder auf `sequenz`: `uebertrag`, `uebertragErledigt` (Original-Bezeichnungen
+  der abgehakten Aufgaben), `uebertragSlideBis`, `keinUebertrag`, `uebertragAm`.
+- Die Häkchen kommen aus `getWochenstoff()` — angeklickt statt getippt.
+- **Roter Punkt**: vergangene Sequenzen ohne Übertrag zählt
+  `getOffeneUebertraege()`; die Zahl steht als Badge am Stundenplan in der
+  Sidebar und als Banner auf `/stundenplan`. Deshalb ist `app/layout.tsx`
+  `force-dynamic` — sonst käme der Zählerstand aus der Build-Zeit.
+- Die Folgesequenz derselben Klasse im selben Modul zeigt den Übertrag als
+  «Stand aus der letzten Lektion» — die Antwort auf «wo fange ich an».
+
 ## Smartlearn-Import
 
 Die Lernumgebung Smartlearn exportiert Module als HTML (Beispiel:

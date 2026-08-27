@@ -20,6 +20,9 @@ import { ContextHeader } from "./context-header";
 import { CockpitView } from "./cockpit-view";
 import { AnsichtToggle, type Ansicht } from "./ansicht-toggle";
 import { WochenstoffSection } from "./wochenstoff-section";
+import { UebertragSection } from "./uebertrag-section";
+import { StandSection } from "./stand-section";
+import { getVorherigenUebertrag } from "../uebertrag-actions";
 import { getWochenstoff } from "@/lib/modulbaum";
 import { getKWFromDateString } from "@/lib/kw";
 
@@ -48,6 +51,13 @@ export default async function SequenzDetailPage({
   const kw = getKWFromDateString(seq.startDatum);
   const stoff =
     seq.modulId && kw !== null ? await getWochenstoff(seq.modulId, kw) : null;
+
+  const stand = await getVorherigenUebertrag(
+    seq.klasseId,
+    seq.modulId,
+    seq.startDatum,
+    id
+  );
   const vorherigeNotiz = await getVorherigeNotiz(seq.klasseId, seq.modulId, id);
   const saveNotizAction = saveUebergabenotiz.bind(null, id);
 
@@ -83,7 +93,21 @@ export default async function SequenzDetailPage({
 
       <ContextHeader kontext={kontext} klasseId={seq.klasseId} />
 
+      {stand && <StandSection stand={stand} />}
+
       {stoff && <WochenstoffSection stoff={stoff} />}
+
+      <UebertragSection
+        sequenzId={id}
+        datum={seq.startDatum}
+        daten={{
+          uebertrag: seq.uebertrag,
+          uebertragErledigt: seq.uebertragErledigt,
+          uebertragSlideBis: seq.uebertragSlideBis,
+          keinUebertrag: seq.keinUebertrag,
+        }}
+        stoff={stoff}
+      />
 
       <AnsichtToggle sequenzId={id} aktiv={ansicht} />
 

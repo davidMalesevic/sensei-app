@@ -63,7 +63,12 @@ const navigationItems = [
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({
+  offeneUebertraege = 0,
+}: {
+  /** Roter Punkt am Stundenplan: Lektionen ohne Übertrag. */
+  offeneUebertraege?: number;
+}) {
   const pathname = usePathname();
 
   return (
@@ -107,6 +112,14 @@ export function AppSidebar() {
                     >
                       <item.icon className="!h-4 !w-4" />
                       <span className="text-[13px]">{item.title}</span>
+                      {item.url === "/stundenplan" && offeneUebertraege > 0 && (
+                        <span
+                          className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-medium text-white"
+                          title={`${offeneUebertraege} Lektionen ohne Übertrag`}
+                        >
+                          {offeneUebertraege}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

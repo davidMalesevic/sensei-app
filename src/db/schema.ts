@@ -346,6 +346,15 @@ export const sequenz = pgTable("sequenz", {
   lektionen: integer("lektionen"),
   raum: varchar("raum", { length: 50 }),
   status: sequenzStatusEnum("status").default("leer").notNull(),
+  // Übertrag: die einzige Eingabe nach der Lektion. «Bis wo sind wir
+  // gekommen» ist nicht ableitbar — die App kann nichts wissen, was nicht
+  // getippt wird.
+  uebertrag: text("uebertrag"),
+  /** Abgehakte Aufgaben, mit ihrer Original-Bezeichnung. */
+  uebertragErledigt: text("uebertrag_erledigt").array(),
+  uebertragSlideBis: integer("uebertrag_slide_bis"),
+  keinUebertrag: boolean("kein_uebertrag").default(false).notNull(),
+  uebertragAm: timestamp("uebertrag_am"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

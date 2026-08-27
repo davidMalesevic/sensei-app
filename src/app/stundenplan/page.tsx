@@ -1,5 +1,7 @@
 import { StundenplanImport } from "./import-form";
 import { getStundenplanUebersicht } from "./actions";
+import { getOffeneUebertraege } from "@/app/sequenzen/uebertrag-actions";
+import { AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,10 @@ function formatiereTag(datum: string): string {
 }
 
 export default async function StundenplanPage() {
-  const { eintraege, aliasse } = await getStundenplanUebersicht();
+  const [{ eintraege, aliasse }, offen] = await Promise.all([
+    getStundenplanUebersicht(),
+    getOffeneUebertraege(),
+  ]);
 
   const heute = new Date().toISOString().slice(0, 10);
   const kommende = eintraege.filter((e) => (e.startDatum ?? "") >= heute);
@@ -41,6 +46,42 @@ export default async function StundenplanPage() {
           Zeit und Raum werden nicht eingetippt.
         </p>
       </div>
+
+      {offen.length > 0 && (
+        <Card className="border-red-300 dark:border-red-900">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              {offen.length} Lektionen ohne Übertrag
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <p className="text-sm text-muted-foreground mb-2">
+              Ohne den Stand fehlt der Folgewoche der Ausgangspunkt.
+            </p>
+            {offen.slice(0, 8).map((o) => (
+              <Link
+                key={o.id}
+                href={`/sequenzen/${o.id}`}
+                className="flex items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted"
+              >
+                <span className="w-20 shrink-0 text-muted-foreground">
+                  {formatiereTag(o.startDatum!)}
+                </span>
+                <span className="w-24 shrink-0 font-medium">{o.klasse}</span>
+                <span className="text-muted-foreground">
+                  {o.modulNummer ? `Modul ${o.modulNummer}` : "—"}
+                </span>
+              </Link>
+            ))}
+            {offen.length > 8 && (
+              <p className="text-xs text-muted-foreground pt-1">
+                … und {offen.length - 8} weitere
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <StundenplanImport />
 
