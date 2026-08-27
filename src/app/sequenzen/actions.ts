@@ -23,7 +23,13 @@ export async function getSequenzen() {
   });
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getSequenzById(id: string) {
+  // Ohne die Prüfung wirft Postgres bei jeder Nicht-UUID in der URL, und die
+  // Seite antwortet mit 500 statt 404 — etwa auf alte Links wie /sequenzen/neu.
+  if (!UUID.test(id)) return undefined;
+
   return db.query.sequenz.findFirst({
     where: eq(sequenz.id, id),
     with: {

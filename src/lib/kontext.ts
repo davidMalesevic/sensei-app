@@ -44,6 +44,11 @@ export type SequenzKontext = {
 export async function getSequenzKontext(
   sequenzId: string
 ): Promise<SequenzKontext | null> {
+  // Nicht-UUIDs in der URL dürfen keinen 500 auslösen.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sequenzId)) {
+    return null;
+  }
+
   const seq = await db.query.sequenz.findFirst({
     where: eq(sequenz.id, sequenzId),
     with: {
