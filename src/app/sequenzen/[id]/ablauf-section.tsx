@@ -28,6 +28,7 @@ import {
   Trash2,
   Plus,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import {
   erzeugeEntwurf,
@@ -141,6 +142,7 @@ export function AblaufSection({
   const [ueber, setUeber] = useState<number | null>(null);
   const zeilenRefs = useRef<(HTMLLIElement | null)[]>([]);
   const [neuerTyp, setNeuerTyp] = useState("frei");
+  const [rueckfrage, setRueckfrage] = useState(false);
   const [laeuft, startTransition] = useTransition();
 
   useEffect(() => setItems(zeilen), [zeilen]);
@@ -148,10 +150,20 @@ export function AblaufSection({
   const bestaetigt = status === "bestaetigt";
 
   function neuErzeugen() {
+    setRueckfrage(false);
     startTransition(async () => {
       await erzeugeEntwurf(sequenzId, { force: true });
       router.refresh();
     });
+  }
+
+  /**
+   * Neu erzeugen wirft die ganze Bearbeitung weg — Umordnen, umgeschriebene
+   * Texte, eigene Schritte. Nur fragen, wenn es auch etwas zu verlieren gibt.
+   */
+  function neuErzeugenAnfragen() {
+    if (items.length === 0) neuErzeugen();
+    else setRueckfrage(true);
   }
 
   function bestaetigen() {
@@ -370,6 +382,30 @@ export function AblaufSection({
               })}
             </ol>
 
+            {rueckfrage ? (
+              <div className="border-t pt-3 space-y-3">
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                  <p className="text-sm">
+                    Die {items.length} Schritte werden ersetzt. Umgeordnetes,
+                    umgeschriebene Texte und eigene Schritte gehen verloren.
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setRueckfrage(false)}
+                    disabled={laeuft}
+                  >
+                    Abbrechen
+                  </Button>
+                  <Button onClick={neuErzeugen} disabled={laeuft}>
+                    <Sparkles className="h-4 w-4" />
+                    Trotzdem neu erzeugen
+                  </Button>
+                </div>
+              </div>
+            ) : (
             <div className="flex flex-wrap items-center gap-2 border-t pt-3">
               <Select
                 value={neuerTyp}
@@ -401,7 +437,7 @@ export function AblaufSection({
                 )}
                 <Button
                   variant="outline"
-                  onClick={neuErzeugen}
+                  onClick={neuErzeugenAnfragen}
                   disabled={laeuft}
                   title="Verwirft die Bearbeitung und erzeugt den Ablauf neu"
                 >
@@ -410,9 +446,11 @@ export function AblaufSection({
                 </Button>
               </div>
             </div>
+            )}
           </>
         )}
       </CardContent>
+
     </Card>
   );
 }

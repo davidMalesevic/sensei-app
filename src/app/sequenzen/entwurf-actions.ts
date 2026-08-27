@@ -407,7 +407,11 @@ export async function erzeugeEntwuerfe(
       .from(sequenz)
       .leftJoin(sequenzAblauf, eq(sequenzAblauf.sequenzId, sequenz.id))
       .where(
-        and(eq(sequenz.modulId, modulTeil), isNotNull(sequenz.startDatum))
+        and(
+          eq(sequenz.modulId, modulTeil),
+          isNotNull(sequenz.kalenderKurs),
+          isNotNull(sequenz.startDatum)
+        )
       )
       .groupBy(sequenz.id, sequenz.startDatum)
       .orderBy(asc(sequenz.startDatum));
@@ -618,6 +622,12 @@ export async function getGeschwister(sequenzId: string): Promise<Geschwister[]> 
       and(
         eq(sequenz.modulId, seq.modulId),
         ne(sequenz.id, sequenzId),
+        // Eine Parallelklasse ist per Definition eine *andere* Klasse.
+        // Dieselbe Klasse zweimal im selben Modul wären aufeinanderfolgende
+        // Lektionen — dort wäre Übernehmen falsch.
+        ne(sequenz.klasseId, seq.klasseId),
+        // Alt-Sequenzen ohne Kalenderbezug sind Archiv, keine Geschwister.
+        isNotNull(sequenz.kalenderKurs),
         isNotNull(sequenz.startDatum)
       )
     )
