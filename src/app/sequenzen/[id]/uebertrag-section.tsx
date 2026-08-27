@@ -11,6 +11,7 @@ import {
   uebertragZuruecksetzen,
 } from "../uebertrag-actions";
 import type { Wochenstoff } from "@/lib/modulbaum";
+import { schweizerHeute } from "@/lib/zeit";
 
 export type UebertragDaten = {
   uebertrag: string | null;
@@ -35,7 +36,7 @@ export function UebertragSection({
   daten: UebertragDaten;
   stoff: Wochenstoff | null;
 }) {
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = schweizerHeute();
   const gehalten = datum !== null && datum <= heute;
   const erfasst = daten.keinUebertrag || daten.uebertrag !== null;
 

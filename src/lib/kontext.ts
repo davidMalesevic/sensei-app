@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { kalenderEintrag, modularPlan, pendenz, sequenz } from "@/db/schema";
 import { and, asc, eq, gte } from "drizzle-orm";
 import { getKW, getKWFromDateString } from "@/lib/kw";
+import { schweizerHeute } from "@/lib/zeit";
 
 export type ModulplanZiel = {
   kw: number;
@@ -136,7 +137,7 @@ export async function getSequenzKontext(
 
   // Prüfungstermine aus dem Semesterkalender (ab heute).
   // Sequenzen aus dem Stundenplan-Import haben kein Semester mehr.
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = schweizerHeute();
   const kalenderPruefungen = seq.semesterId
     ? await db
         .select({

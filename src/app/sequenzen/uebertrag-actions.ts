@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { sequenz, klasse, modul } from "@/db/schema";
 import { and, desc, eq, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { schweizerHeute } from "@/lib/zeit";
 
 /**
  * Übertrag nach der Lektion: bis wo sind wir gekommen, was fliesst in die
@@ -77,7 +78,7 @@ export async function uebertragZuruecksetzen(sequenzId: string) {
  * Punkt. Ohne sie fehlt der Folgewoche der Ausgangspunkt.
  */
 export async function getOffeneUebertraege() {
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = schweizerHeute();
 
   return db
     .select({

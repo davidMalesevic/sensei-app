@@ -5,12 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Loader2 } from "lucide-react";
 import { erzeugeEntwuerfe } from "@/app/sequenzen/entwurf-actions";
-
-function datumPlus(tage: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + tage);
-  return d.toISOString().slice(0, 10);
-}
+import { schweizerDatumPlus } from "@/lib/zeit";
 
 /**
  * Manueller Anstoss zusätzlich zum Nachtlauf — wenn der Stundenplan sich
@@ -24,7 +19,7 @@ export function EntwuerfeButton() {
   function starten() {
     setMeldung(null);
     startTransition(async () => {
-      const res = await erzeugeEntwuerfe(datumPlus(0), datumPlus(10));
+      const res = await erzeugeEntwuerfe(schweizerDatumPlus(0), schweizerDatumPlus(10));
       const teile = [`${res.erzeugt} Entwürfe erzeugt`];
       if (res.uebernommen > 0)
         teile.push(`${res.uebernommen} auf Parallelklassen übernommen`);

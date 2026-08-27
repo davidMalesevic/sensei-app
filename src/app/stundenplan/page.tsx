@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getKWFromDateString } from "@/lib/kw";
+import { findeAktuelle, schweizerHeute, schweizerJetzt } from "@/lib/zeit";
 import Link from "next/link";
 
 // Die Seite zeigt den aktuellen Importstand — nicht den der Build-Zeit.
@@ -34,8 +35,13 @@ export default async function StundenplanPage() {
     getOffeneUebertraege(),
   ]);
 
-  const heute = new Date().toISOString().slice(0, 10);
+  const jetzt = schweizerJetzt();
+  const heute = schweizerHeute();
   const kommende = eintraege.filter((e) => (e.startDatum ?? "") >= heute);
+
+  // Die laufende Lektion hervorheben — sonst sucht man sie in der Liste.
+  const { laufend, naechste } = findeAktuelle(kommende, jetzt);
+  const hervorgehoben = laufend ?? naechste;
 
   const nachWoche = new Map<number, typeof eintraege>();
   for (const e of kommende) {
@@ -119,7 +125,11 @@ export default async function StundenplanPage() {
                       <Link
                         key={e.id}
                         href={`/sequenzen/${e.id}`}
-                        className="flex items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted"
+                        className={`flex items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted ${
+                          e.id === hervorgehoben?.id
+                            ? "bg-primary/5 ring-1 ring-primary/30"
+                            : ""
+                        }`}
                       >
                         <span className="w-20 shrink-0 text-muted-foreground">
                           {formatiereTag(e.startDatum!)}
@@ -127,6 +137,11 @@ export default async function StundenplanPage() {
                         <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
                           {e.startZeit}–{e.endZeit}
                         </span>
+                        {e.id === hervorgehoben?.id && (
+                          <Badge className="shrink-0 text-[10px] font-normal">
+                            {laufend ? "jetzt" : "als nächstes"}
+                          </Badge>
+                        )}
                         <Badge variant="outline" className="shrink-0">
                           {e.lektionen} Lekt.
                         </Badge>

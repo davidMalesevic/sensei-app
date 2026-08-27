@@ -233,6 +233,20 @@ Lauf jeden Neustart und ist von aussen prüfbar. `CRON_SECRET` steht in
 
 Zusätzlich gibt es auf `/stundenplan` einen Knopf für den manuellen Anstoss.
 
+## Zeitzonen
+
+Der Container läuft auf **UTC**, die Schule auf **Europe/Zurich**.
+`new Date().toISOString().slice(0, 10)` ist deshalb falsch: zwischen Mitternacht
+und 02:00 Schweizer Zeit liefert es den Vortag, und jeder Uhrzeitvergleich liegt
+zwei Stunden daneben.
+
+Alles über `src/lib/zeit.ts`:
+
+- `schweizerJetzt()` → `{ datum, zeit }` in Schweizer Zeit
+- `schweizerHeute()` ersetzt das UTC-Datum
+- `schweizerDatumPlus(tage)` für Zeitfenster
+- `findeAktuelle(sequenzen)` → laufende und nächste Sequenz
+
 ## Übertrag
 
 Nach der Lektion die einzige verbleibende Eingabe: **bis wo sind wir gekommen**.

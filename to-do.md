@@ -3,9 +3,13 @@
 
 # ready
 
-* aktuelle lektion / sequenz auf dem Dashboard anzeigen und im stundenplan hervorheben
-
 # done
+* \~\~**aktuelle Lektion auf dem Dashboard und im Stundenplan hervorheben**\~\~ (2026-08-27)
+  * Dashboard zeigt oben «Läuft gerade» bzw. «Als nächstes» mit Klasse, Modul, Zeit, Raum und Status
+  * Die Zeile ist in beiden Listen hervorgehoben, im Stundenplan zusätzlich mit «jetzt»-Badge
+  * Dabei behoben: der Container läuft auf **UTC**, die Schule auf Europe/Zurich. Jeder
+    Uhrzeitvergleich lag zwei Stunden daneben, und zwischen 00:00 und 02:00 war «heute»
+    der Vortag. Alles läuft jetzt über `src/lib/zeit.ts` (`schweizerJetzt`, `schweizerHeute`)
 * \~\~**Cockpit-Nachschärfung nach Interview-Abgleich** (KI-Bausteine als Anker im Cockpit, Prüfungen im Kontext-Hub, Smartlearn-Parser, Übergabenotiz-Vorschlag)\~\~ (2026-08-26)
   * Smartlearn-HTML-Export wird deterministisch gelesen (`src/lib/smartlearn.ts`) — Modularbeitsplan inkl. «LB:»-Leistungsbeurteilungen, ohne KI
   * KI-Bausteine erzeugen jetzt **Anker** (Tabelle `sequenz_anker`) im Cockpit statt Phasentabellen in der Planung

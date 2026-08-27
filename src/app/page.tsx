@@ -8,6 +8,7 @@ import {
   GraduationCap,
   ArrowRight,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 import Link from "next/link";
 import { db } from "@/db";
@@ -15,6 +16,7 @@ import { and, asc, gte, isNotNull } from "drizzle-orm";
 import { sequenz } from "@/db/schema";
 import { getOffeneUebertraege } from "./sequenzen/uebertrag-actions";
 import { getKWFromDateString } from "@/lib/kw";
+import { findeAktuelle, schweizerHeute, schweizerJetzt } from "@/lib/zeit";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +63,7 @@ function tag(datum: string): string {
 
 /** Die nächsten Unterrichtstage — die Sequenz ist die Einheit, nicht der Block. */
 async function getNaechsteSequenzen() {
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = schweizerHeute();
 
   return db.query.sequenz.findMany({
     where: and(isNotNull(sequenz.kalenderKurs), gte(sequenz.startDatum, heute)),
@@ -89,6 +91,10 @@ export default async function Dashboard() {
     getNaechsteSequenzen(),
     getOffeneUebertraege(),
   ]);
+
+  const jetzt = schweizerJetzt();
+  const { laufend, naechste: kommend } = findeAktuelle(naechste, jetzt);
+  const hervorgehoben = laufend ?? kommend;
 
   return (
     <div className="space-y-6">
@@ -119,6 +125,42 @@ export default async function Dashboard() {
         </Card>
       )}
 
+      {hervorgehoben && (
+        <Link href={`/sequenzen/${hervorgehoben.id}`} className="block">
+          <Card className="border-primary/50 hover:border-primary transition-colors">
+            <CardContent className="py-5">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                {laufend ? "Läuft gerade" : "Als nächstes"}
+                <span className="normal-case tracking-normal">
+                  · {jetzt.zeit} Uhr
+                </span>
+              </div>
+              <div className="flex flex-wrap items-baseline gap-3 mt-2">
+                <span className="text-2xl font-bold tracking-tight">
+                  {hervorgehoben.klasse.bezeichnung}
+                </span>
+                <span className="text-lg text-muted-foreground">
+                  {hervorgehoben.modul
+                    ? `Modul ${hervorgehoben.modul.nummer}`
+                    : "ohne Modul"}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
+                <span>
+                  {hervorgehoben.startDatum ? tag(hervorgehoben.startDatum) : ""}{" "}
+                  {hervorgehoben.startZeit}–{hervorgehoben.endZeit}
+                </span>
+                {hervorgehoben.raum && <span>· {hervorgehoben.raum}</span>}
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  {STATUS_LABEL[hervorgehoben.status] ?? hervorgehoben.status}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Nächste Sequenzen</CardTitle>
@@ -137,7 +179,9 @@ export default async function Dashboard() {
                 <Link
                   key={s.id}
                   href={`/sequenzen/${s.id}`}
-                  className="flex flex-wrap items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted"
+                  className={`flex flex-wrap items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted ${
+                    s.id === hervorgehoben?.id ? "bg-primary/5 ring-1 ring-primary/30" : ""
+                  }`}
                 >
                   <span className="w-20 shrink-0 text-muted-foreground">
                     {s.startDatum ? tag(s.startDatum) : "—"}

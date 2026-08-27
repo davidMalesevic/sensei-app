@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { erzeugeEntwuerfe } from "@/app/sequenzen/entwurf-actions";
+import { schweizerDatumPlus } from "@/lib/zeit";
 
 /**
  * Nachtlauf für die Ablaufentwürfe.
@@ -21,12 +22,6 @@ function autorisiert(request: NextRequest): boolean {
   return header === `Bearer ${secret}`;
 }
 
-function datumPlus(tage: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + tage);
-  return d.toISOString().slice(0, 10);
-}
-
 export async function POST(request: NextRequest) {
   if (!process.env.CRON_SECRET) {
     return NextResponse.json(
@@ -38,8 +33,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nicht autorisiert." }, { status: 401 });
   }
 
-  const von = datumPlus(0);
-  const bis = datumPlus(TAGE_VORAUS);
+  const von = schweizerDatumPlus(0);
+  const bis = schweizerDatumPlus(TAGE_VORAUS);
 
   const start = Date.now();
   const ergebnis = await erzeugeEntwuerfe(von, bis);
