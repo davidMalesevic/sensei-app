@@ -447,6 +447,56 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Carbon Checkbox als natives <input type="checkbox">
+
+   Bewusst plain CSS statt Tailwind-Utilities: der Haken steckt als SVG in
+   einer data-URI, und deren spitze Klammern lassen Tailwinds Klassen-Scanner
+   die *ganze* class-Liste des Elements verwerfen — dann fehlt auch
+   `appearance-none`, und der Browser zeigt eine tote leere Box.
+   Nur für Checkboxen in Formularen, die ohne JavaScript abgeschickt werden;
+   sonst die Komponente `components/ui/checkbox.tsx` nehmen.
+   --------------------------------------------------------------------------- */
+@layer components {
+  .carbon-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    border: 1px solid var(--border-inverse);
+    background-color: transparent;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 0.75rem;
+    cursor: pointer;
+    transition: background-color 70ms var(--ease-carbon-standard);
+  }
+
+  .carbon-checkbox:checked {
+    background-color: var(--border-inverse);
+    /* Haken in weiss — die Fläche ist im hellen Theme schwarz. */
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='%23ffffff'%3E%3Cpath d='M13 24 4 15l1.414-1.414L13 21.171 26.586 7.586 28 9z'/%3E%3C/svg%3E");
+  }
+
+  :root:is(.dark) .carbon-checkbox:checked {
+    /* Im dunklen Theme ist die Fläche hell — der Haken wird dunkel. */
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='%23161616'%3E%3Cpath d='M13 24 4 15l1.414-1.414L13 21.171 26.586 7.586 28 9z'/%3E%3C/svg%3E");
+  }
+
+  .carbon-checkbox:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+
+  .carbon-checkbox:disabled {
+    cursor: not-allowed;
+    border-color: var(--text-disabled);
+    background-color: transparent;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Druck: die UI Shell verschwindet, der Inhalt bekommt die ganze Seite.
    --------------------------------------------------------------------------- */
 @media print {

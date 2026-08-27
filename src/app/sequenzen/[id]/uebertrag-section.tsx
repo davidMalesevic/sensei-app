@@ -142,7 +142,7 @@ export function UebertragSection({
                       type="checkbox"
                       name="erledigt"
                       value={a.wert}
-                      className="size-4 shrink-0 appearance-none border border-border-inverse bg-transparent checked:bg-border-inverse checked:bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22 fill=%22white%22><path d=%22M13 24l-9-9 1.4-1.4L13 21.2 26.6 7.6 28 9 13 24z%22/></svg>')] checked:bg-center checked:bg-no-repeat focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)]"
+                      className="carbon-checkbox"
                     />
                     <span className="font-semibold">{a.bezeichnung}</span>
                     <code className="type-helper-02 font-mono text-text-helper">
