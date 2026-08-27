@@ -23,7 +23,8 @@ import { WochenstoffSection } from "./wochenstoff-section";
 import { UebertragSection } from "./uebertrag-section";
 import { StandSection } from "./stand-section";
 import { AblaufSection } from "./ablauf-section";
-import { getAblauf } from "../entwurf-actions";
+import { getAblauf, getGeschwister } from "../entwurf-actions";
+import { GeschwisterSection } from "./geschwister-section";
 import { getVorherigenUebertrag } from "../uebertrag-actions";
 import { getWochenstoff } from "@/lib/modulbaum";
 import { getKWFromDateString } from "@/lib/kw";
@@ -54,7 +55,10 @@ export default async function SequenzDetailPage({
   const stoff =
     seq.modulId && kw !== null ? await getWochenstoff(seq.modulId, kw) : null;
 
-  const ablauf = await getAblauf(id);
+  const [ablauf, geschwister] = await Promise.all([
+    getAblauf(id),
+    getGeschwister(id),
+  ]);
 
   const stand = await getVorherigenUebertrag(
     seq.klasseId,
@@ -104,6 +108,13 @@ export default async function SequenzDetailPage({
         status={seq.status}
         entwurfAm={seq.entwurfAm}
         zeilen={ablauf}
+      />
+
+      <GeschwisterSection
+        sequenzId={id}
+        eigeneSchritte={ablauf.length}
+        uebernommenVon={seq.uebernommenVon}
+        geschwister={geschwister}
       />
 
       {stoff && <WochenstoffSection stoff={stoff} />}

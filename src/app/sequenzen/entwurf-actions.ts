@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { sequenz, sequenzAblauf } from "@/db/schema";
-import { and, asc, desc, eq, gte, isNotNull, lte } from "drizzle-orm";
+import { sequenz, sequenzAblauf, klasse } from "@/db/schema";
+import { and, asc, count, desc, eq, gte, isNotNull, lte, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { getWochenstoff, type Wochenstoff } from "@/lib/modulbaum";
@@ -354,11 +354,16 @@ export async function erzeugeEntwuerfe(
 ): Promise<{
   ok: true;
   erzeugt: number;
+  uebernommen: number;
   uebersprungen: number;
   fehler: { sequenzId: string; grund: string }[];
 }> {
   const kandidaten = await db
-    .select({ id: sequenz.id })
+    .select({
+      id: sequenz.id,
+      modulId: sequenz.modulId,
+      startDatum: sequenz.startDatum,
+    })
     .from(sequenz)
     .where(
       and(
@@ -368,15 +373,88 @@ export async function erzeugeEntwuerfe(
         eq(sequenz.status, "leer")
       )
     )
-    .orderBy(asc(sequenz.startDatum));
+    .orderBy(asc(sequenz.startDatum), asc(sequenz.startZeit));
+
+  // Nach Modul und Kalenderwoche gruppieren: dieselbe Woche im selben Modul
+  // wird einmal geplant und auf die übrigen Klassen übernommen. Das spart
+  // nicht nur KI-Aufrufe, es ist auch die Planung, die die Lehrperson meint.
+  const gruppen = new Map<string, string[]>();
+  for (const k of kandidaten) {
+    const kw = getKWFromDateString(k.startDatum);
+    const schluessel = `${k.modulId ?? "ohne"}|${kw ?? "?"}`;
+    if (!gruppen.has(schluessel)) gruppen.set(schluessel, []);
+    gruppen.get(schluessel)!.push(k.id);
+  }
 
   let erzeugt = 0;
+  let uebernommen = 0;
   const fehler: { sequenzId: string; grund: string }[] = [];
 
-  for (const k of kandidaten) {
-    const res = await erzeugeEntwurf(k.id);
-    if (res.ok) erzeugt++;
-    else fehler.push({ sequenzId: k.id, grund: res.fehler ?? "unbekannt" });
+  /** Sequenz derselben Woche im selben Modul, die schon einen Ablauf trägt. */
+  async function vorhandenerAblaufDerWoche(
+    schluessel: string,
+    ausgeschlossen: string[]
+  ): Promise<string | null> {
+    const [modulTeil] = schluessel.split("|");
+    if (modulTeil === "ohne") return null;
+
+    const kandidatenDerWoche = await db
+      .select({
+        id: sequenz.id,
+        startDatum: sequenz.startDatum,
+        schritte: count(sequenzAblauf.id),
+      })
+      .from(sequenz)
+      .leftJoin(sequenzAblauf, eq(sequenzAblauf.sequenzId, sequenz.id))
+      .where(
+        and(eq(sequenz.modulId, modulTeil), isNotNull(sequenz.startDatum))
+      )
+      .groupBy(sequenz.id, sequenz.startDatum)
+      .orderBy(asc(sequenz.startDatum));
+
+    const kw = schluessel.split("|")[1];
+    const treffer = kandidatenDerWoche.find(
+      (k) =>
+        !ausgeschlossen.includes(k.id) &&
+        k.schritte > 0 &&
+        String(getKWFromDateString(k.startDatum) ?? "?") === kw
+    );
+
+    return treffer?.id ?? null;
+  }
+
+  for (const [schluessel, ids] of gruppen) {
+    // Hat eine Parallelklasse derselben Woche bereits einen Ablauf, wird der
+    // übernommen statt ein zweiter erzeugt — dieselbe Woche im selben Modul
+    // ist dieselbe Planung.
+    const vorhandene = await vorhandenerAblaufDerWoche(schluessel, ids);
+    if (vorhandene) {
+      for (const id of ids) {
+        const kopie = await uebernehmeAblauf(id, vorhandene);
+        if (kopie.ok) uebernommen++;
+        else fehler.push({ sequenzId: id, grund: kopie.fehler ?? "unbekannt" });
+      }
+      continue;
+    }
+
+    const [erste, ...weitere] = ids;
+
+    const res = await erzeugeEntwurf(erste);
+    if (!res.ok) {
+      // Schlägt die Erzeugung fehl, scheitert die ganze Gruppe am selben
+      // Grund — der Modulplan gilt für alle Klassen gleichermassen.
+      for (const id of ids) {
+        fehler.push({ sequenzId: id, grund: res.fehler ?? "unbekannt" });
+      }
+      continue;
+    }
+    erzeugt++;
+
+    for (const id of weitere) {
+      const kopie = await uebernehmeAblauf(id, erste);
+      if (kopie.ok) uebernommen++;
+      else fehler.push({ sequenzId: id, grund: kopie.fehler ?? "unbekannt" });
+    }
   }
 
   revalidatePath("/stundenplan");
@@ -384,7 +462,8 @@ export async function erzeugeEntwuerfe(
   return {
     ok: true,
     erzeugt,
-    uebersprungen: kandidaten.length - erzeugt - fehler.length,
+    uebernommen,
+    uebersprungen: kandidaten.length - erzeugt - uebernommen - fehler.length,
     fehler,
   };
 }
@@ -474,5 +553,151 @@ export async function fuegeAblaufZeileHinzu(
     titel: titel.trim().slice(0, 300) || "Neuer Schritt",
   });
 
+  revalidatePath(`/sequenzen/${sequenzId}`);
+}
+
+// ─── Wiederverwendung über Klassen ────────────────────────────────────────
+//
+// Dasselbe Modul läuft mit mehreren Klassen: freitags zweimal 168 und zweimal
+// 219, dienstags zweimal 278. Von sieben Sequenzen pro Woche sind vier
+// Dubletten. Einmal planen, dann übernehmen — Fortschritt und Notizen bleiben
+// pro Klasse getrennt (`erstellungsprozess.md`, Abschnitt 6.3).
+
+export type Geschwister = {
+  id: string;
+  klasse: string;
+  startDatum: string | null;
+  startZeit: string | null;
+  status: string;
+  schritte: number;
+  /** Stand aus der eigenen Lektion — zeigt, ob die Klassen auseinanderlaufen. */
+  uebertragSlideBis: number | null;
+  uebertragErledigt: string[] | null;
+  uebernommenVon: string | null;
+};
+
+/**
+ * Sequenzen derselben Kalenderwoche im selben Modul, andere Klasse.
+ *
+ * Die Woche ist die richtige Klammer, nicht der Tag: der Modulplan ist
+ * wochenweise organisiert, und zwei Klassen können denselben Stoff an
+ * verschiedenen Tagen haben.
+ */
+export async function getGeschwister(sequenzId: string): Promise<Geschwister[]> {
+  const [seq] = await db
+    .select({
+      modulId: sequenz.modulId,
+      startDatum: sequenz.startDatum,
+      klasseId: sequenz.klasseId,
+    })
+    .from(sequenz)
+    .where(eq(sequenz.id, sequenzId))
+    .limit(1);
+
+  if (!seq?.modulId || !seq.startDatum) return [];
+
+  const kw = getKWFromDateString(seq.startDatum);
+  if (kw === null) return [];
+
+  const kandidaten = await db
+    .select({
+      id: sequenz.id,
+      klasse: klasse.bezeichnung,
+      startDatum: sequenz.startDatum,
+      startZeit: sequenz.startZeit,
+      status: sequenz.status,
+      uebertragSlideBis: sequenz.uebertragSlideBis,
+      uebertragErledigt: sequenz.uebertragErledigt,
+      uebernommenVon: sequenz.uebernommenVon,
+      schritte: count(sequenzAblauf.id),
+    })
+    .from(sequenz)
+    .innerJoin(klasse, eq(sequenz.klasseId, klasse.id))
+    .leftJoin(sequenzAblauf, eq(sequenzAblauf.sequenzId, sequenz.id))
+    .where(
+      and(
+        eq(sequenz.modulId, seq.modulId),
+        ne(sequenz.id, sequenzId),
+        isNotNull(sequenz.startDatum)
+      )
+    )
+    .groupBy(
+      sequenz.id,
+      klasse.bezeichnung,
+      sequenz.startDatum,
+      sequenz.startZeit,
+      sequenz.status,
+      sequenz.uebertragSlideBis,
+      sequenz.uebertragErledigt,
+      sequenz.uebernommenVon
+    )
+    .orderBy(asc(sequenz.startDatum), asc(sequenz.startZeit));
+
+  return kandidaten.filter(
+    (k) => getKWFromDateString(k.startDatum) === kw
+  );
+}
+
+/**
+ * Ablauf einer Sequenz auf eine andere übertragen. Der bestehende Ablauf des
+ * Ziels wird ersetzt — die Übernahme ist eine bewusste Aktion.
+ *
+ * Das Ziel landet auf «Entwurf», nicht auf «bestätigt»: durchsehen soll man
+ * jede Klasse einzeln, auch wenn die Planung dieselbe ist.
+ */
+export async function uebernehmeAblauf(
+  zielId: string,
+  quelleId: string
+): Promise<{ ok: boolean; schritte?: number; fehler?: string }> {
+  if (zielId === quelleId) return { ok: false, fehler: "Quelle und Ziel sind gleich." };
+
+  const quelle = await db.query.sequenzAblauf.findMany({
+    where: eq(sequenzAblauf.sequenzId, quelleId),
+    orderBy: (a, { asc: s }) => [s(a.sortierung)],
+  });
+
+  if (quelle.length === 0) {
+    return { ok: false, fehler: "Die Quellsequenz hat keinen Ablauf." };
+  }
+
+  await db.delete(sequenzAblauf).where(eq(sequenzAblauf.sequenzId, zielId));
+  await db.insert(sequenzAblauf).values(
+    quelle.map((z, i) => ({
+      sequenzId: zielId,
+      sortierung: i,
+      typ: z.typ,
+      quelle: z.quelle,
+      titel: z.titel,
+      text: z.text,
+      refCode: z.refCode,
+      refAufgabe: z.refAufgabe,
+      refMaterialId: z.refMaterialId,
+      refSeiteVon: z.refSeiteVon,
+      refSeiteBis: z.refSeiteBis,
+    }))
+  );
+
+  await db
+    .update(sequenz)
+    .set({
+      status: "entwurf",
+      entwurfAm: new Date(),
+      uebernommenVon: quelleId,
+      updatedAt: new Date(),
+    })
+    .where(eq(sequenz.id, zielId));
+
+  revalidatePath(`/sequenzen/${zielId}`);
+  revalidatePath("/stundenplan");
+
+  return { ok: true, schritte: quelle.length };
+}
+
+/** Übernahme lösen — ab hier plant die Klasse eigenständig. */
+export async function loeseUebernahme(sequenzId: string) {
+  await db
+    .update(sequenz)
+    .set({ uebernommenVon: null, updatedAt: new Date() })
+    .where(eq(sequenz.id, sequenzId));
   revalidatePath(`/sequenzen/${sequenzId}`);
 }

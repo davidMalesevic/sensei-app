@@ -26,6 +26,8 @@ export function EntwuerfeButton() {
     startTransition(async () => {
       const res = await erzeugeEntwuerfe(datumPlus(0), datumPlus(10));
       const teile = [`${res.erzeugt} Entwürfe erzeugt`];
+      if (res.uebernommen > 0)
+        teile.push(`${res.uebernommen} auf Parallelklassen übernommen`);
       if (res.fehler.length > 0)
         teile.push(`${res.fehler.length} übersprungen: ${res.fehler[0].grund}`);
       setMeldung(teile.join(" · "));

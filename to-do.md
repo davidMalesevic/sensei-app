@@ -1,7 +1,9 @@
 # backlog
 * aktuell ist der planer sehr stark auf berufskunde unterricht im edb ausgelegt. ander fächer funktionieren aber ganz anders. eine sprachlehrperson hat z.B. keine module sondern einfach eine sprache und unterrichtet pro semetester unterschiedliche schwerpunkte oder so. ABU lehrpersonen haben vermutlich unterrichtsblöcke die themenbasiert sind. solche sachen müssten pro lehrperson in den einstellungen eingestellt werden können. wie genau das aussieht wird aber vermutlich erst durch testing klar werden.
 
-# ready  
+# ready
+
+* aktuelle lektion / sequenz auf dem Dashboard anzeigen und im stundenplan hervorheben
 
 # done
 * \~\~**Cockpit-Nachschärfung nach Interview-Abgleich** (KI-Bausteine als Anker im Cockpit, Prüfungen im Kontext-Hub, Smartlearn-Parser, Übergabenotiz-Vorschlag)\~\~ (2026-08-26)
@@ -38,4 +40,4 @@
 		* man gibt an welches materiel für diese Unterrichtssequenz relevant ist
 		* in welcher form man Vorwissen aktivieren möchte
 		* welche aufgaben in dieser sequnez gelöst werden sollen
-		* auf Basis dieser Daten erstellt die per API verknüpfte KI einen unterrichtsplan nach dem gewünschten Phasenmodell \~\~ 
+		* auf Basis dieser Daten erstellt die per API verknüpfte KI einen unterrichtsplan nach dem gewünschten Phasenmodell \~\~

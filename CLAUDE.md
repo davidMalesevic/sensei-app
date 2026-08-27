@@ -198,6 +198,23 @@ Texte sichern beim Verlassen des Felds (`onBlur`), nicht bei jedem Tastendruck.
 Fakten aus dem Material behalten ihre Referenz auf LA-Code und Material auch
 nach dem Umschreiben.
 
+### Wiederverwendung über Klassen
+
+Dasselbe Modul läuft mit mehreren Klassen — freitags zweimal 168 und zweimal
+219, dienstags zweimal 278. Von sieben Sequenzen pro Woche sind vier Dubletten.
+
+- **Klammer ist die Kalenderwoche, nicht der Tag**: der Modulplan ist
+  wochenweise organisiert, und zwei Klassen können denselben Stoff an
+  verschiedenen Tagen haben. `getGeschwister()` liefert die Parallelsequenzen.
+- `uebernehmeAblauf()` kopiert den Ablauf und setzt `sequenz.uebernommenVon`.
+  Das Ziel landet auf **Entwurf**, nicht auf bestätigt — durchsehen soll man
+  jede Klasse einzeln.
+- **Fortschritt und Notizen bleiben pro Klasse getrennt.** Genau daran wird
+  sichtbar, wenn die Klassen auseinanderlaufen.
+- Der **Nachtlauf gruppiert nach Modul + KW** und plant einmal pro Gruppe.
+  Trägt eine Parallelklasse bereits einen Ablauf, wird der übernommen statt
+  ein zweiter erzeugt.
+
 ### Nachtlauf
 
 `POST /api/entwuerfe/nacht` mit `Authorization: Bearer $CRON_SECRET`, Fenster

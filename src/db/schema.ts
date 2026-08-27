@@ -375,6 +375,11 @@ export const sequenz = pgTable("sequenz", {
   keinUebertrag: boolean("kein_uebertrag").default(false).notNull(),
   uebertragAm: timestamp("uebertrag_am"),
   entwurfAm: timestamp("entwurf_am"),
+  /**
+   * Dasselbe Modul läuft mit mehreren Klassen. Der Ablauf wird einmal geplant
+   * und übernommen; Fortschritt und Notizen bleiben pro Klasse getrennt.
+   */
+  uebernommenVon: uuid("uebernommen_von"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
