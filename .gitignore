@@ -36,6 +36,10 @@ yarn-error.log*
 # uploads
 /uploads
 
+# Quellmaterial: Bildungsplan-PDFs, Kalenderexporte, Smartlearn-Exporte.
+# Gehört zur Arbeit, nicht ins Repo — 9 MB, und teils Schulunterlagen.
+/assets
+
 # vercel
 .vercel
 
