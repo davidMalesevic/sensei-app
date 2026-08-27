@@ -10,8 +10,10 @@ Unterrichtsplanungs-Tool für Berufsschullehrpersonen (Schweiz). UI-Sprache ist 
 - **React 19** + TypeScript
 - **shadcn/ui v4** (basiert auf `@base-ui/react`, NICHT auf Radix)
 - **Tailwind CSS v4**
-- **Drizzle ORM** + PostgreSQL via Supabase (Session Pooler)
+- **Drizzle ORM** + eigene **PostgreSQL 17** (Docker auf Netcup VPS)
 - **lucide-react** für Icons
+- **unpdf** für PDF-Textextraktion
+- **KI**: Ollama Cloud API (OpenAI-kompatibel)
 
 ## shadcn/ui v4 — wichtige Unterschiede
 
@@ -65,22 +67,114 @@ Diese Version nutzt `@base-ui/react` statt Radix. Häufige Fehlerquellen:
   // ❌ Unzuverlässig — onClick mit Server Action
   <Button onClick={async () => { await serverAction(); }}>Aktion</Button>
   ```
+- **`"use server"`-Dateien dürfen nur `async function` exportieren.** Ein `export const FOO = {...}` bricht erst beim `npm run build`, nicht beim Type-Check. Konstanten entweder nicht exportieren oder in eine eigene Datei auslagern. `export type` ist erlaubt (wird wegkompiliert).
 
 ## Datenbank
 
-- **Supabase Session Pooler** auf Port 5432 (nicht Direct Connection)
+- **Eigene PostgreSQL 17** im Docker-Compose auf dem Netcup-VPS (kein Supabase mehr)
 - Connection-String in `.env.local` als `DATABASE_URL`
-- Schema: `src/db/schema.ts` (13 Tabellen)
+- Schema: `src/db/schema.ts` (19 Tabellen)
 - Seed-Daten: `src/db/seed.ts` (Bildungsplan EDB + Phasenmodelle AVIVA/PADUA)
+
+### ⚠️ Lokale Entwicklung schreibt in die Produktions-DB
+
+`.env.local` zeigt auf `127.0.0.1:5432` — das ist ein **SSH-Tunnel auf die
+Produktionsdatenbank**. Es gibt keine separate lokale DB. Jeder lokale Test
+verändert echte Daten. Testdaten deshalb nach dem Testen wieder entfernen.
+
+```bash
+# Tunnel öffnen (Port 5432 ist im Heim-WLAN direkt blockiert)
+ssh -i ~/.ssh/id_ed25519_menuplan -L 5432:localhost:5432 -N -f root@159.195.241.246
+# Tunnel beenden
+kill $(lsof -ti:5432)
+```
+
+### Migrationen
+
+`npx drizzle-kit push` **funktioniert hier nicht** — es verlangt bei bestehenden
+Tabellen einen interaktiven TTY-Prompt und bricht sonst ab. Stattdessen ein
+idempotentes Migrations-Script nach dem Muster von `src/db/migrate-*.ts`
+schreiben (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`) und mit
+`npx tsx` ausführen. `dotenv.config({ path: ".env.local" })` muss vor dem
+DB-Zugriff laufen.
+
+## KI-Integration
+
+Alle KI-Features laufen über `src/lib/ai.ts`:
+
+- `callAI(prompt, temperature)` → Ollama Cloud (`OLLAMA_API_KEY`, `OLLAMA_MODEL`)
+- `parseJsonFromAI<T>(raw)` → robustes JSON-Parsing (Markdown-Fences, Fliesstext drumherum)
+
+**Regel: erst deterministisch parsen, KI nur als Fallback.** Beispiel
+Modulplan-Import: JSON direkt → Smartlearn-Parser → erst dann KI.
+
+Bestehende KI-Funktionen:
+
+| Funktion | Datei | Zweck |
+|---|---|---|
+| `generateWithAI` | `sequenzen/actions.ts` | ganze Sequenz als Lektionsblöcke |
+| `generateBaustein` | `sequenzen/actions.ts` | Einstieg / Repetition als **Anker** |
+| `suggestUebergabenotiz` | `sequenzen/actions.ts` | Entwurf der Übergabenotiz |
+| `extractMaterialTasks` | `materialien/actions.ts` | Schüler-Aufgaben aus Material |
+| `importModularPlan` | `sequenzen/actions.ts` | Modulplan aus Freitext/PDF |
+
+## Cockpit-Architektur
+
+Die Sequenz-Detailseite hat zwei Ansichten, umgeschaltet über den Query-Parameter
+`?ansicht=cockpit` (bewusst kein Client-State, damit die Seite Server Component
+bleibt). Hintergrund und Anforderungen: `redesign.md`.
+
+- **Planung** — Lektionsblöcke mit Phasen, detaillierte Dokumentation
+- **Cockpit** — Orientierung während des Unterrichts: Anker-Liste, aus Materialien
+  extrahierte Aufgaben, freie Notizen
+
+Darüber liegt in beiden Ansichten der **ContextHeader**: KW, Wochenziel aus dem
+Modulplan, anstehende Beurteilungen, Übergabenotiz der Vorsequenz, offene
+Pendenzen der Klasse. Die Aggregation macht `src/lib/kontext.ts`.
+
+**Anker statt Phasen**: KI-generierte Einstiege und Repetitionsblöcke landen als
+kompakte Einträge in `sequenz_anker`, nicht als Phasentabelle — die Lehrperson
+soll sie im Unterricht in Sekunden überfliegen können.
+
+## Smartlearn-Import
+
+Die Lernumgebung Smartlearn exportiert Module als HTML (Beispiel:
+`assets/exam_ple/`). `src/lib/smartlearn.ts` liest daraus **ohne KI**:
+
+- den Modularbeitsplan als Tabelle `Datum | Block & Lern- und Arbeitsauftrag | Bemerkung`
+- Zeilen beginnen mit `KW nn` oder `FERIEN` und können mehrzeilig sein
+- `LB:`-Zeilen sind Leistungsbeurteilungen → `modular_plan.lbHinweis`
+
+Bei der Aufgaben-Extraktion aus Materialien werden die **Original-Bezeichnungen
+beibehalten** («Aufgabe 1 / Teilaufgabe 2», LA-Codes). Nicht umformulieren — die
+Lehrperson muss der Klasse «macht Aufgabe 4.2» sagen können.
 
 ## Befehle
 
 ```bash
-npm run dev              # Dev-Server starten (Port 3000)
-npx drizzle-kit push     # Schema auf DB pushen
-npx tsx src/db/seed.ts   # Seed-Daten laden
-npx tsc --noEmit         # Type-Check
+npm run dev                       # Dev-Server starten (Port 3000)
+npx tsx src/db/migrate-<name>.ts  # Migration ausführen (NICHT drizzle-kit push)
+npx tsx src/db/seed.ts            # Seed-Daten laden
+npx tsc --noEmit                  # Type-Check
+npm run build                     # Build (fängt "use server"-Fehler, die tsc nicht sieht)
 ```
+
+## Deployment
+
+Netcup VPS, Docker Compose (App + PostgreSQL), Nginx + Let's Encrypt,
+https://sensei.maelu.fun
+
+```bash
+ssh -i ~/.ssh/id_ed25519_menuplan root@159.195.241.246 \
+  'cd /opt/sensei-app && git pull && docker compose up -d --build'
+```
+
+**`git pull` allein deployt nichts** — ohne `docker compose up -d --build` läuft
+weiter das alte Image. Nach dem Deploy verifizieren, z.B. per
+`curl -s https://sensei.maelu.fun/... | grep <neuer Text>`.
+
+Schema-Änderungen sind durch den SSH-Tunnel meist schon in der Produktions-DB,
+bevor deployt wird — das Migrations-Script muss dort nicht nochmals laufen.
 
 ## Projektstruktur
 
@@ -88,19 +182,36 @@ npx tsc --noEmit         # Type-Check
 src/
 ├── app/
 │   ├── page.tsx                  # Dashboard
+│   ├── api/
+│   │   ├── upload/               # Datei-Upload für Modul-Material
+│   │   ├── files/[...path]/      # Ausliefern hochgeladener Dateien
+│   │   └── modulplan/import/     # Modulplan-Import aus Datei (PDF/HTML/JSON)
 │   ├── semester/                 # Semester CRUD + Kalenderansicht
-│   ├── klassen/                  # Klassen CRUD
-│   ├── sequenzen/                # Sequenzen CRUD + Detailseite mit Lektionsblöcken/Phasen
-│   ├── bildungsplan/             # HKB/HK-Übersicht + Coverage-Matrix
-│   └── materialien/              # Material-Übersicht
+│   ├── klassen/                  # Klassen CRUD + Pendenzen-Actions
+│   ├── sequenzen/                # Sequenzen CRUD
+│   │   └── [id]/                 # Detailseite: Planung + Cockpit
+│   │       ├── context-header.tsx
+│   │       ├── cockpit-view.tsx
+│   │       ├── ansicht-toggle.tsx
+│   │       └── lektionsbloecke-section.tsx
+│   ├── bildungsplan/             # HKB/HK-Übersicht, Coverage-Matrix, Modulplan
+│   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
 ├── components/
 │   ├── ui/                       # shadcn/ui Komponenten
 │   ├── app-sidebar.tsx           # Navigation
 │   └── material-section.tsx      # Wiederverwendbare Material-Komponente
+├── lib/
+│   ├── ai.ts                     # Ollama-Aufruf + JSON-Parsing
+│   ├── kontext.ts                # Kontext-Aggregation für den ContextHeader
+│   ├── kw.ts                     # ISO-Kalenderwochen
+│   ├── smartlearn.ts             # Parser für Smartlearn-HTML-Exporte
+│   ├── dokument-text.ts          # Text aus PDF/HTML/TXT
+│   └── material-link.ts          # Deep-Links ins Material (#page=N)
 └── db/
     ├── index.ts                  # DB-Verbindung (postgres-js + Drizzle)
     ├── schema.ts                 # Drizzle Schema
-    └── seed.ts                   # Bildungsplan EDB + AVIVA/PADUA
+    ├── seed.ts                   # Bildungsplan EDB + AVIVA/PADUA
+    └── migrate-*.ts              # Idempotente Migrations-Scripts
 ```
 
 ## Patterns
@@ -110,3 +221,13 @@ src/
 - **FormData** basierte Actions mit `revalidatePath` + `redirect`
 - Alle Tabellen nutzen **UUID** Primary Keys mit `defaultRandom()`
 - Cascading Deletes auf Foreign Keys
+- KI-Ergebnisse sind **Entwürfe**: anzeigen, prüfen lassen, erst auf bewusste
+  Aktion speichern (siehe Übergabenotiz-Vorschlag)
+
+## Bekannte Altlasten
+
+- `Button render={<Link/>}` erzeugt in der Dev-Overlay-Konsole eine Base-UI-Warnung
+  (`nativeButton`). Kosmetisch, betrifft mehrere Seiten.
+- Aus `.pptx`/`.docx` kann kein Text gelesen werden — es fehlt ein OOXML-Parser.
+  `extractMaterialTasks` gibt dafür eine klare Fehlermeldung aus.
+- Mehrere `actions.ts` haben ungenutzte Imports (Lint-Warnungen, vorbestehend).
