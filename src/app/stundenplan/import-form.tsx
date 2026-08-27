@@ -1,9 +1,14 @@
 "use client";
 
 import { useState, useTransition, useRef } from "react";
+import { Upload, Checkmark, Document, Close } from "@carbon/icons-react";
+
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Notification } from "@/components/ui/notification";
+import { InlineLoading } from "@/components/ui/loading";
+import { SectionHeader, DataItem } from "@/components/ui/page-header";
+import { Label, HelperText } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -19,13 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Upload,
-  Loader2,
-  CheckCircle2,
-  AlertTriangle,
-  CalendarDays,
-} from "lucide-react";
 import {
   analysiereStundenplan,
   importiereStundenplan,
@@ -66,6 +64,13 @@ export function StundenplanImport() {
     });
   }
 
+  function zuruecksetzen() {
+    setInhalt(null);
+    setDateiname(null);
+    setAnalyse(null);
+    if (dateiRef.current) dateiRef.current.value = "";
+  }
+
   function handleImport() {
     if (!inhalt) return;
     startTransition(async () => {
@@ -76,12 +81,7 @@ export function StundenplanImport() {
           .map(([kuerzel, klasseId]) => ({ kuerzel, klasseId }))
       );
       setErgebnis(res);
-      if (res.ok) {
-        setAnalyse(null);
-        setInhalt(null);
-        setDateiname(null);
-        if (dateiRef.current) dateiRef.current.value = "";
-      }
+      if (res.ok) zuruecksetzen();
     });
   }
 
@@ -93,228 +93,215 @@ export function StundenplanImport() {
     analyse?.ok === true ? analyse.klassen.length - offen.length : 0;
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarDays className="h-5 w-5" />
-            Stundenplan importieren
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            WebUntis-Export als <code>.ics</code>. Daraus entstehen die Sequenzen
-            samt Klasse, Modul, Datum, Zeit, Lektionenzahl und Raum — ein
-            erneuter Import derselben Datei ändert nichts.
-          </p>
+    <section className="mb-12">
+      <SectionHeader
+        titel="Stundenplan importieren"
+        beschreibung="WebUntis-Export als .ics. Daraus entstehen die Sequenzen samt Klasse, Modul, Datum, Zeit, Lektionenzahl und Raum — ein erneuter Import derselben Datei ändert nichts."
+      />
 
-          <div className="flex items-center gap-3">
-            <input
-              ref={dateiRef}
-              type="file"
-              accept=".ics,text/calendar"
-              onChange={handleDatei}
-              className="hidden"
-              id="ics-datei"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              disabled={laeuft}
-              onClick={() => dateiRef.current?.click()}
-            >
-              {laeuft ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              Datei wählen
-            </Button>
-            {dateiname && (
-              <span className="text-sm text-muted-foreground">{dateiname}</span>
+      {/* Carbon File Uploader: Label, Hilfetext, Knopf, dann die Dateizeile. */}
+      <div className="bg-layer p-4">
+        <Label htmlFor="ics-datei">Kalenderexport</Label>
+        <HelperText className="mt-1 mb-4">
+          Nur .ics-Dateien. Die Analyse läuft, sobald die Datei gewählt ist.
+        </HelperText>
+
+        <input
+          ref={dateiRef}
+          type="file"
+          accept=".ics,text/calendar"
+          onChange={handleDatei}
+          className="sr-only"
+          id="ics-datei"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={laeuft}
+          onClick={() => dateiRef.current?.click()}
+        >
+          Datei wählen
+          <Upload size={16} />
+        </Button>
+
+        {dateiname && (
+          <div className="mt-4 flex items-center gap-3 border border-border-strong bg-background px-4 py-2">
+            <Document size={16} className="shrink-0 text-text-secondary" />
+            <span className="type-body-compact-02 min-w-0 flex-1 truncate">
+              {dateiname}
+            </span>
+            {laeuft ? (
+              <InlineLoading />
+            ) : (
+              <button
+                type="button"
+                onClick={zuruecksetzen}
+                aria-label="Datei entfernen"
+                className="shrink-0 text-text-secondary transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]"
+              >
+                <Close size={16} />
+              </button>
             )}
           </div>
+        )}
+      </div>
 
-          {analyse?.ok === false && (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-200">
-              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-              <p className="text-sm">{analyse.fehler}</p>
-            </div>
-          )}
+      {analyse?.ok === false && (
+        <Notification kind="error" titel="Import nicht möglich" className="mt-4">
+          {analyse.fehler}
+        </Notification>
+      )}
 
-          {ergebnis?.ok === false && (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-200">
-              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-              <p className="text-sm">{ergebnis.fehler}</p>
-            </div>
-          )}
+      {ergebnis?.ok === false && (
+        <Notification kind="error" titel="Import fehlgeschlagen" className="mt-4">
+          {ergebnis.fehler}
+        </Notification>
+      )}
 
-          {ergebnis?.ok === true && (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200">
-              <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
-              <div className="text-sm space-y-1">
-                <p>
-                  {ergebnis.neu} Sequenzen neu angelegt, {ergebnis.aktualisiert}{" "}
-                  aktualisiert, {ergebnis.unveraendert} unverändert.
-                </p>
-                {ergebnis.uebersprungen > 0 && (
-                  <p>
-                    {ergebnis.uebersprungen} Termine übersprungen — Kürzel keiner
-                    Klasse zugeordnet.
-                  </p>
-                )}
-                {ergebnis.verwaist > 0 && (
-                  <p>
-                    {ergebnis.verwaist} bestehende Sequenzen kommen im Export
-                    nicht mehr vor. Sie wurden nicht gelöscht — dort könnte
-                    Planung drinstecken.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {ergebnis?.ok === true && (
+        <Notification kind="success" titel="Import abgeschlossen" className="mt-4">
+          {ergebnis.neu} Sequenzen neu angelegt, {ergebnis.aktualisiert}{" "}
+          aktualisiert, {ergebnis.unveraendert} unverändert
+          {ergebnis.uebersprungen > 0 &&
+            ` · ${ergebnis.uebersprungen} Termine übersprungen (Kürzel keiner Klasse zugeordnet)`}
+          {ergebnis.verwaist > 0 &&
+            ` · ${ergebnis.verwaist} bestehende Sequenzen fehlen im Export und wurden nicht gelöscht — dort könnte Planung drinstecken`}
+        </Notification>
+      )}
 
       {analyse?.ok === true && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Gefunden</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-3 text-sm">
-                <div>
-                  <div className="text-2xl font-semibold">
-                    {analyse.anzahlTermine}
-                  </div>
-                  <div className="text-muted-foreground">Sequenzen</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-semibold">
-                    {analyse.klassen.length}
-                  </div>
-                  <div className="text-muted-foreground">Klassenkürzel</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-semibold">
-                    {analyse.module.length}
-                  </div>
-                  <div className="text-muted-foreground">Module</div>
-                </div>
+          <div className="mt-8 grid gap-px bg-border-subtle sm:grid-cols-3">
+            <div className="bg-layer p-4">
+              <div className="type-label-02 text-text-helper">Sequenzen</div>
+              <div className="type-heading-04 mt-1 text-foreground">
+                {analyse.anzahlTermine}
               </div>
-              <p className="text-sm text-muted-foreground mt-4">
-                Zeitraum {analyse.vonDatum} bis {analyse.bisDatum}
-                {analyse.ohneModul > 0 &&
-                  ` · ${analyse.ohneModul} Termine ohne erkennbare Modulnummer`}
-              </p>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="bg-layer p-4">
+              <div className="type-label-02 text-text-helper">Klassenkürzel</div>
+              <div className="type-heading-04 mt-1 text-foreground">
+                {analyse.klassen.length}
+              </div>
+            </div>
+            <div className="bg-layer p-4">
+              <div className="type-label-02 text-text-helper">Module</div>
+              <div className="type-heading-04 mt-1 text-foreground">
+                {analyse.module.length}
+              </div>
+            </div>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Klassen zuordnen</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Der Kalender nennt Klassen anders als du. Die Zuordnung wird
-                gespeichert und beim nächsten Import wiederverwendet.
-              </p>
+          <div className="mt-4 flex flex-wrap gap-x-12 gap-y-4 bg-layer p-4">
+            <DataItem label="Zeitraum">
+              {analyse.vonDatum} bis {analyse.bisDatum}
+            </DataItem>
+            {analyse.ohneModul > 0 && (
+              <DataItem label="Ohne erkennbare Modulnummer">
+                {analyse.ohneModul} Termine
+              </DataItem>
+            )}
+          </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Kürzel im Kalender</TableHead>
-                    <TableHead className="w-24">Termine</TableHead>
-                    <TableHead>Klasse in Sensei</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {analyse.klassen.map((k) => {
-                    const wert = zuordnung[k.kuerzel] ?? OHNE;
-                    return (
-                      <TableRow key={k.kuerzel}>
-                        <TableCell className="font-mono text-xs">
-                          {k.kuerzel}
-                          {k.bekannt && (
-                            <Badge variant="outline" className="ml-2">
-                              bekannt
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {k.anzahl}
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={wert}
-                            onValueChange={(v) =>
-                              setZuordnung((z) => ({
-                                ...z,
-                                [k.kuerzel]: String(v),
-                              }))
-                            }
-                            items={{
-                              [OHNE]: "— nicht importieren —",
-                              ...Object.fromEntries(
-                                analyse.klassenListe.map((kl) => [
-                                  kl.id,
-                                  kl.bezeichnung,
-                                ])
-                              ),
-                            }}
-                          >
-                            <SelectTrigger className="w-56">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={OHNE}>
-                                — nicht importieren —
+          <div className="mt-8">
+            <SectionHeader
+              titel="Klassen zuordnen"
+              beschreibung="Der Kalender nennt Klassen anders als du. Die Zuordnung wird gespeichert und beim nächsten Import wiederverwendet."
+            />
+
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-layer-accent">
+                  <TableHead>Kürzel im Kalender</TableHead>
+                  <TableHead className="w-24">Termine</TableHead>
+                  <TableHead className="w-72">Klasse in Sensei</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {analyse.klassen.map((k) => {
+                  const wert = zuordnung[k.kuerzel] ?? OHNE;
+                  return (
+                    <TableRow key={k.kuerzel} className="hover:bg-layer">
+                      <TableCell className="py-2">
+                        <span className="font-mono text-sm">{k.kuerzel}</span>
+                        {k.bekannt && (
+                          <Badge variant="blue" size="sm" className="ml-2">
+                            bekannt
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="tabular-nums text-text-secondary">
+                        {k.anzahl}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <Select
+                          value={wert}
+                          onValueChange={(v) =>
+                            setZuordnung((z) => ({
+                              ...z,
+                              [k.kuerzel]: String(v),
+                            }))
+                          }
+                          items={{
+                            [OHNE]: "— nicht importieren —",
+                            ...Object.fromEntries(
+                              analyse.klassenListe.map((kl) => [
+                                kl.id,
+                                kl.bezeichnung,
+                              ])
+                            ),
+                          }}
+                        >
+                          <SelectTrigger size="sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={OHNE}>
+                              — nicht importieren —
+                            </SelectItem>
+                            {analyse.klassenListe.map((kl) => (
+                              <SelectItem key={kl.id} value={kl.id}>
+                                {kl.bezeichnung}
                               </SelectItem>
-                              {analyse.klassenListe.map((kl) => (
-                                <SelectItem key={kl.id} value={kl.id}>
-                                  {kl.bezeichnung}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
 
-              {analyse.module.some((m) => !m.vorhanden) && (
-                <p className="text-sm text-muted-foreground">
-                  Neu angelegt werden die Module{" "}
-                  {analyse.module
-                    .filter((m) => !m.vorhanden)
-                    .map((m) => m.nummer)
-                    .join(", ")}
-                  .
-                </p>
-              )}
+            {analyse.module.some((m) => !m.vorhanden) && (
+              <p className="type-body-02 mt-4 text-text-secondary">
+                Neu angelegt werden die Module{" "}
+                {analyse.module
+                  .filter((m) => !m.vorhanden)
+                  .map((m) => m.nummer)
+                  .join(", ")}
+                .
+              </p>
+            )}
 
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-sm text-muted-foreground">
-                  {zugeordnet} von {analyse.klassen.length} Kürzeln zugeordnet
-                  {offen.length > 0 &&
-                    ` · ${offen.reduce((n, k) => n + k.anzahl, 0)} Termine werden übersprungen`}
-                </span>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+              <span className="type-body-02 text-text-secondary">
+                {zugeordnet} von {analyse.klassen.length} Kürzeln zugeordnet
+                {offen.length > 0 &&
+                  ` · ${offen.reduce((n, k) => n + k.anzahl, 0)} Termine werden übersprungen`}
+              </span>
+              <div className="flex items-center gap-4">
+                {laeuft && <InlineLoading text="Wird importiert…" />}
                 <Button onClick={handleImport} disabled={laeuft || zugeordnet === 0}>
-                  {laeuft ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
                   Sequenzen anlegen
+                  <Checkmark size={16} />
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </>
       )}
-    </div>
+    </section>
   );
 }

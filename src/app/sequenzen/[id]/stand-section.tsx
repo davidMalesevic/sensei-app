@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { ArrowRight } from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { History } from "lucide-react";
+import { SectionHeader, DataItem } from "@/components/ui/page-header";
 
 export type VorherigerUebertrag = {
   id: string;
@@ -30,45 +31,57 @@ export function StandSection({ stand }: { stand: VorherigerUebertrag }) {
     !stand.uebertragErledigt?.length;
 
   return (
-    <Card className="bg-muted/40">
-      <CardContent className="py-4 space-y-2">
-        <div className="flex items-center gap-2 text-sm">
-          <History className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">Stand aus der letzten Lektion</span>
+    <section className="mb-12">
+      <SectionHeader
+        titel="Stand aus der letzten Lektion"
+        aktionen={
           <Link
             href={`/sequenzen/${stand.id}`}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="type-body-compact-02 inline-flex items-center gap-2 text-link underline-offset-2 hover:underline"
           >
             {formatiereDatum(stand.startDatum)}
+            <ArrowRight size={16} />
           </Link>
-        </div>
+        }
+      />
 
+      <div className="bg-layer p-4">
         {leer ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="type-body-02 text-text-placeholder">
             Kein Übertrag hinterlegt.
           </p>
         ) : (
-          <>
+          <div className="space-y-4">
             {stand.uebertragSlideBis !== null && (
-              <p className="text-sm">
-                Gekommen bis <strong>Slide {stand.uebertragSlideBis}</strong>.
-              </p>
+              <DataItem label="Gekommen bis">
+                Slide {stand.uebertragSlideBis}
+              </DataItem>
             )}
+
             {stand.uebertragErledigt && stand.uebertragErledigt.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {stand.uebertragErledigt.map((e) => (
-                  <Badge key={e} variant="secondary" className="font-normal">
-                    {e}
-                  </Badge>
-                ))}
+              <div>
+                <div className="type-label-02 mb-2 text-text-helper">Erledigt</div>
+                <div className="flex flex-wrap gap-2">
+                  {stand.uebertragErledigt.map((e) => (
+                    <Badge key={e} variant="green" size="sm">
+                      {e}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
+
             {stand.uebertrag && (
-              <p className="text-sm whitespace-pre-wrap">{stand.uebertrag}</p>
+              <div>
+                <div className="type-label-02 mb-1 text-text-helper">Notiz</div>
+                <p className="type-body-02 whitespace-pre-wrap text-foreground">
+                  {stand.uebertrag}
+                </p>
+              </div>
             )}
-          </>
+          </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

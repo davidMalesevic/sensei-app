@@ -1,26 +1,22 @@
+import Link from "next/link";
+import { ArrowRight } from "@carbon/icons-react";
+
 import { StundenplanImport } from "./import-form";
 import { getStundenplanUebersicht } from "./actions";
 import { getOffeneUebertraege } from "@/app/sequenzen/uebertrag-actions";
-import { AlertCircle } from "lucide-react";
 import { EntwuerfeButton } from "./entwuerfe-button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Notification } from "@/components/ui/notification";
+import { PageHeader, SectionHeader } from "@/components/ui/page-header";
 import { getKWFromDateString } from "@/lib/kw";
 import { findeAktuelle, schweizerHeute, schweizerJetzt } from "@/lib/zeit";
-import Link from "next/link";
+import { statusTag } from "@/lib/status";
 
 // Die Seite zeigt den aktuellen Importstand — nicht den der Build-Zeit.
 export const dynamic = "force-dynamic";
 
 const WOCHENTAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-
-const STATUS_LABEL: Record<string, string> = {
-  leer: "kein Ablauf",
-  entwurf: "Entwurf",
-  bestaetigt: "bestätigt",
-  gehalten: "gehalten",
-};
 
 function formatiereTag(datum: string): string {
   const d = new Date(datum + "T00:00:00");
@@ -52,146 +48,150 @@ export default async function StundenplanPage() {
   const wochen = [...nachWoche.entries()].slice(0, 4);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Stundenplan</h1>
-        <p className="text-muted-foreground mt-1">
-          Sequenzen entstehen aus dem WebUntis-Export — Klasse, Modul, Datum,
-          Zeit und Raum werden nicht eingetippt.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        titel="Stundenplan"
+        beschreibung="Sequenzen entstehen aus dem WebUntis-Export — Klasse, Modul, Datum, Zeit und Raum werden nicht eingetippt."
+      />
 
       {offen.length > 0 && (
-        <Card className="border-red-300 dark:border-red-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertCircle className="h-4 w-4 text-red-500" />
-              {offen.length} Lektionen ohne Übertrag
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <p className="text-sm text-muted-foreground mb-2">
-              Ohne den Stand fehlt der Folgewoche der Ausgangspunkt.
-            </p>
+        <div className="mb-12">
+          <Notification
+            kind="error"
+            titel={`${offen.length} Lektionen ohne Übertrag`}
+          >
+            Ohne den Stand fehlt der Folgewoche der Ausgangspunkt.
+          </Notification>
+          <div className="bg-layer">
             {offen.slice(0, 8).map((o) => (
               <Link
                 key={o.id}
                 href={`/sequenzen/${o.id}`}
-                className="flex items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted"
+                className="type-body-compact-02 flex items-center gap-4 border-b border-border-subtle px-4 py-3 transition-colors duration-[110ms] ease-carbon-standard last:border-b-0 hover:bg-layer-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
               >
-                <span className="w-20 shrink-0 text-muted-foreground">
+                <span className="w-24 shrink-0 text-text-secondary">
                   {formatiereTag(o.startDatum!)}
                 </span>
-                <span className="w-24 shrink-0 font-medium">{o.klasse}</span>
-                <span className="text-muted-foreground">
+                <span className="w-28 shrink-0 font-semibold">{o.klasse}</span>
+                <span className="text-text-secondary">
                   {o.modulNummer ? `Modul ${o.modulNummer}` : "—"}
                 </span>
+                <ArrowRight size={16} className="ml-auto shrink-0 text-primary" />
               </Link>
             ))}
             {offen.length > 8 && (
-              <p className="text-xs text-muted-foreground pt-1">
+              <p className="type-helper-02 px-4 py-2 text-text-helper">
                 … und {offen.length - 8} weitere
               </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       <StundenplanImport />
 
       {eintraege.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Importiert · {eintraege.length} Sequenzen, davon {kommende.length}{" "}
-              noch anstehend
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <EntwuerfeButton />
+        <section className="mb-12">
+          <SectionHeader
+            titel="Anstehende Wochen"
+            beschreibung={`${eintraege.length} Sequenzen importiert, davon ${kommende.length} noch anstehend.`}
+            aktionen={
+              kommende.length > 0 ? (
+                <Button variant="ghost" size="sm" render={<Link href="/sequenzen" />}>
+                  Alle Sequenzen
+                  <ArrowRight size={16} />
+                </Button>
+              ) : undefined
+            }
+          />
 
-            {wochen.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Keine anstehenden Sequenzen.
-              </p>
-            ) : (
-              wochen.map(([kw, liste]) => (
-                <div key={kw} className="space-y-2">
-                  <div className="text-sm font-medium text-muted-foreground">
+          <div className="mb-8">
+            <EntwuerfeButton />
+          </div>
+
+          {wochen.length === 0 ? (
+            <p className="type-body-02 bg-layer p-6 text-text-secondary">
+              Keine anstehenden Sequenzen.
+            </p>
+          ) : (
+            <div className="space-y-8">
+              {wochen.map(([kw, liste]) => (
+                <div key={kw}>
+                  <div className="type-heading-compact-02 mb-2 border-b border-border-strong pb-2 text-foreground">
                     KW {kw}
                   </div>
-                  <div className="space-y-1">
-                    {liste.map((e) => (
-                      <Link
-                        key={e.id}
-                        href={`/sequenzen/${e.id}`}
-                        className={`flex items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted ${
-                          e.id === hervorgehoben?.id
-                            ? "bg-primary/5 ring-1 ring-primary/30"
-                            : ""
-                        }`}
-                      >
-                        <span className="w-20 shrink-0 text-muted-foreground">
-                          {formatiereTag(e.startDatum!)}
-                        </span>
-                        <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
-                          {e.startZeit}–{e.endZeit}
-                        </span>
-                        {e.id === hervorgehoben?.id && (
-                          <Badge className="shrink-0 text-[10px] font-normal">
-                            {laufend ? "jetzt" : "als nächstes"}
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="shrink-0">
-                          {e.lektionen} Lekt.
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className="shrink-0 text-[10px] font-normal"
+                  <div className="bg-layer">
+                    {liste.map((e) => {
+                      const aktiv = e.id === hervorgehoben?.id;
+                      return (
+                        <Link
+                          key={e.id}
+                          href={`/sequenzen/${e.id}`}
+                          className={`type-body-compact-02 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border-subtle px-4 py-3 transition-colors duration-[110ms] ease-carbon-standard last:border-b-0 hover:bg-layer-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)] ${
+                            aktiv
+                              ? "border-l-[3px] border-l-border-interactive bg-layer-selected pl-[13px]"
+                              : ""
+                          }`}
                         >
-                          {STATUS_LABEL[e.status] ?? e.status}
-                        </Badge>
-                        <span className="w-24 shrink-0 font-medium">
-                          {e.klasse.bezeichnung}
-                        </span>
-                        <span className="truncate">
-                          {e.modul ? `Modul ${e.modul.nummer}` : "—"}
-                        </span>
-                        <span className="ml-auto shrink-0 text-muted-foreground">
-                          {e.raum}
-                        </span>
-                      </Link>
-                    ))}
+                          <span className="w-24 shrink-0 text-text-secondary">
+                            {formatiereTag(e.startDatum!)}
+                          </span>
+                          <span className="w-28 shrink-0 tabular-nums text-text-secondary">
+                            {e.startZeit}–{e.endZeit}
+                          </span>
+                          <span className="w-28 shrink-0 font-semibold">
+                            {e.klasse.bezeichnung}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-text-secondary">
+                            {e.modul ? `Modul ${e.modul.nummer}` : "—"}
+                          </span>
+                          {aktiv && (
+                            <Badge variant="blue" size="sm">
+                              {laufend ? "jetzt" : "als nächstes"}
+                            </Badge>
+                          )}
+                          <Badge variant="ghost" size="sm">
+                            {e.lektionen} Lekt.
+                          </Badge>
+                          <Badge variant={statusTag(e.status).variant} size="sm">
+                            {statusTag(e.status).label}
+                          </Badge>
+                          <span className="w-16 shrink-0 text-right text-text-secondary">
+                            {e.raum}
+                          </span>
+                        </Link>
+                      );
+                    })}
                   </div>
                 </div>
-              ))
-            )}
-
-            {kommende.length > 0 && (
-              <Button variant="outline" render={<Link href="/sequenzen" />}>
-                Alle Sequenzen
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {aliasse.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Gespeicherte Zuordnungen</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
+        <section>
+          <SectionHeader
+            titel="Gespeicherte Zuordnungen"
+            beschreibung="Kürzel aus dem Kalender und die Klasse, die sie in Sensei meinen."
+          />
+          <div className="bg-layer">
             {aliasse.map((a) => (
-              <div key={a.kuerzel} className="flex items-center gap-3 text-sm">
-                <code className="text-xs">{a.kuerzel}</code>
-                <span className="text-muted-foreground">→</span>
-                <span className="font-medium">{a.bezeichnung}</span>
+              <div
+                key={a.kuerzel}
+                className="type-body-compact-02 flex items-center gap-4 border-b border-border-subtle px-4 py-2 last:border-b-0"
+              >
+                <code className="font-mono text-sm text-text-secondary">
+                  {a.kuerzel}
+                </code>
+                <ArrowRight size={16} className="shrink-0 text-text-helper" />
+                <span className="font-semibold">{a.bezeichnung}</span>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
-    </div>
+    </>
   );
 }

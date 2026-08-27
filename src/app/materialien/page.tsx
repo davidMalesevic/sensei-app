@@ -1,5 +1,16 @@
 import Link from "next/link";
+import {
+  Document,
+  DocumentBlank,
+  PresentationFile,
+  Link as LinkIcon,
+  Video,
+  Pen,
+  Launch,
+} from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -8,15 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  FileText,
-  Presentation,
-  Link as LinkIcon,
-  Video,
-  StickyNote,
-  File,
-  ExternalLink,
-} from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { getMaterialien } from "./actions";
 import { MaterialDeleteButton } from "./material-delete-button";
 
@@ -30,14 +33,27 @@ const typLabels: Record<string, string> = {
   sonstiges: "Sonstiges",
 };
 
-const typIcons: Record<string, typeof FileText> = {
-  arbeitsblatt: FileText,
-  praesentation: Presentation,
+const typIcons: Record<string, typeof Document> = {
+  arbeitsblatt: Document,
+  praesentation: PresentationFile,
   link: LinkIcon,
   video: Video,
-  dokument: File,
-  notiz: StickyNote,
-  sonstiges: File,
+  dokument: DocumentBlank,
+  notiz: Pen,
+  sonstiges: DocumentBlank,
+};
+
+/** Carbon-Tags ordnen nach Art, nicht nach Wichtigkeit. */
+const typFarben: Record<
+  string,
+  "blue" | "purple" | "teal" | "magenta" | "cool-gray" | "green"
+> = {
+  arbeitsblatt: "blue",
+  praesentation: "purple",
+  link: "teal",
+  video: "magenta",
+  dokument: "cool-gray",
+  notiz: "green",
 };
 
 function getZuordnung(mat: {
@@ -45,9 +61,16 @@ function getZuordnung(mat: {
   lektionsblock: { id: string; thema: string | null; sequenzId: string } | null;
   phase: { id: string; bezeichnung: string; lektionsblockId: string } | null;
 }) {
-  if (mat.phase) return { label: `Phase: ${mat.phase.bezeichnung}`, type: "Phase" };
-  if (mat.lektionsblock) return { label: `Block: ${mat.lektionsblock.thema ?? "–"}`, type: "Block" };
-  if (mat.sequenz) return { label: mat.sequenz.titel, type: "Sequenz", href: `/sequenzen/${mat.sequenz.id}` };
+  if (mat.phase)
+    return { label: `Phase: ${mat.phase.bezeichnung}`, type: "Phase" };
+  if (mat.lektionsblock)
+    return { label: `Block: ${mat.lektionsblock.thema ?? "–"}`, type: "Block" };
+  if (mat.sequenz)
+    return {
+      label: mat.sequenz.titel,
+      type: "Sequenz",
+      href: `/sequenzen/${mat.sequenz.id}`,
+    };
   return { label: "–", type: "Ohne" };
 }
 
@@ -55,82 +78,96 @@ export default async function MaterialienPage() {
   const materialienList = await getMaterialien();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Materialien</h1>
-        <p className="text-muted-foreground mt-1">
-          Alle Unterrichtsmaterialien auf einen Blick.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        titel="Materialien"
+        beschreibung="Alle Unterrichtsmaterialien auf einen Blick. Material hängt am Modul, nicht an der Sequenz."
+      />
 
       {materialienList.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center">
-          <p className="text-muted-foreground">
-            Noch keine Materialien vorhanden. Materialien können direkt bei
-            einer Sequenz, einem Lektionsblock oder einer Phase hinzugefügt
-            werden.
+        <div className="bg-layer p-8">
+          <p className="type-body-02 max-w-2xl text-text-secondary">
+            Noch keine Materialien vorhanden. Sie werden im Bildungsplan beim
+            jeweiligen Modul hochgeladen — Präsentationen als PDF, damit die
+            Seitenzahl zur Foliennummer wird.
           </p>
         </div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Titel</TableHead>
-                <TableHead className="w-[120px]">Typ</TableHead>
-                <TableHead>Zuordnung</TableHead>
-                <TableHead className="w-[60px]">Link</TableHead>
-                <TableHead className="w-[60px]">Aktionen</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {materialienList.map((mat) => {
-                const Icon = typIcons[mat.typ] ?? File;
-                const zuordnung = getZuordnung(mat);
-                return (
-                  <TableRow key={mat.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                        {mat.titel}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {typLabels[mat.typ] ?? mat.typ}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {zuordnung.href ? (
-                        <Link href={zuordnung.href} className="hover:underline">
-                          {zuordnung.label}
-                        </Link>
-                      ) : (
-                        zuordnung.label
-                      )}
-                    </TableCell>
-                    <TableCell>
+        <Table className="min-w-[52rem] table-fixed">
+          <TableHeader>
+            <TableRow className="hover:bg-layer-accent">
+              {/* ohne Breite: Titel und Zuordnung teilen sich den Rest */}
+              <TableHead>Titel</TableHead>
+              <TableHead className="w-44">Typ</TableHead>
+              <TableHead>Zuordnung</TableHead>
+              <TableHead className="w-24 text-right">
+                <span className="sr-only">Aktionen</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {materialienList.map((mat) => {
+              const Icon = typIcons[mat.typ] ?? DocumentBlank;
+              const zuordnung = getZuordnung(mat);
+              return (
+                <TableRow key={mat.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Icon
+                        size={16}
+                        className="shrink-0 text-text-secondary"
+                      />
+                      <span className="truncate font-semibold">{mat.titel}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={typFarben[mat.typ] ?? "cool-gray"}
+                      size="sm"
+                    >
+                      {typLabels[mat.typ] ?? mat.typ}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="truncate text-text-secondary">
+                    {zuordnung.href ? (
+                      <Link
+                        href={zuordnung.href}
+                        className="text-link underline-offset-2 hover:underline"
+                      >
+                        {zuordnung.label}
+                      </Link>
+                    ) : (
+                      zuordnung.label
+                    )}
+                  </TableCell>
+                  <TableCell className="pr-2">
+                    <div className="flex justify-end gap-px">
                       {mat.url && (
-                        <a
-                          href={mat.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
+                        <Button
+                          variant="ghost-neutral"
+                          size="icon-sm"
+                          aria-label={`${mat.titel} öffnen`}
+                          title="Öffnen"
+                          render={
+                            <a
+                              href={mat.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            />
+                          }
                         >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
+                          <Launch size={16} />
+                        </Button>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <MaterialDeleteButton id={mat.id} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                      <MaterialDeleteButton id={mat.id} titel={mat.titel} />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       )}
-    </div>
+    </>
   );
 }

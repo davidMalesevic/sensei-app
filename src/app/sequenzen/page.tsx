@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Calendar } from "@carbon/icons-react";
+
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -9,20 +11,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { getSequenzen } from "./actions";
 import { SequenzDeleteButton } from "./[id]/sequenz-delete-button";
 import { SortableTableHead } from "@/components/sortable-table-head";
 import { getKWFromDateString } from "@/lib/kw";
+import { statusTag } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  leer: "kein Ablauf",
-  entwurf: "Entwurf",
-  bestaetigt: "bestätigt",
-  gehalten: "gehalten",
-};
 
 const WOCHENTAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
@@ -63,91 +59,103 @@ export default async function SequenzenPage({
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Sequenzen</h1>
-          <p className="text-muted-foreground mt-1">
-            Entstehen aus dem Stundenplan — Klasse × Modul × Unterrichtstag.
-          </p>
-        </div>
-        <Button variant="outline" render={<Link href="/stundenplan" />}>
-          <CalendarDays className="h-4 w-4" />
-          Stundenplan
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        titel="Sequenzen"
+        beschreibung="Entstehen aus dem Stundenplan — Klasse × Modul × Unterrichtstag."
+        aktionen={
+          <Button variant="outline" render={<Link href="/stundenplan" />}>
+            Stundenplan
+            <Calendar size={16} />
+          </Button>
+        }
+      />
 
       {sequenzenList.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
-          <p className="text-muted-foreground">
-            Noch keine Sequenzen vorhanden.
+        <div className="bg-layer p-8">
+          <p className="type-body-02 mb-6 text-text-secondary">
+            Noch keine Sequenzen vorhanden. Sie entstehen beim Import des
+            WebUntis-Kalenderexports.
           </p>
-          <Button variant="outline" render={<Link href="/stundenplan" />}>
-            <CalendarDays className="h-4 w-4" />
+          <Button render={<Link href="/stundenplan" />}>
             Stundenplan importieren
+            <Calendar size={16} />
           </Button>
         </div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTableHead column="datum">Datum</SortableTableHead>
-                <TableHead className="w-24">Zeit</TableHead>
-                <SortableTableHead column="klasse">Klasse</SortableTableHead>
-                <SortableTableHead column="modul">Modul</SortableTableHead>
-                <TableHead className="w-20">Lektionen</TableHead>
-                <TableHead className="w-16">KW</TableHead>
-                <SortableTableHead column="status">Status</SortableTableHead>
-                <TableHead className="w-20">Raum</TableHead>
-                <TableHead className="w-[60px]">Aktionen</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/sequenzen/${s.id}`}
-                      className="hover:underline"
-                    >
-                      {tag(s.startDatum)}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {s.startZeit ? `${s.startZeit}–${s.endZeit}` : "–"}
-                  </TableCell>
-                  <TableCell>{s.klasse.bezeichnung}</TableCell>
-                  <TableCell>
-                    {s.modul ? (
-                      <Badge variant="outline">M{s.modul.nummer}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">–</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {s.lektionen ?? "–"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {getKWFromDateString(s.startDatum) ?? "–"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-[10px] font-normal">
-                      {STATUS_LABEL[s.status] ?? s.status}
+        <Table className="min-w-[68rem] table-fixed">
+          <TableHeader>
+            <TableRow className="hover:bg-layer-accent">
+              <SortableTableHead column="datum" className="w-40">
+                Datum
+              </SortableTableHead>
+              <TableHead className="w-36">Zeit</TableHead>
+              <SortableTableHead column="klasse" className="w-36">
+                Klasse
+              </SortableTableHead>
+              <SortableTableHead column="modul" className="w-28">
+                Modul
+              </SortableTableHead>
+              <TableHead className="w-32">Lektionen</TableHead>
+              <TableHead className="w-20">KW</TableHead>
+              <SortableTableHead column="status" className="w-40">
+                Stand
+              </SortableTableHead>
+              <TableHead className="w-24">Raum</TableHead>
+              <TableHead className="text-right">
+                <span className="sr-only">Aktionen</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell className="whitespace-nowrap">
+                  <Link
+                    href={`/sequenzen/${s.id}`}
+                    className="text-link underline-offset-2 hover:underline"
+                  >
+                    {tag(s.startDatum)}
+                  </Link>
+                </TableCell>
+                <TableCell className="tabular-nums whitespace-nowrap text-text-secondary">
+                  {s.startZeit ? `${s.startZeit}–${s.endZeit}` : "–"}
+                </TableCell>
+                <TableCell>{s.klasse.bezeichnung}</TableCell>
+                <TableCell>
+                  {s.modul ? (
+                    <Badge variant="cool-gray" size="sm">
+                      M{s.modul.nummer}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {s.raum ?? "–"}
-                  </TableCell>
-                  <TableCell>
-                    <SequenzDeleteButton id={s.id} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                  ) : (
+                    <span className="text-text-placeholder">–</span>
+                  )}
+                </TableCell>
+                <TableCell className="tabular-nums text-text-secondary">
+                  {s.lektionen ?? "–"}
+                </TableCell>
+                <TableCell className="tabular-nums text-text-secondary">
+                  {getKWFromDateString(s.startDatum) ?? "–"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={statusTag(s.status).variant} size="sm">
+                    {statusTag(s.status).label}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-text-secondary">
+                  {s.raum ?? "–"}
+                </TableCell>
+                <TableCell className="pr-2 text-right">
+                  <SequenzDeleteButton
+                    id={s.id}
+                    bezeichnung={`${s.klasse.bezeichnung} · ${tag(s.startDatum)}`}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </div>
+    </>
   );
 }

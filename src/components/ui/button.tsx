@@ -3,34 +3,67 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Carbon Button.
+ * https://carbondesignsystem.com/components/button/style/
+ *
+ * Die Carbon-Signatur: Beschriftung linksbündig, Icon rechts aussen, keine
+ * abgerundeten Ecken, 2px-Fokusrahmen nach innen. Für dichte Zeilen sind
+ * Icon-Varianten (`size="icon-sm"`, `variant="ghost"`) vorgesehen — nicht
+ * schmalere Textknöpfe.
+ */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  [
+    "group/button relative inline-flex shrink-0 items-center text-left align-top",
+    "type-body-compact-02 border border-transparent whitespace-nowrap",
+    "transition-colors duration-[70ms] ease-carbon-entrance outline-none select-none",
+    "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]",
+    "disabled:pointer-events-none disabled:cursor-not-allowed",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+  ].join(" "),
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
-        outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        // Carbon: Primary
+        default:
+          "bg-primary text-white hover:bg-button-primary-hover active:bg-button-primary-active focus-visible:shadow-[inset_0_0_0_1px_var(--background)] disabled:bg-[#c6c6c6] disabled:text-[#8d8d8d] dark:disabled:bg-[#525252] dark:disabled:text-[#8d8d8d]",
+        // Carbon: Secondary
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "bg-button-secondary text-white hover:bg-button-secondary-hover active:bg-button-secondary-active focus-visible:shadow-[inset_0_0_0_1px_var(--background)] disabled:bg-[#c6c6c6] disabled:text-[#8d8d8d] dark:disabled:bg-[#525252] dark:disabled:text-[#8d8d8d]",
+        // Carbon: Tertiary — der Rahmenknopf
+        outline:
+          "border-primary bg-transparent text-primary hover:bg-primary hover:text-white active:bg-button-primary-active active:text-white disabled:border-[#c6c6c6] disabled:bg-transparent disabled:text-[#c6c6c6] dark:disabled:border-[#525252] dark:disabled:text-[#525252]",
+        // Carbon: Ghost
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "bg-transparent text-primary hover:bg-layer-hover hover:text-link-hover active:bg-layer-active disabled:text-[#c6c6c6] dark:disabled:text-[#525252]",
+        // Carbon: Ghost, aber in Textfarbe — für Werkzeugleisten über Tabellen
+        "ghost-neutral":
+          "bg-transparent text-foreground hover:bg-layer-hover active:bg-layer-active disabled:text-text-disabled",
+        // Carbon: Danger Primary
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-support-error text-white hover:bg-button-danger-hover active:bg-button-danger-active focus-visible:shadow-[inset_0_0_0_1px_var(--background)] disabled:bg-[#c6c6c6] disabled:text-[#8d8d8d]",
+        // Carbon: Danger Tertiary
+        "destructive-outline":
+          "border-support-error bg-transparent text-support-error hover:bg-support-error hover:text-white active:bg-button-danger-active active:text-white disabled:border-[#c6c6c6] disabled:text-[#c6c6c6]",
+        // Carbon: Danger Ghost
+        "destructive-ghost":
+          "bg-transparent text-support-error hover:bg-support-error hover:text-white active:bg-button-danger-active active:text-white disabled:text-[#c6c6c6]",
+        link: "bg-transparent p-0 text-link underline underline-offset-2 hover:text-link-hover disabled:text-text-disabled",
       },
       size: {
-        default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-8",
-        "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
+        // Carbon: Beschriftung links, grosszügiger Raum rechts fürs Icon.
+        // `xs` behält die dichte 01-Schrift — kleines Feld, kleine Schrift.
+        xs: "type-body-compact-01 h-8 justify-start pr-12 pl-3 [&_svg]:absolute [&_svg]:right-3",
+        sm: "h-10 justify-start pr-14 pl-[15px] [&_svg]:absolute [&_svg]:right-4",
+        default: "h-12 justify-start pr-16 pl-[15px] [&_svg]:absolute [&_svg]:right-4",
+        lg: "h-12 justify-start pr-16 pl-[15px] [&_svg]:absolute [&_svg]:right-4",
+        // Icon-only: quadratisch, Icon zentriert.
+        "icon-xs": "size-8 justify-center p-0",
+        "icon-sm": "size-10 justify-center p-0",
+        icon: "size-12 justify-center p-0",
+        "icon-lg": "size-16 justify-center p-0",
+        // Ohne Höhe/Padding — für Text-Links im Fliesstext.
+        inline: "h-auto justify-start gap-2 p-0",
       },
     },
     defaultVariants: {

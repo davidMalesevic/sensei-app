@@ -1,31 +1,41 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
+import { and, asc, gte, isNotNull } from "drizzle-orm";
+import {
+  ArrowRight,
+  Calendar,
+  Layers,
+  Book,
+  Education,
+  Time,
+} from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Notification } from "@/components/ui/notification";
+import { PageHeader, SectionHeader, DataItem } from "@/components/ui/page-header";
 import {
-  CalendarDays,
-  Layers,
-  BookOpen,
-  GraduationCap,
-  ArrowRight,
-  AlertCircle,
-  Clock,
-} from "lucide-react";
-import Link from "next/link";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { db } from "@/db";
-import { and, asc, gte, isNotNull } from "drizzle-orm";
 import { sequenz } from "@/db/schema";
 import { getOffeneUebertraege } from "./sequenzen/uebertrag-actions";
 import { getKWFromDateString } from "@/lib/kw";
 import { findeAktuelle, schweizerHeute, schweizerJetzt } from "@/lib/zeit";
+import { statusTag } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
 
-const quickLinks = [
+const SCHNELLZUGRIFF = [
   {
     title: "Stundenplan",
     description: "Sequenzen aus dem Kalender, Entwürfe anstossen",
     href: "/stundenplan",
-    icon: CalendarDays,
+    icon: Calendar,
   },
   {
     title: "Sequenzen",
@@ -37,22 +47,15 @@ const quickLinks = [
     title: "Bildungsplan",
     description: "Module, Modulpläne und Aufgabenbäume",
     href: "/bildungsplan",
-    icon: BookOpen,
+    icon: Book,
   },
   {
     title: "Klassen",
     description: "Klassen und Pendenzen",
     href: "/klassen",
-    icon: GraduationCap,
+    icon: Education,
   },
 ];
-
-const STATUS_LABEL: Record<string, string> = {
-  leer: "kein Ablauf",
-  entwurf: "Entwurf",
-  bestaetigt: "bestätigt",
-  gehalten: "gehalten",
-};
 
 const WOCHENTAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
@@ -95,137 +98,174 @@ export default async function Dashboard() {
   const jetzt = schweizerJetzt();
   const { laufend, naechste: kommend } = findeAktuelle(naechste, jetzt);
   const hervorgehoben = laufend ?? kommend;
+  const kwHeute = getKWFromDateString(jetzt.datum);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Sensei</h1>
-        <p className="text-muted-foreground mt-1">
-          Unterrichtsplanung für Berufsfachschulen
-        </p>
-      </div>
+    <>
+      <PageHeader
+        titel="Dashboard"
+        beschreibung={`${tag(jetzt.datum)} ${jetzt.zeit} Uhr · KW ${kwHeute ?? "—"}`}
+      />
 
       {offen.length > 0 && (
-        <Card className="border-red-300 dark:border-red-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertCircle className="h-4 w-4 text-red-500" />
-              {offen.length} Lektionen ohne Übertrag
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-2">
-              Ohne den Stand fehlt der Folgewoche der Ausgangspunkt.
-            </p>
-            <Button variant="outline" size="sm" render={<Link href="/stundenplan" />}>
-              Ansehen
-              <ArrowRight className="h-3.5 w-3.5" />
+        <Notification
+          kind="error"
+          titel={`${offen.length} Lektionen ohne Übertrag`}
+          className="mb-8"
+          action={
+            <Button variant="ghost" size="sm" render={<Link href="/stundenplan" />}>
+              Nachtragen
+              <ArrowRight size={16} />
             </Button>
-          </CardContent>
-        </Card>
+          }
+        >
+          Ohne den Stand fehlt der Folgewoche der Ausgangspunkt.
+        </Notification>
       )}
 
       {hervorgehoben && (
-        <Link href={`/sequenzen/${hervorgehoben.id}`} className="block">
-          <Card className="border-primary/50 hover:border-primary transition-colors">
-            <CardContent className="py-5">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                {laufend ? "Läuft gerade" : "Als nächstes"}
-                <span className="normal-case tracking-normal">
-                  · {jetzt.zeit} Uhr
-                </span>
-              </div>
-              <div className="flex flex-wrap items-baseline gap-3 mt-2">
-                <span className="text-2xl font-bold tracking-tight">
-                  {hervorgehoben.klasse.bezeichnung}
-                </span>
-                <span className="text-lg text-muted-foreground">
-                  {hervorgehoben.modul
-                    ? `Modul ${hervorgehoben.modul.nummer}`
-                    : "ohne Modul"}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
-                <span>
-                  {hervorgehoben.startDatum ? tag(hervorgehoben.startDatum) : ""}{" "}
-                  {hervorgehoben.startZeit}–{hervorgehoben.endZeit}
-                </span>
-                {hervorgehoben.raum && <span>· {hervorgehoben.raum}</span>}
-                <Badge variant="outline" className="text-[10px] font-normal">
-                  {STATUS_LABEL[hervorgehoben.status] ?? hervorgehoben.status}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+        <Link
+          href={`/sequenzen/${hervorgehoben.id}`}
+          className="mb-8 block border-l-[3px] border-l-border-interactive bg-layer p-6 transition-colors duration-[110ms] ease-carbon-standard hover:bg-layer-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
+        >
+          <div className="type-label-02 flex items-center gap-2 text-text-helper">
+            <Time size={16} />
+            {laufend ? "Läuft gerade" : "Als nächstes"}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span className="type-heading-04 text-foreground">
+              {hervorgehoben.klasse.bezeichnung}
+            </span>
+            <span className="type-heading-03 text-text-secondary">
+              {hervorgehoben.modul
+                ? `Modul ${hervorgehoben.modul.nummer}`
+                : "ohne Modul"}
+            </span>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-start gap-x-12 gap-y-4">
+            <DataItem label="Wann">
+              {hervorgehoben.startDatum ? tag(hervorgehoben.startDatum) : "—"}{" "}
+              {hervorgehoben.startZeit}–{hervorgehoben.endZeit}
+            </DataItem>
+            <DataItem label="Raum">{hervorgehoben.raum ?? "—"}</DataItem>
+            <DataItem label="Lektionen">{hervorgehoben.lektionen ?? "—"}</DataItem>
+            <DataItem label="Stand">
+              <Badge
+                variant={statusTag(hervorgehoben.status).variant}
+                size="sm"
+              >
+                {statusTag(hervorgehoben.status).label}
+              </Badge>
+            </DataItem>
+          </div>
         </Link>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Nächste Sequenzen</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {naechste.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Keine anstehenden Sequenzen.{" "}
-              <Link href="/stundenplan" className="underline">
-                Stundenplan importieren
-              </Link>
-            </p>
-          ) : (
-            <div className="space-y-1">
-              {naechste.map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/sequenzen/${s.id}`}
-                  className={`flex flex-wrap items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-muted ${
-                    s.id === hervorgehoben?.id ? "bg-primary/5 ring-1 ring-primary/30" : ""
-                  }`}
-                >
-                  <span className="w-20 shrink-0 text-muted-foreground">
-                    {s.startDatum ? tag(s.startDatum) : "—"}
-                  </span>
-                  <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
-                    {s.startZeit}–{s.endZeit}
-                  </span>
-                  <span className="w-24 shrink-0 font-medium">
-                    {s.klasse.bezeichnung}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {s.modul ? `Modul ${s.modul.nummer}` : "—"}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className="ml-auto shrink-0 text-[10px] font-normal"
-                  >
-                    {STATUS_LABEL[s.status] ?? s.status}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    KW {getKWFromDateString(s.startDatum) ?? "—"}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <section className="mb-8">
+        <SectionHeader
+          titel="Nächste Sequenzen"
+          aktionen={
+            <Button variant="ghost" size="sm" render={<Link href="/sequenzen" />}>
+              Alle ansehen
+              <ArrowRight size={16} />
+            </Button>
+          }
+        />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {quickLinks.map((l) => (
-          <Link key={l.href} href={l.href}>
-            <Card className="h-full hover:bg-muted/50 transition-colors">
-              <CardContent className="pt-6">
-                <l.icon className="h-5 w-5 text-muted-foreground mb-2" />
-                <p className="font-medium text-sm">{l.title}</p>
-                <p className="text-xs text-muted-foreground mt-1">
+        {naechste.length === 0 ? (
+          <div className="type-body-02 bg-layer p-6 text-text-secondary">
+            Keine anstehenden Sequenzen.{" "}
+            <Link href="/stundenplan" className="text-link underline underline-offset-2">
+              Stundenplan importieren
+            </Link>
+          </div>
+        ) : (
+          <Table className="min-w-[60rem] table-fixed">
+            <TableHeader>
+              <TableRow className="hover:bg-layer-accent">
+                <TableHead className="w-32">Tag</TableHead>
+                <TableHead className="w-36">Zeit</TableHead>
+                <TableHead className="w-36">Klasse</TableHead>
+                {/* ohne Breite: schluckt den Überschuss */}
+                <TableHead>Modul</TableHead>
+                <TableHead className="w-24">Raum</TableHead>
+                <TableHead className="w-20">KW</TableHead>
+                <TableHead className="w-40">Stand</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {naechste.map((s) => (
+                <TableRow
+                  key={s.id}
+                  data-state={s.id === hervorgehoben?.id ? "selected" : undefined}
+                >
+                  <TableCell className="whitespace-nowrap text-text-secondary">
+                    {s.startDatum ? tag(s.startDatum) : "—"}
+                  </TableCell>
+                  <TableCell className="tabular-nums whitespace-nowrap text-text-secondary">
+                    {s.startZeit}–{s.endZeit}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/sequenzen/${s.id}`}
+                      className="text-link underline-offset-2 hover:underline"
+                    >
+                      {s.klasse.bezeichnung}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-text-secondary">
+                    {s.modul ? `Modul ${s.modul.nummer}` : "—"}
+                  </TableCell>
+                  <TableCell className="text-text-secondary">
+                    {s.raum ?? "—"}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-text-secondary">
+                    {getKWFromDateString(s.startDatum) ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={statusTag(s.status).variant}
+                      size="sm"
+                    >
+                      {statusTag(s.status).label}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
+
+      <section>
+        <SectionHeader titel="Schnellzugriff" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {SCHNELLZUGRIFF.map((l) => {
+            const Icon = l.icon;
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="group relative flex min-h-36 flex-col bg-layer p-4 transition-colors duration-[110ms] ease-carbon-standard hover:bg-layer-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
+              >
+                <Icon size={20} className="mb-4 text-foreground" />
+                <p className="type-heading-compact-02 text-foreground">
+                  {l.title}
+                </p>
+                <p className="type-body-02 mt-1 pr-6 text-text-secondary">
                   {l.description}
                 </p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
-    </div>
+                <ArrowRight
+                  size={20}
+                  className="absolute right-4 bottom-4 text-primary"
+                />
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+    </>
   );
 }

@@ -2,20 +2,23 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Calendar,
+  Idea,
+  Education,
+  ArrowsHorizontal,
+  ListChecked,
+  ChevronDown,
+  Add,
+  TrashCan,
+} from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  CalendarRange,
-  Target,
-  ArrowLeftRight,
-  ListTodo,
-  ChevronDown,
-  Plus,
-  Trash2,
-  GraduationCap,
-} from "lucide-react";
+import { SectionHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils";
 import type { SequenzKontext } from "@/lib/kontext";
 import {
   createPendenz,
@@ -29,14 +32,18 @@ const KW_QUELLE_HINWEIS: Record<SequenzKontext["kwQuelle"], string> = {
   heute: "aktuelle Woche (kein Datum gesetzt)",
 };
 
-function Abschnitt({
+/**
+ * Eine Kachel der Kontextleiste. Carbon-Aufbau: kleines Label mit Icon,
+ * darunter der Wert. Gibt es Details, wird die ganze Kopfzeile zum Schalter.
+ */
+function Kachel({
   icon: Icon,
   label,
   wert,
   badge,
   children,
 }: {
-  icon: typeof Target;
+  icon: typeof Idea;
   label: string;
   wert: string | null;
   badge?: string;
@@ -46,37 +53,50 @@ function Abschnitt({
   const hatDetails = !!children;
 
   return (
-    <div className="flex-1 min-w-[200px]">
+    <div className="min-w-0 bg-layer p-4">
       <button
         type="button"
         onClick={() => hatDetails && setOffen((o) => !o)}
         disabled={!hatDetails}
-        className={`w-full text-left ${hatDetails ? "cursor-pointer" : "cursor-default"}`}
+        aria-expanded={hatDetails ? offen : undefined}
+        className={cn(
+          "-m-1 w-full p-1 text-left",
+          hatDetails
+            ? "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
+            : "cursor-default"
+        )}
       >
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide min-w-0">
-          <Icon className="h-3.5 w-3.5 shrink-0" />
+        <div className="type-label-02 flex min-w-0 items-center gap-2 text-text-helper">
+          <Icon size={16} className="shrink-0" />
           <span className="truncate">{label}</span>
           {badge && (
-            <Badge
-              variant="secondary"
-              className="text-[10px] px-1.5 py-0 max-w-[12rem] truncate"
-            >
+            <Badge variant="cool-gray" size="sm" className="max-w-40 truncate">
               {badge}
             </Badge>
           )}
           {hatDetails && (
             <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${offen ? "rotate-180" : ""}`}
+              size={16}
+              className={cn(
+                "ml-auto shrink-0 text-foreground transition-transform duration-[110ms] ease-carbon-standard",
+                offen && "rotate-180"
+              )}
             />
           )}
         </div>
         <p
-          className={`text-sm mt-0.5 ${wert ? "" : "text-muted-foreground italic"} ${offen ? "" : "line-clamp-2"}`}
+          className={cn(
+            "type-body-02 mt-2",
+            wert ? "text-foreground" : "text-text-placeholder",
+            !offen && "line-clamp-2"
+          )}
         >
           {wert ?? "—"}
         </p>
       </button>
-      {offen && children && <div className="mt-2">{children}</div>}
+      {offen && children && (
+        <div className="mt-4 border-t border-border-subtle pt-4">{children}</div>
+      )}
     </div>
   );
 }
@@ -93,9 +113,12 @@ function PendenzenListe({
   const [isPending, startTransition] = useTransition();
 
   return (
-    <div className="space-y-1.5">
+    <div>
       {pendenzen.map((p) => (
-        <div key={p.id} className="flex items-center gap-2 group text-sm">
+        <div
+          key={p.id}
+          className="group type-body-compact-02 flex items-center gap-3 border-b border-border-subtle py-2"
+        >
           <Checkbox
             checked={false}
             disabled={isPending}
@@ -106,11 +129,12 @@ function PendenzenListe({
               })
             }
           />
-          <span className="flex-1 min-w-0">{p.text}</span>
+          <span className="min-w-0 flex-1">{p.text}</span>
           <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+            variant="destructive-ghost"
+            size="icon-xs"
+            aria-label="Pendenz löschen"
+            className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
             disabled={isPending}
             onClick={() =>
               startTransition(async () => {
@@ -119,7 +143,7 @@ function PendenzenListe({
               })
             }
           >
-            <Trash2 className="h-3 w-3" />
+            <TrashCan size={16} />
           </Button>
         </div>
       ))}
@@ -130,7 +154,7 @@ function PendenzenListe({
           setNeu("");
           router.refresh();
         }}
-        className="flex gap-1.5"
+        className="mt-3 flex"
       >
         <input type="hidden" name="klasseId" value={klasseId} />
         <Input
@@ -138,11 +162,16 @@ function PendenzenListe({
           value={neu}
           onChange={(e) => setNeu(e.target.value)}
           placeholder="Neue Pendenz…"
-          className="h-8 text-sm"
+          className="h-10"
           required
         />
-        <Button type="submit" size="icon" variant="outline" className="h-8 w-8 shrink-0">
-          <Plus className="h-3.5 w-3.5" />
+        <Button
+          type="submit"
+          size="icon-sm"
+          aria-label="Pendenz hinzufügen"
+          className="shrink-0"
+        >
+          <Add size={16} />
         </Button>
       </form>
     </div>
@@ -150,8 +179,11 @@ function PendenzenListe({
 }
 
 /**
- * Kompakte Kontextleiste über der Sequenz: Wochenziel aus dem Modulplan,
- * Übergabenotiz der Vorsequenz und offene Pendenzen der Klasse.
+ * Kontextleiste über der Sequenz: Wochenziel aus dem Modulplan, anstehende
+ * Beurteilungen, Übergabenotiz der Vorsequenz und offene Pendenzen der Klasse.
+ *
+ * Carbon setzt zusammengehörige Kacheln mit 1px Fuge auf eine dunklere
+ * Fläche — dadurch lesen sie sich als ein Paneel, nicht als lose Karten.
  */
 export function ContextHeader({
   kontext,
@@ -170,41 +202,43 @@ export function ContextHeader({
       : "Kein Modul zugeordnet";
 
   return (
-    <div className="rounded-lg border bg-muted/40 p-4">
-      <div className="flex flex-wrap gap-x-6 gap-y-4">
-        <div className="shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            <CalendarRange className="h-3.5 w-3.5" />
+    <section className="mb-12">
+      <SectionHeader titel="Kontext" />
+
+      <div className="grid gap-px bg-border-subtle md:grid-cols-2 xl:grid-cols-5">
+        <div className="min-w-0 bg-layer p-4">
+          <div className="type-label-02 flex items-center gap-2 text-text-helper">
+            <Calendar size={16} className="shrink-0" />
             Woche
           </div>
-          <p className="text-2xl font-bold leading-tight">KW {kontext.kw}</p>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="type-heading-04 mt-2 text-foreground">KW {kontext.kw}</p>
+          <p className="type-helper-02 mt-1 text-text-helper">
             {KW_QUELLE_HINWEIS[kontext.kwQuelle]}
           </p>
         </div>
 
-        <Abschnitt
-          icon={Target}
+        <Kachel
+          icon={Idea}
           label="Wochenziel"
           wert={zielText}
           badge={kontext.modulLabel ?? undefined}
         >
-          <div className="space-y-1">
+          <div className="space-y-2">
             {ziel?.lbHinweis && (
-              <p className="text-sm font-medium">
+              <p className="type-heading-02 text-foreground">
                 Leistungsbeurteilung: {ziel.lbHinweis}
               </p>
             )}
             {ziel?.beschreibung && (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              <p className="type-body-02 whitespace-pre-wrap text-text-secondary">
                 {ziel.beschreibung}
               </p>
             )}
           </div>
-        </Abschnitt>
+        </Kachel>
 
-        <Abschnitt
-          icon={GraduationCap}
+        <Kachel
+          icon={Education}
           label="Beurteilungen"
           badge={
             kontext.pruefungen.length > 0
@@ -220,24 +254,27 @@ export function ContextHeader({
           }
         >
           {kontext.pruefungen.length > 0 && (
-            <ul className="space-y-1">
+            <ul className="space-y-2">
               {kontext.pruefungen.map((p, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <Badge variant="outline" className="shrink-0 text-xs">
+                <li
+                  key={i}
+                  className="type-body-02 flex items-start gap-2 text-foreground"
+                >
+                  <Badge variant="purple" size="sm" className="shrink-0">
                     {p.wann}
                   </Badge>
-                  <span className="flex-1 min-w-0">{p.bezeichnung}</span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
+                  <span className="min-w-0 flex-1">{p.bezeichnung}</span>
+                  <span className="type-helper-02 shrink-0 text-text-helper">
                     {p.quelle === "kalender" ? "Kalender" : "Modulplan"}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-        </Abschnitt>
+        </Kachel>
 
-        <Abschnitt
-          icon={ArrowLeftRight}
+        <Kachel
+          icon={ArrowsHorizontal}
           label="Übergabe"
           wert={
             kontext.vorherigeNotiz
@@ -246,14 +283,14 @@ export function ContextHeader({
           }
         >
           {kontext.vorherigeNotiz && (
-            <p className="text-sm whitespace-pre-wrap">
+            <p className="type-body-02 whitespace-pre-wrap text-text-secondary">
               {kontext.vorherigeNotiz.notiz}
             </p>
           )}
-        </Abschnitt>
+        </Kachel>
 
-        <Abschnitt
-          icon={ListTodo}
+        <Kachel
+          icon={ListChecked}
           label="Pendenzen"
           badge={
             kontext.pendenzen.length > 0
@@ -267,8 +304,8 @@ export function ContextHeader({
           }
         >
           <PendenzenListe klasseId={klasseId} pendenzen={kontext.pendenzen} />
-        </Abschnitt>
+        </Kachel>
       </div>
-    </div>
+    </section>
   );
 }

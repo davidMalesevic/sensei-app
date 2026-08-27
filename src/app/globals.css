@@ -4,41 +4,106 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   IBM Carbon Design System — White Theme (hell) / Gray 100 (dunkel)
+
+   Die shadcn-Tokennamen bleiben bestehen, tragen aber Carbon-Werte. Dadurch
+   sehen auch Stellen, die noch nicht angefasst wurden, sofort richtig aus.
+   Zusätzlich stehen die Carbon-eigenen Rollen (layer, field, border-subtle,
+   support-*) als eigene Tokens bereit.
+   Referenz: https://carbondesignsystem.com/elements/color/tokens/
+   --------------------------------------------------------------------------- */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
+
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+  --font-heading: var(--font-plex-sans);
+
+  /* shadcn-Rollen, mit Carbon-Werten belegt */
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Carbon: Ebenen und Felder */
+  --color-layer: var(--layer);
+  --color-layer-hover: var(--layer-hover);
+  --color-layer-active: var(--layer-active);
+  --color-layer-accent: var(--layer-accent);
+  --color-layer-selected: var(--layer-selected);
+  --color-field: var(--field);
+  --color-field-hover: var(--field-hover);
+
+  /* Carbon: Ränder */
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-border-inverse: var(--border-inverse);
+  --color-border-interactive: var(--border-interactive);
+
+  /* Carbon: Text */
+  --color-text-secondary: var(--text-secondary);
+  --color-text-placeholder: var(--text-placeholder);
+  --color-text-helper: var(--text-helper);
+  --color-text-on-color: var(--text-on-color);
+  --color-text-inverse: var(--text-inverse);
+  --color-text-disabled: var(--text-disabled);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+
+  /* Carbon: Statusfarben */
+  --color-support-error: var(--support-error);
+  --color-support-success: var(--support-success);
+  --color-support-warning: var(--support-warning);
+  --color-support-info: var(--support-info);
+  --color-support-caution: var(--support-caution);
+  --color-notification-error: var(--notification-error);
+  --color-notification-success: var(--notification-success);
+  --color-notification-warning: var(--notification-warning);
+  --color-notification-info: var(--notification-info);
+
+  /* Carbon: Buttons */
+  --color-button-primary-hover: var(--button-primary-hover);
+  --color-button-primary-active: var(--button-primary-active);
+  --color-button-secondary: var(--button-secondary);
+  --color-button-secondary-hover: var(--button-secondary-hover);
+  --color-button-secondary-active: var(--button-secondary-active);
+  --color-button-danger-hover: var(--button-danger-hover);
+  --color-button-danger-active: var(--button-danger-active);
+
+  /* Carbon: UI Shell — immer dunkel, in beiden Themes gleich */
+  --color-shell: var(--shell);
+  --color-shell-hover: var(--shell-hover);
+  --color-shell-border: var(--shell-border);
+  --color-shell-text: var(--shell-text);
+  --color-shell-text-secondary: var(--shell-text-secondary);
+
+  /* Sidebar-Rollen (shadcn) */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Carbon kennt keine abgerundeten Ecken. */
   --radius-sm: 0;
   --radius-md: 0;
   --radius-lg: 0;
@@ -46,88 +111,360 @@
   --radius-2xl: 0;
   --radius-3xl: 0;
   --radius-4xl: 0;
+
+  /* Carbon Motion — productive */
+  --ease-carbon-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-carbon-entrance: cubic-bezier(0, 0, 0.38, 0.9);
+  --ease-carbon-exit: cubic-bezier(0.2, 0, 1, 0.9);
 }
 
 :root {
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.12 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.12 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.12 0 0);
-  --primary: oklch(0.55 0.22 25);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.965 0 0);
-  --secondary-foreground: oklch(0.15 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.50 0 0);
-  --accent: oklch(0.96 0.01 25);
-  --accent-foreground: oklch(0.15 0 0);
-  --destructive: oklch(0.55 0.22 25);
-  --border: oklch(0.90 0 0);
-  --input: oklch(0.90 0 0);
-  --ring: oklch(0.55 0.22 25);
-  --chart-1: oklch(0.55 0.22 25);
-  --chart-2: oklch(0.45 0 0);
-  --chart-3: oklch(0.35 0 0);
-  --chart-4: oklch(0.65 0 0);
-  --chart-5: oklch(0.80 0 0);
+  /* --- White Theme ----------------------------------------------------- */
+  --background: #ffffff;
+  --foreground: #161616;
+
+  --layer: #f4f4f4;
+  --layer-hover: #e8e8e8;
+  --layer-active: #c6c6c6;
+  --layer-accent: #e0e0e0;
+  --layer-selected: #e0e0e0;
+  --field: #f4f4f4;
+  --field-hover: #e8e8e8;
+
+  --card: #f4f4f4;
+  --card-foreground: #161616;
+  --popover: #ffffff;
+  --popover-foreground: #161616;
+
+  --primary: #0f62fe;
+  --primary-foreground: #ffffff;
+  --secondary: #393939;
+  --secondary-foreground: #ffffff;
+  --muted: #f4f4f4;
+  --muted-foreground: #525252;
+  --accent: #e8e8e8;
+  --accent-foreground: #161616;
+  --destructive: #da1e28;
+  --destructive-foreground: #ffffff;
+
+  --border: #e0e0e0;
+  --border-subtle: #e0e0e0;
+  --border-strong: #8d8d8d;
+  --border-inverse: #161616;
+  --border-interactive: #0f62fe;
+  --input: #f4f4f4;
+  --ring: #0f62fe;
   --radius: 0;
-  --sidebar: oklch(0.975 0 0);
-  --sidebar-foreground: oklch(0.12 0 0);
-  --sidebar-primary: oklch(0.55 0.22 25);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.955 0.005 25);
-  --sidebar-accent-foreground: oklch(0.15 0 0);
-  --sidebar-border: oklch(0.90 0 0);
-  --sidebar-ring: oklch(0.55 0.22 25);
+
+  --text-secondary: #525252;
+  --text-placeholder: #a8a8a8;
+  --text-helper: #6f6f6f;
+  --text-on-color: #ffffff;
+  --text-inverse: #ffffff;
+  --text-disabled: rgb(22 22 22 / 0.25);
+  --link: #0f62fe;
+  --link-hover: #0043ce;
+
+  --support-error: #da1e28;
+  --support-success: #24a148;
+  --support-warning: #f1c21b;
+  --support-info: #0043ce;
+  --support-caution: #ff832b;
+  --notification-error: #fff1f1;
+  --notification-success: #defbe6;
+  --notification-warning: #fdf6dd;
+  --notification-info: #edf5ff;
+
+  --button-primary-hover: #0050e6;
+  --button-primary-active: #002d9c;
+  --button-secondary: #393939;
+  --button-secondary-hover: #4c4c4c;
+  --button-secondary-active: #6f6f6f;
+  --button-danger-hover: #ba1b23;
+  --button-danger-active: #750e13;
+
+  --shell: #161616;
+  --shell-hover: #353535;
+  --shell-border: #393939;
+  --shell-text: #f4f4f4;
+  --shell-text-secondary: #c6c6c6;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #525252;
+  --sidebar-primary: #0f62fe;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8e8e8;
+  --sidebar-accent-foreground: #161616;
+  --sidebar-border: #e0e0e0;
+  --sidebar-ring: #0f62fe;
 }
 
 .dark {
-  --background: oklch(0.10 0 0);
-  --foreground: oklch(0.93 0 0);
-  --card: oklch(0.14 0 0);
-  --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.14 0 0);
-  --popover-foreground: oklch(0.93 0 0);
-  --primary: oklch(0.60 0.22 25);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.18 0 0);
-  --secondary-foreground: oklch(0.93 0 0);
-  --muted: oklch(0.18 0 0);
-  --muted-foreground: oklch(0.60 0 0);
-  --accent: oklch(0.18 0.01 25);
-  --accent-foreground: oklch(0.93 0 0);
-  --destructive: oklch(0.60 0.22 25);
-  --border: oklch(0.22 0 0);
-  --input: oklch(0.22 0 0);
-  --ring: oklch(0.60 0.22 25);
-  --chart-1: oklch(0.60 0.22 25);
-  --chart-2: oklch(0.55 0 0);
-  --chart-3: oklch(0.45 0 0);
-  --chart-4: oklch(0.65 0 0);
-  --chart-5: oklch(0.75 0 0);
-  --sidebar: oklch(0.12 0 0);
-  --sidebar-foreground: oklch(0.93 0 0);
-  --sidebar-primary: oklch(0.60 0.22 25);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.18 0.005 25);
-  --sidebar-accent-foreground: oklch(0.93 0 0);
-  --sidebar-border: oklch(0.22 0 0);
-  --sidebar-ring: oklch(0.60 0.22 25);
+  /* --- Gray 100 Theme --------------------------------------------------- */
+  --background: #161616;
+  --foreground: #f4f4f4;
+
+  --layer: #262626;
+  --layer-hover: #333333;
+  --layer-active: #525252;
+  --layer-accent: #393939;
+  --layer-selected: #393939;
+  --field: #262626;
+  --field-hover: #333333;
+
+  --card: #262626;
+  --card-foreground: #f4f4f4;
+  --popover: #262626;
+  --popover-foreground: #f4f4f4;
+
+  --primary: #0f62fe;
+  --primary-foreground: #ffffff;
+  --secondary: #6f6f6f;
+  --secondary-foreground: #ffffff;
+  --muted: #262626;
+  --muted-foreground: #c6c6c6;
+  --accent: #333333;
+  --accent-foreground: #f4f4f4;
+  --destructive: #fa4d56;
+  --destructive-foreground: #ffffff;
+
+  --border: #393939;
+  --border-subtle: #393939;
+  --border-strong: #6f6f6f;
+  --border-inverse: #f4f4f4;
+  --border-interactive: #4589ff;
+  --input: #262626;
+  --ring: #ffffff;
+
+  --text-secondary: #c6c6c6;
+  --text-placeholder: #6f6f6f;
+  --text-helper: #8d8d8d;
+  --text-on-color: #ffffff;
+  --text-inverse: #161616;
+  --text-disabled: rgb(244 244 244 / 0.25);
+  --link: #78a9ff;
+  --link-hover: #a6c8ff;
+
+  --support-error: #fa4d56;
+  --support-success: #42be65;
+  --support-warning: #f1c21b;
+  --support-info: #4589ff;
+  --support-caution: #ff832b;
+  --notification-error: #262626;
+  --notification-success: #262626;
+  --notification-warning: #262626;
+  --notification-info: #262626;
+
+  --button-primary-hover: #0050e6;
+  --button-primary-active: #002d9c;
+  --button-secondary: #6f6f6f;
+  --button-secondary-hover: #606060;
+  --button-secondary-active: #393939;
+  --button-danger-hover: #ba1b23;
+  --button-danger-active: #750e13;
+
+  --shell: #161616;
+  --shell-hover: #353535;
+  --shell-border: #393939;
+  --shell-text: #f4f4f4;
+  --shell-text-secondary: #c6c6c6;
+
+  --sidebar: #161616;
+  --sidebar-foreground: #c6c6c6;
+  --sidebar-primary: #4589ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #333333;
+  --sidebar-accent-foreground: #f4f4f4;
+  --sidebar-border: #393939;
+  --sidebar-ring: #ffffff;
+}
+
+/* ---------------------------------------------------------------------------
+   Carbon Type Scale
+   https://carbondesignsystem.com/elements/typography/type-sets/
+   --------------------------------------------------------------------------- */
+
+/* Die dichte «01»-Reihe — 12/14px. In dieser App nur für Ausnahmen. */
+@utility type-label-01 {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  letter-spacing: 0.32px;
+  font-weight: 400;
+}
+@utility type-helper-01 {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  letter-spacing: 0.32px;
+  font-weight: 400;
+}
+@utility type-body-compact-01 {
+  font-size: 0.875rem;
+  line-height: 1.125rem;
+  letter-spacing: 0.16px;
+  font-weight: 400;
+}
+@utility type-body-01 {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  letter-spacing: 0.16px;
+  font-weight: 400;
+}
+@utility type-heading-compact-01 {
+  font-size: 0.875rem;
+  line-height: 1.125rem;
+  letter-spacing: 0.16px;
+  font-weight: 600;
+}
+@utility type-heading-01 {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  letter-spacing: 0.16px;
+  font-weight: 600;
+}
+
+/* Die «02»-Reihe — 14/16px. Das ist der Standard dieser App: Lauftext 16px. */
+@utility type-label-02 {
+  font-size: 0.875rem;
+  line-height: 1.125rem;
+  letter-spacing: 0.16px;
+  font-weight: 400;
+}
+@utility type-helper-02 {
+  font-size: 0.875rem;
+  line-height: 1.125rem;
+  letter-spacing: 0.16px;
+  font-weight: 400;
+}
+@utility type-body-compact-02 {
+  font-size: 1rem;
+  line-height: 1.375rem;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+@utility type-body-02 {
+  font-size: 1rem;
+  line-height: 1.5rem;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+@utility type-heading-compact-02 {
+  font-size: 1rem;
+  line-height: 1.375rem;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+@utility type-heading-02 {
+  font-size: 1rem;
+  line-height: 1.5rem;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+@utility type-heading-03 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+@utility type-heading-04 {
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+@utility type-heading-05 {
+  font-size: 2rem;
+  line-height: 2.5rem;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+@utility type-heading-06 {
+  font-size: 2.625rem;
+  line-height: 3.125rem;
+  letter-spacing: 0;
+  font-weight: 300;
+}
+
+/* Carbon-Fokus: 2px Rahmen innen, kein weicher Ring. */
+@utility focus-carbon {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+@keyframes carbon-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+
   html {
     @apply font-sans;
+    -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3, h4, h5, h6 {
-    letter-spacing: -0.025em;
+
+  body {
+    @apply bg-background text-foreground;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    letter-spacing: 0;
+  }
+
+  /* Carbon-Überschriften: keine negative Laufweite, kein Fettdruck bei
+     grossen Graden — die Grösse trägt die Hierarchie. */
+  h1 {
+    @apply type-heading-05;
+  }
+  h2 {
+    @apply type-heading-04;
+  }
+  h3 {
+    @apply type-heading-03;
+  }
+  h4 {
+    @apply type-heading-02;
+  }
+  h5,
+  h6 {
+    @apply type-heading-02;
+  }
+
+  /* Ein einziges Fokusmodell für die ganze App. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  ::selection {
+    background: var(--layer-accent);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Druck: die UI Shell verschwindet, der Inhalt bekommt die ganze Seite.
+   --------------------------------------------------------------------------- */
+@media print {
+  [data-slot="shell-header"],
+  [data-slot="shell-nav"] {
+    display: none !important;
+  }
+
+  [data-slot="shell-content"] {
+    padding: 0 !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  a[href]::after {
+    content: "";
   }
 }

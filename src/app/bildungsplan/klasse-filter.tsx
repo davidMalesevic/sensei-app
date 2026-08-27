@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+
 import {
   Select,
   SelectContent,
@@ -20,33 +21,33 @@ export function KlasseFilter({ klassen }: { klassen: Klasse[] }) {
   const currentKlasse = searchParams.get("klasse") ?? "alle";
 
   return (
-    <Select
-      value={currentKlasse}
-      onValueChange={(val) => {
-        if (val === "alle") {
-          router.push("/bildungsplan");
-        } else {
-          router.push(`/bildungsplan?klasse=${val}`);
-        }
-      }}
-      items={{
-        alle: "Alle Klassen",
-        ...Object.fromEntries(
-          klassen.map((k) => [k.id, k.bezeichnung])
-        ),
-      }}
-    >
-      <SelectTrigger className="w-48">
-        <SelectValue placeholder="Alle Klassen" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="alle">Alle Klassen</SelectItem>
-        {klassen.map((k) => (
-          <SelectItem key={k.id} value={k.id}>
-            {k.bezeichnung}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="w-56">
+      <Select
+        value={currentKlasse}
+        onValueChange={(val) => {
+          if (val === "alle") {
+            router.push("/bildungsplan");
+          } else {
+            router.push(`/bildungsplan?klasse=${val}`);
+          }
+        }}
+        items={{
+          alle: "Alle Klassen",
+          ...Object.fromEntries(klassen.map((k) => [k.id, k.bezeichnung])),
+        }}
+      >
+        <SelectTrigger size="sm" aria-label="Nach Klasse filtern">
+          <SelectValue placeholder="Alle Klassen" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="alle">Alle Klassen</SelectItem>
+          {klassen.map((k) => (
+            <SelectItem key={k.id} value={k.id}>
+              {k.bezeichnung}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

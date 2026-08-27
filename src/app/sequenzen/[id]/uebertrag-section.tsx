@@ -1,10 +1,12 @@
+import { Checkmark } from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label, HelperText } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ClipboardCheck, CheckCircle2 } from "lucide-react";
+import { Notification } from "@/components/ui/notification";
+import { SectionHeader, DataItem } from "@/components/ui/page-header";
 import {
   speichereUebertrag,
   keinUebertragSetzen,
@@ -46,47 +48,58 @@ export function UebertragSection({
   if (erfasst) {
     const zuruecksetzen = uebertragZuruecksetzen.bind(null, sequenzId);
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-500" />
-            Übertrag
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <section className="mb-12">
+        <SectionHeader
+          titel="Übertrag"
+          aktionen={
+            <form action={zuruecksetzen}>
+              <Button type="submit" variant="ghost" size="sm">
+                Ändern
+              </Button>
+            </form>
+          }
+        />
+
+        <div className="border-l-[3px] border-l-support-success bg-layer p-4">
           {daten.keinUebertrag && !daten.uebertrag ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="type-body-02 text-text-secondary">
               Kein Übertrag — nichts nachzutragen.
             </p>
           ) : (
-            <>
+            <div className="space-y-4">
+              {daten.uebertragSlideBis !== null && (
+                <DataItem label="Gekommen bis">
+                  Slide {daten.uebertragSlideBis}
+                </DataItem>
+              )}
+
               {daten.uebertragErledigt && daten.uebertragErledigt.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {daten.uebertragErledigt.map((e) => (
-                    <Badge key={e} variant="secondary" className="font-normal">
-                      {e}
-                    </Badge>
-                  ))}
+                <div>
+                  <div className="type-label-02 mb-2 text-text-helper">
+                    Erledigt
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {daten.uebertragErledigt.map((e) => (
+                      <Badge key={e} variant="green" size="sm">
+                        {e}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               )}
-              {daten.uebertragSlideBis !== null && (
-                <p className="text-sm">
-                  Gekommen bis Slide {daten.uebertragSlideBis}.
-                </p>
-              )}
-              {daten.uebertrag && (
-                <p className="text-sm whitespace-pre-wrap">{daten.uebertrag}</p>
-              )}
-            </>
-          )}
 
-          <form action={zuruecksetzen}>
-            <Button type="submit" variant="ghost" size="sm">
-              Ändern
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              {daten.uebertrag && (
+                <div>
+                  <div className="type-label-02 mb-1 text-text-helper">Notiz</div>
+                  <p className="type-body-02 whitespace-pre-wrap text-foreground">
+                    {daten.uebertrag}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
     );
   }
 
@@ -104,77 +117,80 @@ export function UebertragSection({
   );
 
   return (
-    <Card className="border-amber-300 dark:border-amber-900">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ClipboardCheck className="h-4 w-4" />
-          Übertrag fehlt
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground mb-4">
-          Bis wo seid ihr gekommen? Ohne das fehlt der nächsten Sequenz der
-          Ausgangspunkt.
-        </p>
+    <section className="mb-12">
+      <SectionHeader titel="Übertrag" />
 
-        <form action={speichern} className="space-y-4">
+      <Notification kind="warning" titel="Übertrag fehlt" className="mb-4">
+        Bis wo seid ihr gekommen? Ohne das fehlt der nächsten Sequenz der
+        Ausgangspunkt.
+      </Notification>
+
+      <div className="bg-layer p-4">
+        <form action={speichern}>
           {aufgaben.length > 0 && (
-            <div className="space-y-2">
-              <Label>Erledigt</Label>
-              <div className="space-y-1.5">
+            <fieldset className="mb-8">
+              <legend className="type-label-02 mb-3 text-text-secondary">
+                Erledigt
+              </legend>
+              <div>
                 {aufgaben.map((a) => (
                   <label
                     key={a.wert}
-                    className="flex items-center gap-2 text-sm cursor-pointer"
+                    className="type-body-compact-02 flex cursor-pointer items-center gap-3 border-b border-border-subtle py-2 last:border-b-0"
                   >
                     <input
                       type="checkbox"
                       name="erledigt"
                       value={a.wert}
-                      className="h-4 w-4 rounded border-input"
+                      className="size-4 shrink-0 appearance-none border border-border-inverse bg-transparent checked:bg-border-inverse checked:bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22 fill=%22white%22><path d=%22M13 24l-9-9 1.4-1.4L13 21.2 26.6 7.6 28 9 13 24z%22/></svg>')] checked:bg-center checked:bg-no-repeat focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)]"
                     />
-                    <span className="font-medium">{a.bezeichnung}</span>
-                    <code className="text-xs text-muted-foreground">
+                    <span className="font-semibold">{a.bezeichnung}</span>
+                    <code className="type-helper-02 font-mono text-text-helper">
                       {a.code}
                     </code>
                   </label>
                 ))}
               </div>
-            </div>
+            </fieldset>
           )}
 
-          <div className="space-y-2">
+          <div className="mb-8 max-w-xs">
             <Label htmlFor="slideBis">Gekommen bis Slide</Label>
             <Input
               id="slideBis"
               name="slideBis"
               inputMode="numeric"
               placeholder="z.B. 22"
-              className="w-32"
+              className="mt-2"
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="mb-8 max-w-2xl">
             <Label htmlFor="uebertrag">Notizen für nächste Woche</Label>
             <Textarea
               id="uebertrag"
               name="uebertrag"
               rows={3}
+              className="mt-2"
               placeholder="Was ist offen, was lief anders als geplant, worauf muss ich zurückkommen?"
             />
+            <HelperText className="mt-2">
+              Die App kann nichts wissen, was nicht getippt wird.
+            </HelperText>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button type="submit">Übertrag sichern</Button>
-          </div>
+          <Button type="submit">
+            Übertrag sichern
+            <Checkmark size={16} />
+          </Button>
         </form>
 
-        <form action={keiner} className="mt-2">
+        <form action={keiner} className="mt-4">
           <Button type="submit" variant="ghost" size="sm">
             Kein Übertrag
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

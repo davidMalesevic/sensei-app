@@ -2,9 +2,27 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Idea,
+  Enterprise,
+  PresentationFile,
+  ListChecked,
+  Chat,
+  Flag,
+  CircleDash,
+  Draggable,
+  TrashCan,
+  Add,
+  Checkmark,
+  Launch,
+  MachineLearningModel,
+} from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineLoading } from "@/components/ui/loading";
+import { Notification } from "@/components/ui/notification";
+import { SectionHeader } from "@/components/ui/page-header";
 import {
   Select,
   SelectContent,
@@ -12,24 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ListOrdered,
-  Sparkles,
-  CheckCircle2,
-  ExternalLink,
-  Lightbulb,
-  Briefcase,
-  Presentation,
-  ClipboardList,
-  MessagesSquare,
-  Flag,
-  Circle,
-  GripVertical,
-  Trash2,
-  Plus,
-  Loader2,
-  AlertTriangle,
-} from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   erzeugeEntwurf,
   bestaetigeAblauf,
@@ -59,14 +60,14 @@ export type AblaufZeile = {
   } | null;
 };
 
-const TYP_ICON: Record<string, typeof Circle> = {
-  einstieg: Lightbulb,
-  praxisbezug: Briefcase,
-  theorie: Presentation,
-  aufgabe: ClipboardList,
-  besprechung: MessagesSquare,
+const TYP_ICON: Record<string, typeof CircleDash> = {
+  einstieg: Idea,
+  praxisbezug: Enterprise,
+  theorie: PresentationFile,
+  aufgabe: ListChecked,
+  besprechung: Chat,
   abschluss: Flag,
-  frei: Circle,
+  frei: CircleDash,
 };
 
 const TYP_LABEL: Record<string, string> = {
@@ -85,11 +86,13 @@ function AutoTextarea({
   platzhalter,
   onSichern,
   className,
+  ariaLabel,
 }: {
   wert: string;
   platzhalter: string;
   onSichern: (neu: string) => void;
   className?: string;
+  ariaLabel: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [lokal, setLokal] = useState(wert);
@@ -114,18 +117,26 @@ function AutoTextarea({
       ref={ref}
       rows={1}
       value={lokal}
+      aria-label={ariaLabel}
       placeholder={platzhalter}
       onChange={(e) => setLokal(e.target.value)}
       onBlur={() => {
         if (lokal !== wert) onSichern(lokal);
       }}
-      className={`w-full resize-none bg-transparent outline-none rounded px-1 -mx-1 focus:bg-muted/60 ${className ?? ""}`}
+      className={cn(
+        "-mx-2 w-full resize-none bg-transparent px-2 py-0.5 outline-none",
+        "placeholder:text-text-placeholder",
+        "transition-colors duration-[110ms] ease-carbon-standard",
+        "hover:bg-layer-hover",
+        "focus:bg-field focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--ring)]",
+        className
+      )}
     />
   );
 }
 
 /**
- * Der Ablauf — bearbeitbar per Direktmanipulation: umordnen per Drag & Drop,
+ * Der Ablauf — bearbeitbar per Direktmanipulation: umordnen per Ziehen,
  * Texte an Ort und Stelle ändern, Schritte löschen und ergänzen.
  *
  * Fakten aus dem Material bleiben als solche markiert; ihre Referenz auf
@@ -257,211 +268,219 @@ export function AblaufSection({
   }
 
   return (
-    <Card className={bestaetigt ? undefined : "border-primary/40"}>
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-          <ListOrdered className="h-4 w-4" />
-          Ablauf
-          {items.length > 0 &&
-            (bestaetigt ? (
-              <Badge variant="outline" className="gap-1">
-                <CheckCircle2 className="h-3 w-3" />
-                bestätigt
-              </Badge>
-            ) : (
-              <Badge variant="secondary">Entwurf, ungeprüft</Badge>
-            ))}
-          {entwurfAm && (
-            <span className="text-xs font-normal text-muted-foreground">
-              erzeugt {new Date(entwurfAm).toLocaleDateString("de-CH")}
-            </span>
-          )}
-          {laeuft && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          )}
-        </CardTitle>
-      </CardHeader>
+    <section className="mb-12">
+      <SectionHeader
+        titel="Ablauf"
+        beschreibung={
+          entwurfAm
+            ? `Erzeugt am ${new Date(entwurfAm).toLocaleDateString("de-CH")}`
+            : undefined
+        }
+        aktionen={
+          <div className="flex items-center gap-4">
+            {laeuft && <InlineLoading />}
+            {items.length > 0 &&
+              (bestaetigt ? (
+                <Badge variant="green">
+                  <Checkmark size={16} />
+                  bestätigt
+                </Badge>
+              ) : (
+                <Badge variant="blue">Entwurf, ungeprüft</Badge>
+              ))}
+          </div>
+        }
+      />
 
-      <CardContent className="space-y-4">
-        {items.length === 0 ? (
-          <>
-            <p className="text-sm text-muted-foreground">
-              Noch kein Ablauf. Der Nachtlauf erzeugt ihn für anstehende
-              Sequenzen — hier kannst du ihn sofort anstossen.
-            </p>
-            <Button onClick={neuErzeugen} disabled={laeuft}>
-              <Sparkles className="h-4 w-4" />
-              Entwurf erzeugen
-            </Button>
-          </>
-        ) : (
-          <>
-            <ol
-              className="space-y-1.5"
-              onPointerMove={ziehenBewegen}
-              onPointerUp={ziehenBeenden}
-              onPointerCancel={ziehenBeenden}
-            >
-              {items.map((z, i) => {
-                const Icon = TYP_ICON[z.typ] ?? Circle;
-                const fakt = z.quelle === "fakt";
-                const href = z.refMaterial
-                  ? materialHref(
-                      z.refMaterial,
-                      z.refSeiteVon !== null ? `Slide ${z.refSeiteVon}` : null
-                    )
-                  : null;
+      {items.length === 0 ? (
+        <div className="bg-layer p-6">
+          <p className="type-body-02 mb-6 max-w-2xl text-text-secondary">
+            Noch kein Ablauf. Der Nachtlauf erzeugt ihn für anstehende
+            Sequenzen — hier kannst du ihn sofort anstossen.
+          </p>
+          <Button onClick={neuErzeugen} disabled={laeuft}>
+            Entwurf erzeugen
+            <MachineLearningModel size={16} />
+          </Button>
+        </div>
+      ) : (
+        <>
+          <ol
+            className="bg-layer"
+            onPointerMove={ziehenBewegen}
+            onPointerUp={ziehenBeenden}
+            onPointerCancel={ziehenBeenden}
+          >
+            {items.map((z, i) => {
+              const Icon = TYP_ICON[z.typ] ?? CircleDash;
+              const fakt = z.quelle === "fakt";
+              const href = z.refMaterial
+                ? materialHref(
+                    z.refMaterial,
+                    z.refSeiteVon !== null ? `Slide ${z.refSeiteVon}` : null
+                  )
+                : null;
 
-                return (
-                  <li
-                    key={z.id}
-                    ref={(el) => {
-                      zeilenRefs.current[i] = el;
-                    }}
-                    className={`group flex gap-2 rounded-md border px-2 py-2 transition-colors ${
-                      ueber === i && gezogen !== i
-                        ? "border-primary bg-primary/5"
-                        : ""
-                    } ${gezogen === i ? "opacity-40" : ""}`}
+              return (
+                <li
+                  key={z.id}
+                  ref={(el) => {
+                    zeilenRefs.current[i] = el;
+                  }}
+                  className={cn(
+                    "group flex gap-3 border-b border-border-subtle px-4 py-3 transition-colors duration-[110ms] ease-carbon-standard last:border-b-0",
+                    // Fakten tragen links einen blauen Balken — sie stammen
+                    // aus dem Material und sind nicht verhandelbar.
+                    fakt && "border-l-[3px] border-l-border-interactive pl-[13px]",
+                    ueber === i && gezogen !== i && "bg-layer-hover shadow-[inset_0_2px_0_0_var(--border-interactive)]",
+                    gezogen === i && "opacity-40"
+                  )}
+                >
+                  <span
+                    onPointerDown={(e) => ziehenStarten(i, e)}
+                    role="button"
+                    tabIndex={-1}
+                    aria-label="Zum Umordnen ziehen"
+                    title="Zum Umordnen ziehen"
+                    className="mt-0.5 flex h-6 w-4 shrink-0 cursor-grab touch-none items-center justify-center text-text-helper transition-colors hover:text-foreground active:cursor-grabbing"
                   >
-                    <span
-                      onPointerDown={(e) => ziehenStarten(i, e)}
-                      className="flex items-start pt-1 text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
-                      title="Zum Umordnen ziehen"
-                    >
-                      <GripVertical className="h-4 w-4" />
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums pt-1.5 w-4 shrink-0">
-                      {i + 1}
-                    </span>
-                    <Icon className="h-4 w-4 text-muted-foreground shrink-0 mt-1.5" />
+                    <Draggable size={16} />
+                  </span>
 
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <AutoTextarea
-                        wert={z.titel}
-                        platzhalter="Titel des Schritts"
-                        className="text-sm font-medium"
-                        onSichern={(neu) => sichern(z.id, "titel", neu)}
-                      />
-                      <AutoTextarea
-                        wert={z.text ?? ""}
-                        platzhalter="Notiz (optional)"
-                        className="text-sm text-muted-foreground"
-                        onSichern={(neu) => sichern(z.id, "text", neu)}
-                      />
+                  <span className="type-body-compact-02 mt-1 w-6 shrink-0 text-right font-mono tabular-nums text-text-helper">
+                    {i + 1}
+                  </span>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={fakt ? "outline" : "secondary"}
-                          className="text-[10px] font-normal"
+                  <Icon size={16} className="mt-1.5 shrink-0 text-text-secondary" />
+
+                  <div className="min-w-0 flex-1">
+                    <AutoTextarea
+                      wert={z.titel}
+                      ariaLabel={`Titel von Schritt ${i + 1}`}
+                      platzhalter="Titel des Schritts"
+                      className="type-heading-compact-02 text-foreground"
+                      onSichern={(neu) => sichern(z.id, "titel", neu)}
+                    />
+                    <AutoTextarea
+                      wert={z.text ?? ""}
+                      ariaLabel={`Notiz zu Schritt ${i + 1}`}
+                      platzhalter="Notiz (optional)"
+                      className="type-body-02 mt-1 text-text-secondary"
+                      onSichern={(neu) => sichern(z.id, "text", neu)}
+                    />
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge variant={fakt ? "blue" : "purple"} size="sm">
+                        {fakt ? "aus dem Material" : "KI-Vorschlag"}
+                      </Badge>
+                      <Badge variant="ghost" size="sm">
+                        {TYP_LABEL[z.typ] ?? z.typ}
+                      </Badge>
+                      {z.refCode && (
+                        <code className="type-helper-02 font-mono text-text-helper">
+                          {z.refCode}
+                        </code>
+                      )}
+                      {href && (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="type-helper-02 inline-flex items-center gap-1 text-link underline-offset-2 hover:underline"
                         >
-                          {fakt ? "aus dem Material" : "KI-Vorschlag"}
-                        </Badge>
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          {TYP_LABEL[z.typ] ?? z.typ}
-                        </span>
-                        {z.refCode && (
-                          <code className="text-[11px] text-muted-foreground">
-                            {z.refCode}
-                          </code>
-                        )}
-                        {href && (
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                          >
-                            {z.refMaterial?.titel}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
+                          {z.refMaterial?.titel}
+                          <Launch size={16} />
+                        </a>
+                      )}
                     </div>
+                  </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Schritt löschen"
-                      onClick={() => loeschen(z.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </li>
-                );
-              })}
-            </ol>
-
-            {rueckfrage ? (
-              <div className="border-t pt-3 space-y-3">
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200">
-                  <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-                  <p className="text-sm">
-                    Die {items.length} Schritte werden ersetzt. Umgeordnetes,
-                    umgeschriebene Texte und eigene Schritte gehen verloren.
-                  </p>
-                </div>
-                <div className="flex flex-wrap justify-end gap-2">
                   <Button
-                    variant="outline"
-                    onClick={() => setRueckfrage(false)}
-                    disabled={laeuft}
+                    variant="destructive-ghost"
+                    size="icon-sm"
+                    className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                    aria-label={`Schritt ${i + 1} löschen`}
+                    title="Schritt löschen"
+                    onClick={() => loeschen(z.id)}
                   >
-                    Abbrechen
+                    <TrashCan size={16} />
                   </Button>
-                  <Button onClick={neuErzeugen} disabled={laeuft}>
-                    <Sparkles className="h-4 w-4" />
-                    Trotzdem neu erzeugen
-                  </Button>
-                </div>
-              </div>
-            ) : (
-            <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-              <Select
-                value={neuerTyp}
-                onValueChange={(v) => setNeuerTyp(String(v))}
-                items={TYP_LABEL}
-              >
-                <SelectTrigger className="h-9 w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(TYP_LABEL).map(([wert, label]) => (
-                    <SelectItem key={wert} value={wert}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={hinzufuegen} disabled={laeuft}>
-                <Plus className="h-4 w-4" />
-                Schritt hinzufügen
-              </Button>
+                </li>
+              );
+            })}
+          </ol>
 
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                {!bestaetigt && (
-                  <Button onClick={bestaetigen} disabled={laeuft}>
-                    <CheckCircle2 className="h-4 w-4" />
-                    Passt
-                  </Button>
-                )}
+          {rueckfrage ? (
+            <div className="mt-4">
+              <Notification kind="warning" titel="Die Bearbeitung geht verloren">
+                Die {items.length} Schritte werden ersetzt. Umgeordnetes,
+                umgeschriebene Texte und eigene Schritte sind danach weg.
+              </Notification>
+              <div className="mt-px flex flex-wrap gap-px">
+                <Button
+                  variant="secondary"
+                  onClick={() => setRueckfrage(false)}
+                  disabled={laeuft}
+                >
+                  Abbrechen
+                </Button>
+                <Button variant="destructive" onClick={neuErzeugen} disabled={laeuft}>
+                  Trotzdem neu erzeugen
+                  <MachineLearningModel size={16} />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-stretch">
+                <Select
+                  value={neuerTyp}
+                  onValueChange={(v) => setNeuerTyp(String(v))}
+                  items={TYP_LABEL}
+                >
+                  <SelectTrigger className="w-40" aria-label="Art des Schritts">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(TYP_LABEL).map(([wert, label]) => (
+                      <SelectItem key={wert} value={wert}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="outline"
+                  onClick={hinzufuegen}
+                  disabled={laeuft}
+                  className="shrink-0"
+                >
+                  Schritt hinzufügen
+                  <Add size={16} />
+                </Button>
+              </div>
+
+              <div className="ml-auto flex flex-wrap gap-px">
+                <Button
+                  variant="secondary"
                   onClick={neuErzeugenAnfragen}
                   disabled={laeuft}
                   title="Verwirft die Bearbeitung und erzeugt den Ablauf neu"
                 >
-                  <Sparkles className="h-4 w-4" />
                   Neu erzeugen
+                  <MachineLearningModel size={16} />
                 </Button>
+                {!bestaetigt && (
+                  <Button onClick={bestaetigen} disabled={laeuft}>
+                    Passt
+                    <Checkmark size={16} />
+                  </Button>
+                )}
               </div>
             </div>
-            )}
-          </>
-        )}
-      </CardContent>
-
-    </Card>
+          )}
+        </>
+      )}
+    </section>
   );
 }

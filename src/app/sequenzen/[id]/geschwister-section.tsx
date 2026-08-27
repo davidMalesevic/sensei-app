@@ -3,10 +3,13 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Copy, Unlink } from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CopyCheck, Copy, Loader2, Link2Off, AlertTriangle } from "lucide-react";
+import { InlineLoading } from "@/components/ui/loading";
+import { Notification } from "@/components/ui/notification";
+import { SectionHeader } from "@/components/ui/page-header";
 import {
   uebernehmeAblauf,
   loeseUebernahme,
@@ -76,25 +79,21 @@ export function GeschwisterSection({
   );
 
   return (
-    <Card className="bg-muted/30">
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-          <CopyCheck className="h-4 w-4" />
-          Dieselbe Woche in {geschwister.length} weiteren{" "}
-          {geschwister.length === 1 ? "Klasse" : "Klassen"}
-          {laeuft && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          )}
-        </CardTitle>
-      </CardHeader>
+    <section className="mb-12">
+      <SectionHeader
+        titel="Parallelklassen"
+        beschreibung={`Dieselbe Woche in ${geschwister.length} weiteren ${
+          geschwister.length === 1 ? "Klasse" : "Klassen"
+        }.`}
+        aktionen={laeuft ? <InlineLoading /> : undefined}
+      />
 
-      <CardContent className="space-y-3">
-        {quelle && (
-          <div className="flex flex-wrap items-center gap-2 text-sm rounded-md bg-background px-3 py-2">
-            <span>
-              Ablauf übernommen von <strong>{quelle.klasse}</strong> (
-              {tag(quelle.startDatum)})
-            </span>
+      {quelle && (
+        <Notification
+          kind="info"
+          titel="Ablauf übernommen"
+          className="mb-px"
+          action={
             <Button
               variant="ghost"
               size="sm"
@@ -102,70 +101,75 @@ export function GeschwisterSection({
               disabled={laeuft}
               title="Ab hier plant diese Klasse eigenständig"
             >
-              <Link2Off className="h-3.5 w-3.5" />
               Übernahme lösen
+              <Unlink size={16} />
             </Button>
-          </div>
-        )}
+          }
+        >
+          von {quelle.klasse} ({tag(quelle.startDatum)})
+        </Notification>
+      )}
 
-        <div className="space-y-1">
-          {geschwister.map((g) => {
-            const stand = standText(g);
-            return (
-              <div
-                key={g.id}
-                className="flex flex-wrap items-center gap-3 text-sm rounded-md px-2 py-1.5 hover:bg-background"
+      <div className="bg-layer">
+        {geschwister.map((g) => {
+          const stand = standText(g);
+          return (
+            <div
+              key={g.id}
+              className="type-body-compact-02 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border-subtle px-4 py-3 last:border-b-0"
+            >
+              <Link
+                href={`/sequenzen/${g.id}`}
+                className="w-28 shrink-0 font-semibold text-link underline-offset-2 hover:underline"
               >
-                <Link
-                  href={`/sequenzen/${g.id}`}
-                  className="w-24 shrink-0 font-medium hover:underline"
-                >
-                  {g.klasse}
-                </Link>
-                <span className="w-20 shrink-0 text-muted-foreground">
-                  {tag(g.startDatum)}
+                {g.klasse}
+              </Link>
+              <span className="w-24 shrink-0 text-text-secondary">
+                {tag(g.startDatum)}
+              </span>
+              <Badge
+                variant={g.schritte > 0 ? "cool-gray" : "outline"}
+                size="sm"
+                className="shrink-0"
+              >
+                {g.schritte > 0 ? `${g.schritte} Schritte` : "kein Ablauf"}
+              </Badge>
+              {stand && (
+                <span className="type-helper-02 text-text-helper">{stand}</span>
+              )}
+              {g.uebernommenVon === sequenzId && (
+                <span className="type-helper-02 text-text-helper">
+                  hat von hier übernommen
                 </span>
-                <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
-                  {g.schritte > 0 ? `${g.schritte} Schritte` : "kein Ablauf"}
-                </Badge>
-                {stand && (
-                  <span className="text-xs text-muted-foreground">{stand}</span>
-                )}
-                {g.uebernommenVon === sequenzId && (
-                  <span className="text-xs text-muted-foreground">
-                    hat von hier übernommen
-                  </span>
-                )}
+              )}
 
-                {g.schritte > 0 && g.id !== uebernommenVon && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto"
-                    onClick={() => uebernehmen(g.id)}
-                    disabled={laeuft}
-                    title={
-                      eigeneSchritte > 0
-                        ? "Ersetzt den hiesigen Ablauf"
-                        : "Ablauf von dieser Klasse übernehmen"
-                    }
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    {eigeneSchritte > 0 ? "Ablauf ersetzen" : "Ablauf übernehmen"}
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              {g.schritte > 0 && g.id !== uebernommenVon && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto shrink-0"
+                  onClick={() => uebernehmen(g.id)}
+                  disabled={laeuft}
+                  title={
+                    eigeneSchritte > 0
+                      ? "Ersetzt den hiesigen Ablauf"
+                      : "Ablauf von dieser Klasse übernehmen"
+                  }
+                >
+                  {eigeneSchritte > 0 ? "Ablauf ersetzen" : "Ablauf übernehmen"}
+                  <Copy size={16} />
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
-        {eigenerStand && (
-          <p className="flex items-start gap-2 text-xs text-muted-foreground">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            Der Stand steht pro Klasse — laufen sie auseinander, siehst du es hier.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      {eigenerStand && (
+        <p className="type-helper-02 mt-2 text-text-helper">
+          Der Stand steht pro Klasse — laufen sie auseinander, siehst du es hier.
+        </p>
+      )}
+    </section>
   );
 }

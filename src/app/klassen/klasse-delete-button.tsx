@@ -1,21 +1,24 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { DeleteButton } from "@/components/delete-button";
 import { deleteKlasse } from "./actions";
 
-export function KlasseDeleteButton({ id }: { id: string }) {
+export function KlasseDeleteButton({
+  id,
+  bezeichnung,
+}: {
+  id: string;
+  bezeichnung?: string;
+}) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={async () => {
-        if (confirm("Klasse wirklich löschen?")) {
-          await deleteKlasse(id);
-        }
-      }}
-    >
-      <Trash2 className="h-4 w-4" />
-    </Button>
+    <DeleteButton
+      onDelete={() => deleteKlasse(id)}
+      titel="Klasse löschen"
+      beschreibung={
+        bezeichnung
+          ? `«${bezeichnung}» wird mit allen Pendenzen entfernt. Das lässt sich nicht rückgängig machen.`
+          : "Die Klasse wird mit allen Pendenzen entfernt. Das lässt sich nicht rückgängig machen."
+      }
+    />
   );
 }

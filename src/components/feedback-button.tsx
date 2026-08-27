@@ -1,7 +1,4 @@
-"use client";
-
-import { MessageSquarePlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Chat } from "@carbon/icons-react";
 
 const FEEDBACK_URL =
   "https://github.com/davidMalesevic/sensei-app/issues/new?" +
@@ -23,18 +20,18 @@ const FEEDBACK_URL =
     ].join("\n"),
   }).toString();
 
+/** Global Action in der UI Shell — kein schwebender Knopf über dem Inhalt. */
 export function FeedbackButton() {
   return (
     <a
       href={FEEDBACK_URL}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-5 right-5 z-50 print:hidden"
+      aria-label="Feedback geben"
+      title="Feedback geben"
+      className="flex h-12 w-12 items-center justify-center text-shell-text transition-colors duration-[110ms] ease-carbon-standard hover:bg-shell-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white print:hidden"
     >
-      <Button size="sm" className="shadow-md gap-1.5">
-        <MessageSquarePlus className="h-4 w-4" />
-        Feedback
-      </Button>
+      <Chat size={20} />
     </a>
   );
 }

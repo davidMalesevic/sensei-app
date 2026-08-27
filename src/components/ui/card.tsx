@@ -2,6 +2,14 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Carbon Tile.
+ * https://carbondesignsystem.com/components/tile/style/
+ *
+ * Eine Fläche auf der Ebene `layer`, kantig, mit 16px Innenabstand. Kein
+ * Schatten, keine Rundung — Carbon trennt Flächen über Helligkeit, nicht
+ * über Tiefe.
+ */
 function Card({
   className,
   size = "default",
@@ -12,7 +20,24 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col bg-layer text-card-foreground",
+        "gap-(--card-spacing) py-(--card-spacing) [--card-spacing:--spacing(4)]",
+        "data-[size=sm]:[--card-spacing:--spacing(3)]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+/** Anklickbare Kachel: Hover hebt die Ebene an, Fokus setzt den Carbon-Rahmen. */
+function CardClickable({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <Card
+      className={cn(
+        "cursor-pointer transition-colors duration-[110ms] ease-carbon-standard",
+        "hover:bg-layer-hover",
+        "focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-[var(--ring)]",
         className
       )}
       {...props}
@@ -25,7 +50,8 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+        "@container/card-header grid auto-rows-min items-start gap-1 px-(--card-spacing)",
+        "has-data-[slot=card-action]:grid-cols-[1fr_auto]",
         className
       )}
       {...props}
@@ -33,14 +59,12 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** Carbon: heading-compact-01 — Kachelüberschriften bleiben klein und fett. */
 function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
-        className
-      )}
+      className={cn("type-heading-compact-02 text-foreground", className)}
       {...props}
     />
   )
@@ -50,7 +74,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("type-body-02 text-text-secondary", className)}
       {...props}
     />
   )
@@ -73,7 +97,7 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-content"
-      className={cn("px-(--card-spacing)", className)}
+      className={cn("type-body-02 px-(--card-spacing)", className)}
       {...props}
     />
   )
@@ -84,7 +108,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
+        "mt-auto flex items-center border-t border-border-subtle px-(--card-spacing) pt-(--card-spacing)",
         className
       )}
       {...props}
@@ -94,6 +118,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
 
 export {
   Card,
+  CardClickable,
   CardHeader,
   CardFooter,
   CardTitle,

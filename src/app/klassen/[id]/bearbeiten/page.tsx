@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
+
 import { KlasseForm } from "../../klasse-form";
 import { getKlasseById, updateKlasse } from "../../actions";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function KlasseBearbeitenPage({
   params,
@@ -15,13 +17,15 @@ export default async function KlasseBearbeitenPage({
   const updateAction = updateKlasse.bind(null, id);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Klasse bearbeiten
-        </h1>
-        <p className="text-muted-foreground mt-1">{kl.bezeichnung}</p>
-      </div>
+    <>
+      <PageHeader
+        titel={kl.bezeichnung}
+        beschreibung="Klasse bearbeiten"
+        breadcrumb={[
+          { label: "Klassen", href: "/klassen" },
+          { label: kl.bezeichnung },
+        ]}
+      />
       <KlasseForm
         klasse={{
           id: kl.id,
@@ -31,6 +35,6 @@ export default async function KlasseBearbeitenPage({
         }}
         action={updateAction}
       />
-    </div>
+    </>
   );
 }

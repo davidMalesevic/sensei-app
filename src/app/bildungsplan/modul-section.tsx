@@ -2,14 +2,32 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Upload,
+  Document,
+  DocumentBlank,
+  PresentationFile,
+  Link as LinkIcon,
+  Video,
+  Pen,
+  Launch,
+  Add,
+  Attachment,
+} from "@carbon/icons-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label, HelperText } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loading } from "@/components/ui/loading";
+import { Notification } from "@/components/ui/notification";
+import { SectionHeader } from "@/components/ui/page-header";
+import { DeleteButton } from "@/components/delete-button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -22,20 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Upload,
-  Loader2,
-  FileText,
-  Presentation,
-  Link as LinkIcon,
-  Video,
-  File,
-  StickyNote,
-  Trash2,
-  ExternalLink,
-  Plus,
-  Paperclip,
-} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { createMaterial, deleteMaterial } from "@/app/materialien/actions";
 import { ModulBaumSection, type BaumBlock } from "./modulbaum-section";
 import { MaterialBlockEtikett } from "./material-etikett";
@@ -77,16 +82,32 @@ const typLabels: Record<string, string> = {
   sonstiges: "Sonstiges",
 };
 
-const typIcons: Record<string, typeof FileText> = {
-  arbeitsblatt: FileText,
-  praesentation: Presentation,
+const typIcons: Record<string, typeof Document> = {
+  arbeitsblatt: Document,
+  praesentation: PresentationFile,
   link: LinkIcon,
   video: Video,
-  dokument: File,
-  notiz: StickyNote,
-  sonstiges: File,
+  dokument: DocumentBlank,
+  notiz: Pen,
+  sonstiges: DocumentBlank,
 };
 
+const typFarben: Record<
+  string,
+  "blue" | "purple" | "teal" | "magenta" | "cool-gray" | "green"
+> = {
+  arbeitsblatt: "blue",
+  praesentation: "purple",
+  link: "teal",
+  video: "magenta",
+  dokument: "cool-gray",
+  notiz: "green",
+};
+
+/**
+ * Carbon File Uploader mit Ablagefläche: gestrichelter Rahmen, beim Ziehen
+ * färbt sich die Fläche und der Rahmen wird zur Interaktionsfarbe.
+ */
 function DropZone({
   modulId,
   children,
@@ -193,43 +214,45 @@ function DropZone({
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`relative rounded-lg transition-colors ${
-        isDragging ? "ring-2 ring-primary ring-offset-2 bg-primary/5" : ""
-      }`}
+      className={cn(
+        "relative transition-colors duration-[110ms] ease-carbon-standard",
+        isDragging && "outline-2 outline-offset-2 outline-[var(--ring)]"
+      )}
     >
       {isDragging && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10">
+        <div className="absolute inset-0 z-10 flex items-center justify-center border-2 border-dashed border-border-interactive bg-notification-info">
           <div className="text-center">
-            <Upload className="h-8 w-8 mx-auto text-primary mb-2" />
-            <p className="text-sm font-medium text-primary">
-              Dateien hier ablegen
-            </p>
+            <Upload size={32} className="mx-auto mb-2 text-primary" />
+            <p className="type-heading-02 text-primary">Dateien hier ablegen</p>
           </div>
         </div>
       )}
       {isUploading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/85">
           <div className="text-center">
-            <Loader2 className="h-6 w-6 mx-auto animate-spin text-primary mb-2" />
-            <p className="text-sm text-muted-foreground">
+            <Loading size={24} className="mx-auto mb-2" />
+            <p className="type-body-02 text-text-secondary">
               {uploadCount === 1
-                ? "Datei wird hochgeladen..."
-                : `${uploadCount} Dateien werden hochgeladen...`}
+                ? "Datei wird hochgeladen…"
+                : `${uploadCount} Dateien werden hochgeladen…`}
             </p>
           </div>
         </div>
       )}
+
       {children}
+
       {auswertung && (
-        <p className="text-sm text-muted-foreground mt-3 rounded-md bg-muted px-3 py-2">
+        <Notification kind="success" titel="Ausgewertet" className="mt-4">
           {auswertung}
-        </p>
+        </Notification>
       )}
-      <div className="flex gap-2 pt-2 border-t mt-4">
-        <label className="cursor-pointer">
+
+      <div className="mt-4 flex flex-wrap gap-px">
+        <label>
           <input
             type="file"
-            className="hidden"
+            className="sr-only"
             multiple
             onChange={(e) => {
               if (e.target.files?.length) {
@@ -239,9 +262,15 @@ function DropZone({
             }}
             disabled={isUploading}
           />
-          <span className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-dashed hover:bg-muted transition-colors cursor-pointer">
-            <Upload className="h-3.5 w-3.5" />
+          <span
+            className={cn(
+              "type-body-compact-02 relative inline-flex h-10 cursor-pointer items-center border border-primary pr-14 pl-[15px] text-primary",
+              "transition-colors duration-[70ms] ease-carbon-entrance hover:bg-primary hover:text-white",
+              isUploading && "pointer-events-none border-[#c6c6c6] text-[#c6c6c6]"
+            )}
+          >
             Datei hochladen
+            <Upload size={16} className="absolute right-4" />
           </span>
         </label>
         <AddLinkDialog modulId={modulId} />
@@ -256,73 +285,94 @@ function AddLinkDialog({ modulId }: { modulId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button variant="outline" size="sm" />}>
-        <Plus className="h-3.5 w-3.5" />
         Link / Notiz
+        <Add size={16} />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Material hinzufügen</DialogTitle>
         </DialogHeader>
+
         <form
           action={async (formData) => {
             await createMaterial(formData);
             setOpen(false);
           }}
-          className="space-y-4"
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <input type="hidden" name="modulId" value={modulId} />
+          <DialogBody>
+            <input type="hidden" name="modulId" value={modulId} />
 
-          <div className="space-y-2">
-            <Label htmlFor="titel">Titel</Label>
-            <Input
-              id="titel"
-              name="titel"
-              placeholder="z.B. Scrum-Übersicht"
-              required
-            />
-          </div>
+            <div className="mb-8">
+              <Label htmlFor="titel">Titel</Label>
+              <Input
+                id="titel"
+                name="titel"
+                placeholder="z.B. Scrum-Übersicht"
+                className="mt-2"
+                required
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="typ">Typ</Label>
-            <Select name="typ" defaultValue="link" required items={typLabels}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(typLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="mb-8">
+              <Label htmlFor="typ">Typ</Label>
+              <div className="mt-2">
+                <Select name="typ" defaultValue="link" required items={typLabels}>
+                  <SelectTrigger id="typ">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(typLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="url">URL</Label>
-            <Input id="url" name="url" placeholder="https://..." />
-          </div>
+            <div className="mb-8">
+              <Label htmlFor="url">URL</Label>
+              <Input
+                id="url"
+                name="url"
+                placeholder="https://…"
+                className="mt-2"
+              />
+              <HelperText className="mt-2">
+                Leer lassen, wenn es nur eine Notiz ist.
+              </HelperText>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notiz">Notiz</Label>
-            <Textarea
-              id="notiz"
-              name="notiz"
-              placeholder="Hinweise zum Material..."
-              rows={2}
-            />
-          </div>
+            <div>
+              <Label htmlFor="notiz">Notiz</Label>
+              <Textarea
+                id="notiz"
+                name="notiz"
+                placeholder="Hinweise zum Material…"
+                rows={2}
+                className="mt-2"
+              />
+            </div>
+          </DialogBody>
 
-          <Button type="submit" className="w-full">
-            Hinzufügen
-          </Button>
+          <DialogFooter showCloseButton>
+            <Button type="submit" className="h-16 flex-1 items-start pt-4">
+              Hinzufügen
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-function ModulCard({
+/**
+ * Ein Modul in der linken Liste. Ausgewählt trägt es — wie in Carbons SideNav —
+ * einen 3px-Balken links und eine hellere Fläche.
+ */
+function ModulZeile({
   modul,
   isSelected,
   onSelect,
@@ -335,25 +385,34 @@ function ModulCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full text-left rounded-lg border p-3 transition-colors ${
+      aria-current={isSelected ? "true" : undefined}
+      className={cn(
+        "relative block w-full border-b border-border-subtle px-4 py-3 text-left last:border-b-0",
+        "transition-colors duration-[110ms] ease-carbon-standard",
+        "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]",
         isSelected
-          ? "border-primary bg-primary/5 ring-1 ring-primary"
-          : "hover:bg-muted/50"
-      }`}
+          ? "bg-layer-selected before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-border-interactive before:content-['']"
+          : "hover:bg-layer-hover"
+      )}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={cn(
+            "type-body-compact-02",
+            isSelected ? "font-semibold text-foreground" : "text-foreground"
+          )}
+        >
           Modul {modul.nummer}
         </span>
         {modul.materialien.length > 0 && (
-          <Badge variant="secondary" className="text-xs">
-            <Paperclip className="h-3 w-3" />
+          <Badge variant="cool-gray" size="sm" className="shrink-0">
+            <Attachment size={16} />
             {modul.materialien.length}
           </Badge>
         )}
       </div>
       {modul.bezeichnung && (
-        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+        <p className="type-helper-02 mt-1 truncate text-text-secondary">
           {modul.bezeichnung}
         </p>
       )}
@@ -378,17 +437,17 @@ export function ModulSection({ module }: { module: ModulData[] }) {
   const ohneZuordnung = module.filter((m) => m.lehrjahr === null);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {/* Left side: Module list by Lehrjahr */}
-      <div className="space-y-4">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[18rem_1fr]">
+      {/* Links: Module nach Lehrjahr */}
+      <div className="space-y-6">
         {moduleByLehrjahr.map(({ lehrjahr, module: ljModule }) => (
           <div key={lehrjahr}>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            <h3 className="type-heading-compact-02 mb-2 border-b border-border-strong pb-2 text-foreground">
               {lehrjahr}. Lehrjahr
             </h3>
-            <div className="space-y-1">
+            <div className="bg-layer">
               {ljModule.map((modul) => (
-                <ModulCard
+                <ModulZeile
                   key={modul.id}
                   modul={modul}
                   isSelected={selectedModulId === modul.id}
@@ -400,12 +459,12 @@ export function ModulSection({ module }: { module: ModulData[] }) {
         ))}
         {ohneZuordnung.length > 0 && (
           <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            <h3 className="type-heading-compact-02 mb-2 border-b border-border-strong pb-2 text-foreground">
               Ohne Lehrjahr
             </h3>
-            <div className="space-y-1">
+            <div className="bg-layer">
               {ohneZuordnung.map((modul) => (
-                <ModulCard
+                <ModulZeile
                   key={modul.id}
                   modul={modul}
                   isSelected={selectedModulId === modul.id}
@@ -417,51 +476,58 @@ export function ModulSection({ module }: { module: ModulData[] }) {
         )}
       </div>
 
-      {/* Right side: Selected module detail + materials */}
-      <div className="md:col-span-2">
+      {/* Rechts: gewähltes Modul mit Material, Baum und Plan */}
+      <div className="min-w-0">
         {selectedModul ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>
-                  Modul {selectedModul.nummer}
-                  {selectedModul.bezeichnung && (
-                    <span className="font-normal text-muted-foreground ml-2">
-                      {selectedModul.bezeichnung}
-                    </span>
-                  )}
-                </span>
-                <Badge variant="outline">
+          <>
+            <div className="mb-8 flex flex-wrap items-baseline justify-between gap-4 border-b border-border-strong pb-3">
+              <h2 className="type-heading-04 text-foreground">
+                Modul {selectedModul.nummer}
+                {selectedModul.bezeichnung && (
+                  <span className="type-heading-03 ml-3 text-text-secondary">
+                    {selectedModul.bezeichnung}
+                  </span>
+                )}
+              </h2>
+              {selectedModul.lehrjahr !== null && (
+                <Badge variant="cool-gray">
                   {selectedModul.lehrjahr}. Lehrjahr
                 </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DropZone modulId={selectedModul.id}>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
-                  <Paperclip className="h-4 w-4" />
-                  Materialien
-                  {selectedModul.materialien.length > 0 && (
-                    <span className="text-muted-foreground font-normal">
-                      ({selectedModul.materialien.length})
-                    </span>
-                  )}
-                </h4>
+              )}
+            </div>
 
+            <section className="mb-12">
+              <SectionHeader
+                titel="Materialien"
+                beschreibung={
+                  selectedModul.materialien.length > 0
+                    ? `${selectedModul.materialien.length} Dateien und Links. Präsentationen als PDF — Seite = Slide.`
+                    : "Präsentationen als PDF ablegen — dann wird die Seite zur Foliennummer."
+                }
+              />
+
+              <DropZone modulId={selectedModul.id}>
                 {selectedModul.materialien.length > 0 ? (
-                  <div className="space-y-1.5">
+                  <div className="bg-layer">
                     {selectedModul.materialien.map((mat) => {
-                      const Icon = typIcons[mat.typ] ?? File;
+                      const Icon = typIcons[mat.typ] ?? DocumentBlank;
                       return (
                         <div
                           key={mat.id}
-                          className="flex items-center gap-2 group text-sm rounded-md p-2 hover:bg-muted/50"
+                          className="group type-body-compact-02 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border-subtle px-4 py-2 last:border-b-0 hover:bg-layer-hover"
                         >
-                          <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="flex-1 min-w-0 truncate">
+                          <Icon
+                            size={16}
+                            className="shrink-0 text-text-secondary"
+                          />
+                          <span className="min-w-0 flex-1 truncate">
                             {mat.titel}
                           </span>
-                          <Badge variant="outline" className="text-xs shrink-0">
+                          <Badge
+                            variant={typFarben[mat.typ] ?? "cool-gray"}
+                            size="sm"
+                            className="shrink-0"
+                          >
                             {typLabels[mat.typ] ?? mat.typ}
                           </Badge>
                           <MaterialBlockEtikett
@@ -473,76 +539,75 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                             materialId={mat.id}
                             dateiPfad={mat.dateiPfad}
                           />
-                          {mat.dateiPfad && (
-                            <a
-                              href={`/api/files/${mat.dateiPfad}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-foreground shrink-0"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          )}
-                          {mat.url && (
-                            <a
-                              href={mat.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-foreground shrink-0"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            onClick={async () => {
-                              if (confirm("Material löschen?")) {
-                                await deleteMaterial(mat.id);
+                          {(mat.dateiPfad || mat.url) && (
+                            <Button
+                              variant="ghost-neutral"
+                              size="icon-sm"
+                              className="shrink-0"
+                              aria-label={`${mat.titel} öffnen`}
+                              title="Öffnen"
+                              render={
+                                <a
+                                  href={
+                                    mat.dateiPfad
+                                      ? `/api/files/${mat.dateiPfad}`
+                                      : mat.url!
+                                  }
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                />
                               }
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                            >
+                              <Launch size={16} />
+                            </Button>
+                          )}
+                          <span className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                            <DeleteButton
+                              onDelete={() => deleteMaterial(mat.id)}
+                              titel="Material löschen"
+                              beschreibung={`«${mat.titel}» wird entfernt, samt der daraus gelesenen Aufgaben.`}
+                            />
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed rounded-lg">
-                    <Upload className="h-8 w-8 text-muted-foreground/50 mb-2" />
-                    <p className="text-sm text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center border-2 border-dashed border-border-strong bg-layer py-12 text-center">
+                    <Upload size={32} className="mb-3 text-text-helper" />
+                    <p className="type-body-02 text-text-secondary">
                       Dateien hierher ziehen oder unten hochladen
                     </p>
                   </div>
                 )}
               </DropZone>
+            </section>
 
-              <div className="mt-6 border-t pt-4">
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-1.5">
-                  Aufgabenbaum
-                </h4>
-                <ModulBaumSection
-                  bloecke={selectedModul.bloecke}
-                  praesentationen={selectedModul.materialien
-                    .filter((m) => m.typ === "praesentation" || m.dateiPfad?.endsWith(".pdf"))
-                    .map((m) => ({ id: m.id, titel: m.titel }))}
-                />
-              </div>
+            <section className="mb-12">
+              <SectionHeader
+                titel="Aufgabenbaum"
+                beschreibung="Block ⇒ Lern- und Arbeitsauftrag ⇒ Aufgabe, aus dem Smartlearn-Export gelesen."
+              />
+              <ModulBaumSection
+                bloecke={selectedModul.bloecke}
+                praesentationen={selectedModul.materialien
+                  .filter(
+                    (m) =>
+                      m.typ === "praesentation" || m.dateiPfad?.endsWith(".pdf")
+                  )
+                  .map((m) => ({ id: m.id, titel: m.titel }))}
+              />
+            </section>
 
-              <div className="mt-6 border-t pt-4">
-                <ModulplanSection
-                  modulId={selectedModul.id}
-                  eintraege={selectedModul.modularPlan}
-                />
-              </div>
-            </CardContent>
-          </Card>
+            <ModulplanSection
+              modulId={selectedModul.id}
+              eintraege={selectedModul.modularPlan}
+            />
+          </>
         ) : (
-          <div className="flex items-center justify-center h-full min-h-[200px] rounded-lg border border-dashed">
-            <p className="text-sm text-muted-foreground">
-              Wähle ein Modul aus, um Details und Materialien zu sehen.
+          <div className="flex min-h-64 items-center justify-center border-2 border-dashed border-border-subtle bg-layer">
+            <p className="type-body-02 text-text-secondary">
+              Wähle links ein Modul, um Material, Aufgabenbaum und Plan zu sehen.
             </p>
           </div>
         )}

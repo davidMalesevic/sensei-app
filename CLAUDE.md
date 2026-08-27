@@ -16,10 +16,114 @@ Anforderungen und Begründungen stehen in `erstellungsprozess.md`.
 - **React 19** + TypeScript
 - **shadcn/ui v4** (basiert auf `@base-ui/react`, NICHT auf Radix)
 - **Tailwind CSS v4**
+- **IBM Carbon Design System** — als Token-Schicht in `globals.css`, nicht als
+  `@carbon/react`. Siehe *Carbon*.
 - **Drizzle ORM** + eigene **PostgreSQL 17** (Docker auf Netcup VPS)
-- **lucide-react** für Icons
+- **@carbon/icons-react** für Icons (`<Icon size={16} />`, nicht `className="h-4 w-4"`)
+- **IBM Plex Sans / IBM Plex Mono** über `next/font/google`
 - **unpdf** für PDF-Textextraktion
 - **KI**: Ollama Cloud API (OpenAI-kompatibel)
+
+## Carbon
+
+Die Oberfläche folgt dem **IBM Carbon Design System** — aber ohne
+`@carbon/react`. Diese Bibliothek bringt Sass und ihr eigenes Styling mit und
+besteht fast vollständig aus Client-Komponenten; sie stünde neben Tailwind und
+base-ui als zweites, konkurrierendes System und würde Server Components
+kaputtmachen. Stattdessen liegt Carbon als **Token-Schicht** in
+`src/app/globals.css`, und die Primitives in `components/ui/` sind nach
+Carbon-Spezifikation gestylt.
+
+**Theme: White (hell) / Gray 100 (dunkel).** Umschalter in der Kopfleiste,
+gemerkt in `localStorage["sensei-theme"]`; ein Inline-Script im `<head>` setzt
+die Klasse vor dem ersten Paint, damit nichts aufblitzt.
+
+### Tokens
+
+Die shadcn-Namen (`background`, `primary`, `muted`, `border` …) bleiben
+bestehen, tragen aber Carbon-Werte. Daneben stehen die Carbon-eigenen Rollen:
+
+| Rolle | hell | Wofür |
+|---|---|---|
+| `background` | `#ffffff` | die Seite |
+| `layer` | `#f4f4f4` | jede abgesetzte Fläche: Kachel, Tabelle, Liste |
+| `layer-hover` / `layer-selected` | `#e8e8e8` / `#e0e0e0` | Hover, Auswahl |
+| `field` | `#f4f4f4` | Eingabefelder |
+| `border-subtle` / `border-strong` | `#e0e0e0` / `#8d8d8d` | Trennlinie / Feldlinie |
+| `border-interactive` | `#0f62fe` | der 3px-Balken links an Ausgewähltem |
+| `text-secondary` / `text-helper` | `#525252` / `#6f6f6f` | Fliesstext / Hilfetext |
+| `support-error/success/warning/info` | — | nur Status, nie Dekoration |
+
+**Blau ist Interaktion, Rot ist Gefahr.** Deshalb sticht der Zähler für offene
+Überträge wieder heraus.
+
+### Regeln, die man leicht bricht
+
+- **Kein Radius, kein Schatten.** `--radius-*` ist überall `0`. Flächen werden
+  über Helligkeit getrennt, nicht über Tiefe. Einzige Ausnahme: der Carbon-Tag
+  (`Badge`) ist eine Pille, und Popups werfen einen harten Schatten.
+- **Fokus ist ein 2px-Rahmen nach innen** (`outline-offset: -2px`), kein
+  weicher Ring. Eine Basisregel in `globals.css` setzt das global.
+- **Typografie über die Type-Scale-Utilities**, nicht über `text-sm`.
+  Carbon hat zwei Reihen; diese App benutzt durchgehend die **grössere «02»**:
+
+  | Utility | Grösse | Wofür |
+  |---|---|---|
+  | `type-heading-05/04/03` | 32 / 28 / 20 px | Seitentitel, Abschnitte |
+  | `type-heading-02` / `type-heading-compact-02` | 16 px, 600 | Zeilentitel, Tabellenköpfe |
+  | `type-body-02` / `type-body-compact-02` | **16 px** | Lauftext, Bedienelemente |
+  | `type-label-02` / `type-helper-02` | 14 px | Feldbeschriftung, Hilfetext |
+
+  Die dichte «01»-Reihe (14/12px) steht weiterhin bereit, wird aber nur für
+  Ausnahmen benutzt (`Button size="xs"`). Grösse trägt die Hierarchie, nicht
+  Fettdruck — `h1` ist 32px in Normalstärke.
+- **Bedienelemente sind auf 16px-Text gepaart**: Felder, Selects und Knöpfe
+  48px (`sm` 40px), Tabellenzeilen 48px, SideNav-Einträge 40px. Wer `h-8`
+  von Hand setzt, klemmt den Text ein.
+- **Buttons sind linksbündig** mit dem Icon rechts aussen; das ist Carbons
+  Signatur, kein Fehler. Für dichte Tabellenzeilen gibt es
+  `size="icon-sm" variant="ghost-neutral"`, nicht schmalere Textknöpfe.
+- **Abstände aus Carbons Skala**: 2, 4, 8, 12, 16, 24, 32, 40, 48, 64 px —
+  in Tailwind `0.5, 1, 2, 3, 4, 6, 8, 10, 12, 16`.
+- **Zusammengehörige Kacheln** stehen in einem `grid gap-px bg-border-subtle`,
+  damit sie sich als ein Paneel lesen und nicht als lose Karten.
+
+### Komponenten
+
+`components/ui/` bildet Carbon nach. Die Zuordnung der Variantennamen:
+
+| Datei | Carbon | Hinweis |
+|---|---|---|
+| `button.tsx` | Button | `default`=Primary, `secondary`, `outline`=Tertiary, `ghost`, `ghost-neutral`, `destructive`=Danger, `destructive-ghost` |
+| `badge.tsx` | Tag | Farbnamen (`blue`, `green`, `red`, `purple`, `cool-gray` …) |
+| `card.tsx` | Tile | `CardClickable` für anklickbare Kacheln |
+| `table.tsx` | Data Table | Kopf auf `layer-accent`, Zeilen auf `layer` |
+| `notification.tsx` | Inline Notification | `kind`: `error`, `success`, `warning`, `info` |
+| `loading.tsx` | Loading / Inline Loading | rotierender Ring, 690 ms linear |
+| `page-header.tsx` | Page Header, Breadcrumb | dazu `SectionHeader` und `DataItem` |
+| `structured-list.tsx` | Structured List | für Listen, die keine Tabelle sind |
+| `dialog.tsx` | Modal | Fuss: randlose Knöpfe, 64px hoch, teilen sich die Breite |
+| `input` / `textarea` / `select` | Text Input, Text Area, Dropdown | gefüllte Fläche, eine Linie unten |
+
+Neue Icons kommen aus `@carbon/icons-react`. **Vor dem Import prüfen, ob es sie
+gibt** — die Namen weichen von lucide ab (`TrashCan` statt `Trash2`,
+`Launch` statt `ExternalLink`, `PresentationFile`, `MachineLearningModel`):
+
+```bash
+ls node_modules/@carbon/icons-react/lib/ | grep -i <name>
+```
+
+### UI Shell
+
+`components/shell/ui-shell.tsx`: schwarze Kopfleiste (48px, `shell`-Tokens,
+in beiden Themes dunkel) über einer SideNav (256px). Der aktive Eintrag trägt
+einen 3px-Balken links in `border-interactive`.
+
+- Die Breite unterscheidet Desktop von Mobil über `useSyncExternalStore` auf
+  eine Media Query — kein `setState` im Effect, sonst schlägt die ESLint-Regel
+  `react-hooks/set-state-in-effect` zu.
+- Beim Drucken verschwindet die Shell: `print:hidden` an Kopfleiste und
+  SideNav plus ein `@media print`-Block in `globals.css`.
 
 ## shadcn/ui v4 — wichtige Unterschiede
 
@@ -408,8 +512,10 @@ src/
 │   ├── bildungsplan/             # HKB/HK, Module, Modulplan, Aufgabenbaum
 │   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
 ├── components/
-│   ├── ui/                       # shadcn/ui Komponenten
-│   └── app-sidebar.tsx           # Navigation (Badge: offene Überträge)
+│   ├── ui/                       # Primitives, nach Carbon-Spezifikation
+│   ├── shell/ui-shell.tsx        # Carbon UI Shell: Kopfleiste + SideNav
+│   ├── delete-button.tsx         # Löschen über ein Carbon Danger-Modal
+│   └── sortable-table-head.tsx   # sortierbare Kopfzelle einer DataTable
 ├── lib/
 │   ├── ai.ts                     # Ollama-Aufruf + JSON-Parsing
 │   ├── ics.ts                    # WebUntis-Kalenderexport
@@ -418,6 +524,7 @@ src/
 │   ├── kontext.ts                # Aggregation für den ContextHeader
 │   ├── zeit.ts                   # Europe/Zurich statt UTC
 │   ├── kw.ts                     # ISO-Kalenderwochen
+│   ├── status.ts                 # Sequenz-Status als Carbon-Tag
 │   ├── dokument-text.ts          # Text aus PDF/HTML/TXT
 │   └── material-link.ts          # Deep-Links ins Material (#page=N)
 └── db/
@@ -457,5 +564,3 @@ src/
   OOXML-Parser. Präsentationen deshalb als **PDF** ablegen.
 - `Button render={<Link/>}` erzeugt in der Dev-Overlay-Konsole eine
   Base-UI-Warnung (`nativeButton`). Kosmetisch, betrifft mehrere Seiten.
-- `src/hooks/use-mobile.ts` (aus shadcn) verletzt die React-Regel
-  `set-state-in-effect`. Vendor-Datei, nicht angefasst.

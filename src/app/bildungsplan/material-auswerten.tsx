@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { TextMining } from "@carbon/icons-react";
+
 import { Button } from "@/components/ui/button";
-import { Loader2, ScanText } from "lucide-react";
+import { Loading } from "@/components/ui/loading";
 import { leseModulAusMaterial } from "./actions";
 
 const LESBAR = [".html", ".htm", ".json", ".pdf", ".csv", ".txt", ".md"];
@@ -47,21 +49,20 @@ export function MaterialAuswerten({
   return (
     <>
       <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0"
+        variant="ghost-neutral"
+        size="icon-sm"
+        className="shrink-0"
+        aria-label="Modulplan und Aufgabenbaum aus dieser Datei lesen"
         title="Modulplan und Aufgabenbaum aus dieser Datei lesen"
         onClick={auswerten}
         disabled={laeuft}
       >
-        {laeuft ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <ScanText className="h-3.5 w-3.5" />
-        )}
+        {laeuft ? <Loading size={16} /> : <TextMining size={16} />}
       </Button>
       {meldung && (
-        <span className="text-xs text-muted-foreground shrink-0">{meldung}</span>
+        <span className="type-helper-02 shrink-0 text-text-helper">
+          {meldung}
+        </span>
       )}
     </>
   );

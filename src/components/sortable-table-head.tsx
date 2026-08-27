@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { useSearchParams, usePathname } from "next/navigation";
-import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
-import { TableHead } from "@/components/ui/table";
+import { ArrowUp, ArrowDown, ArrowsVertical } from "@carbon/icons-react";
 
+import { TableHead } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+
+/**
+ * Carbon sortiert über die ganze Kopfzelle, nicht über ein kleines Symbol:
+ * die Fläche ist der Knopf, der Pfeil erscheint beim Überfahren.
+ * https://carbondesignsystem.com/components/data-table/style/#sortable
+ */
 export function SortableTableHead({
   column,
   children,
@@ -27,21 +34,30 @@ export function SortableTableHead({
   params.set("order", nextOrder);
 
   return (
-    <TableHead className={className}>
+    <TableHead className={cn("p-0", className)} aria-sort={
+      isActive ? (currentOrder === "desc" ? "descending" : "ascending") : "none"
+    }>
       <Link
         href={`${pathname}?${params.toString()}`}
-        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+        className="group/sort flex h-10 w-full items-center justify-between gap-2 px-4 transition-colors duration-[110ms] ease-carbon-standard hover:bg-layer-active focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
       >
         {children}
-        {isActive ? (
-          currentOrder === "desc" ? (
-            <ArrowDown className="h-3.5 w-3.5" />
+        <span
+          className={cn(
+            "shrink-0 transition-opacity duration-[110ms]",
+            isActive ? "opacity-100" : "opacity-0 group-hover/sort:opacity-100"
+          )}
+        >
+          {isActive ? (
+            currentOrder === "desc" ? (
+              <ArrowDown size={16} />
+            ) : (
+              <ArrowUp size={16} />
+            )
           ) : (
-            <ArrowUp className="h-3.5 w-3.5" />
-          )
-        ) : (
-          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground/50" />
-        )}
+            <ArrowsVertical size={16} />
+          )}
+        </span>
       </Link>
     </TableHead>
   );

@@ -1,21 +1,24 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { DeleteButton } from "@/components/delete-button";
 import { deleteMaterial } from "./actions";
 
-export function MaterialDeleteButton({ id }: { id: string }) {
+export function MaterialDeleteButton({
+  id,
+  titel,
+}: {
+  id: string;
+  titel?: string;
+}) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={async () => {
-        if (confirm("Material löschen?")) {
-          await deleteMaterial(id);
-        }
-      }}
-    >
-      <Trash2 className="h-4 w-4" />
-    </Button>
+    <DeleteButton
+      onDelete={() => deleteMaterial(id)}
+      titel="Material löschen"
+      beschreibung={
+        titel
+          ? `«${titel}» wird entfernt, samt der daraus gelesenen Aufgaben.`
+          : "Das Material wird entfernt, samt der daraus gelesenen Aufgaben."
+      }
+    />
   );
 }

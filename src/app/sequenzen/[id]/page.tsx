@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
+import { Printer } from "@carbon/icons-react";
+
 import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import { PageHeader, DataItem } from "@/components/ui/page-header";
 import { getSequenzById } from "../actions";
 import { getSequenzKontext } from "@/lib/kontext";
 import { getWochenstoff } from "@/lib/modulbaum";
@@ -17,6 +18,24 @@ import { GeschwisterSection } from "./geschwister-section";
 import { WochenstoffSection } from "./wochenstoff-section";
 import { UebertragSection } from "./uebertrag-section";
 import { NotizenSection } from "./notizen-section";
+
+const WOCHENTAGE = [
+  "Sonntag",
+  "Montag",
+  "Dienstag",
+  "Mittwoch",
+  "Donnerstag",
+  "Freitag",
+  "Samstag",
+];
+
+function langesDatum(datum: string | null): string {
+  if (!datum) return "ohne Datum";
+  const d = new Date(datum + "T00:00:00");
+  return `${WOCHENTAGE[d.getDay()]}, ${String(d.getDate()).padStart(2, "0")}.${String(
+    d.getMonth() + 1
+  ).padStart(2, "0")}.${d.getFullYear()}`;
+}
 
 /**
  * Die Sequenzseite ist eine einzige Ansicht — keine Umschaltung mehr zwischen
@@ -50,33 +69,40 @@ export default async function SequenzDetailPage({
   ]);
 
   const zeitraum =
-    seq.startZeit && seq.endZeit ? `${seq.startZeit}–${seq.endZeit}` : null;
+    seq.startZeit && seq.endZeit ? `${seq.startZeit}–${seq.endZeit}` : "—";
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight">{seq.titel}</h1>
-          <div className="flex flex-wrap items-center gap-2 text-muted-foreground mt-1">
-            <span>{seq.klasse.bezeichnung}</span>
-            {zeitraum && <span>· {zeitraum}</span>}
-            {seq.lektionen && (
-              <Badge variant="outline">{seq.lektionen} Lektionen</Badge>
-            )}
-            {seq.raum && <span>· {seq.raum}</span>}
-          </div>
+    <>
+      <PageHeader
+        titel={seq.titel}
+        beschreibung={langesDatum(seq.startDatum)}
+        breadcrumb={[
+          { label: "Sequenzen", href: "/sequenzen" },
+          { label: seq.klasse.bezeichnung },
+        ]}
+        aktionen={
+          <>
+            <Button
+              variant="ghost-neutral"
+              size="icon"
+              aria-label="Drucken"
+              title="PDF / Drucken"
+              render={<Link href={`/sequenzen/${id}/drucken`} />}
+            >
+              <Printer size={20} />
+            </Button>
+            <SequenzDeleteButton id={id} bezeichnung={seq.titel} />
+          </>
+        }
+      >
+        <div className="mt-6 flex flex-wrap gap-x-12 gap-y-4 bg-layer p-4">
+          <DataItem label="Klasse">{seq.klasse.bezeichnung}</DataItem>
+          <DataItem label="Zeit">{zeitraum}</DataItem>
+          <DataItem label="Lektionen">{seq.lektionen ?? "—"}</DataItem>
+          <DataItem label="Raum">{seq.raum ?? "—"}</DataItem>
+          <DataItem label="Kalenderwoche">{kw ?? "—"}</DataItem>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button
-            variant="outline"
-            render={<Link href={`/sequenzen/${id}/drucken`} />}
-          >
-            <Printer className="h-4 w-4" />
-            PDF / Drucken
-          </Button>
-          <SequenzDeleteButton id={id} />
-        </div>
-      </div>
+      </PageHeader>
 
       <ContextHeader kontext={kontext} klasseId={seq.klasseId} />
 
@@ -111,6 +137,6 @@ export default async function SequenzDetailPage({
       />
 
       <NotizenSection sequenzId={id} notiz={seq.cockpitNotiz} />
-    </div>
+    </>
   );
 }

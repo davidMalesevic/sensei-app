@@ -2,9 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { PresentationFile } from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Loading } from "@/components/ui/loading";
 import {
   Select,
   SelectContent,
@@ -12,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Layers, Loader2, Presentation } from "lucide-react";
 import { setzeBlockSlides } from "./actions";
 
 const KEINE = "keine";
@@ -77,46 +79,55 @@ function SlideZuordnung({
     (block.slideBis?.toString() ?? "") !== bis;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-1">
-      <Presentation className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      <Select
-        value={materialId}
-        onValueChange={(v) => setMaterialId(String(v))}
-        items={{
-          [KEINE]: "keine Zuordnung",
-          ...Object.fromEntries(praesentationen.map((p) => [p.id, p.titel])),
-        }}
-      >
-        <SelectTrigger className="h-8 w-52 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={KEINE}>keine Zuordnung</SelectItem>
-          {praesentationen.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
-              {p.titel}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="flex flex-wrap items-center gap-2 border-t border-border-subtle px-4 py-3">
+      <PresentationFile size={16} className="shrink-0 text-text-secondary" />
+      <span className="type-label-02 mr-2 text-text-helper">Slides</span>
+
+      <div className="w-56">
+        <Select
+          value={materialId}
+          onValueChange={(v) => setMaterialId(String(v))}
+          items={{
+            [KEINE]: "keine Zuordnung",
+            ...Object.fromEntries(praesentationen.map((p) => [p.id, p.titel])),
+          }}
+        >
+          <SelectTrigger size="sm" aria-label="Präsentation für diesen Block">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={KEINE}>keine Zuordnung</SelectItem>
+            {praesentationen.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.titel}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Input
         value={von}
         onChange={(e) => setVon(e.target.value)}
         placeholder="von"
+        aria-label="Erste Slide"
         inputMode="numeric"
-        className="h-8 w-16 text-xs"
+        className="h-10 w-20"
       />
-      <span className="text-xs text-muted-foreground">–</span>
+      <span className="text-text-helper">–</span>
       <Input
         value={bis}
         onChange={(e) => setBis(e.target.value)}
         placeholder="bis"
+        aria-label="Letzte Slide"
         inputMode="numeric"
-        className="h-8 w-16 text-xs"
+        className="h-10 w-20"
       />
+
       {veraendert && (
-        <Button size="sm" className="h-8" onClick={speichern} disabled={speichert}>
-          {speichert ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sichern"}
+        <Button size="sm" onClick={speichern} disabled={speichert}>
+          Sichern
+          {speichert && <Loading size={16} />}
         </Button>
       )}
     </div>
@@ -132,10 +143,10 @@ export function ModulBaumSection({
 }) {
   if (bloecke.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground">
+      <p className="type-body-02 bg-layer p-6 text-text-secondary">
         Noch kein Aufgabenbaum. Er entsteht beim Import des Smartlearn-Exports
         (HTML) zusammen mit dem Modulplan.
-      </div>
+      </p>
     );
   }
 
@@ -145,37 +156,41 @@ export function ModulBaumSection({
     .filter((a) => !a.parentId).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm">
-        <Layers className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">
-          {bloecke.length} Blöcke · {aufgabenGesamt} Aufgaben
-        </span>
-      </div>
+    <div>
+      <p className="type-helper-02 mb-4 text-text-helper">
+        {bloecke.length} Blöcke · {aufgabenGesamt} Aufgaben
+      </p>
 
-      <div className="space-y-3">
+      <div className="space-y-px">
         {bloecke.map((b) => (
-          <div key={b.id} className="rounded-lg border p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">Block {b.schluessel}</Badge>
-              <span className="text-sm font-medium">{b.titel}</span>
+          <div key={b.id} className="bg-layer">
+            <div className="flex flex-wrap items-center gap-3 border-b border-border-strong bg-layer-accent px-4 py-3">
+              <Badge variant="high-contrast" size="sm">
+                Block {b.schluessel}
+              </Badge>
+              <span className="type-heading-compact-02 min-w-0 flex-1 text-foreground">
+                {b.titel}
+              </span>
             </div>
 
             {b.auftraege.map((a) => {
               const oben = a.aufgaben.filter((x) => !x.parentId);
               return (
-                <div key={a.id} className="pl-1 space-y-1">
-                  <code className="text-xs text-muted-foreground">{a.code}</code>
-                  <div className="flex flex-wrap gap-1">
+                <div
+                  key={a.id}
+                  className="border-b border-border-subtle px-4 py-3 last:border-b-0"
+                >
+                  <code className="type-helper-02 font-mono text-text-helper">
+                    {a.code}
+                  </code>
+                  <div className="mt-2 flex flex-wrap gap-2">
                     {oben.map((auf) => {
                       const teil = a.aufgaben.filter((t) => t.parentId === auf.id);
                       return (
-                        <Badge key={auf.id} variant="secondary" className="font-normal">
+                        <Badge key={auf.id} variant="cool-gray" size="sm">
                           {auf.bezeichnung}
                           {teil.length > 0 && (
-                            <span className="text-muted-foreground ml-1">
-                              +{teil.length}
-                            </span>
+                            <span className="ml-1 opacity-70">+{teil.length}</span>
                           )}
                         </Badge>
                       );

@@ -56,7 +56,11 @@ export function MaterialBlockEtikett({
       items={items}
       disabled={speichert}
     >
-      <SelectTrigger className="h-7 w-36 text-xs shrink-0">
+      <SelectTrigger
+        size="sm"
+        className="w-40 shrink-0"
+        aria-label="Etikett: ganzes Modul oder ein Block"
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

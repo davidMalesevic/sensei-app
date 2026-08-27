@@ -1,6 +1,8 @@
+import { Launch } from "@carbon/icons-react";
+
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BookOpenCheck, ExternalLink } from "lucide-react";
+import { Notification } from "@/components/ui/notification";
+import { SectionHeader } from "@/components/ui/page-header";
 import type { Wochenstoff } from "@/lib/modulbaum";
 
 /**
@@ -11,60 +13,52 @@ import type { Wochenstoff } from "@/lib/modulbaum";
 export function WochenstoffSection({ stoff }: { stoff: Wochenstoff }) {
   if (stoff.ohneModulplan) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BookOpenCheck className="h-4 w-4" />
-            Stoff dieser Woche
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Für KW {stoff.kw} gibt es keinen Modulplan-Eintrag. Ohne ihn ist
-            nicht bestimmbar, welcher Block ansteht.
-          </p>
-        </CardContent>
-      </Card>
+      <section className="mb-12">
+        <SectionHeader titel="Stoff dieser Woche" />
+        <Notification kind="info" titel={`Kein Modulplan-Eintrag für KW ${stoff.kw}`}>
+          Ohne ihn ist nicht bestimmbar, welcher Block ansteht.
+        </Notification>
+      </section>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <BookOpenCheck className="h-4 w-4" />
-          Stoff dieser Woche
-          <Badge variant="outline" className="ml-1">
-            KW {stoff.kw}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {stoff.ziel && <p className="text-sm">{stoff.ziel}</p>}
+    <section className="mb-12">
+      <SectionHeader
+        titel="Stoff dieser Woche"
+        beschreibung={stoff.ziel ?? undefined}
+        aktionen={<Badge variant="cool-gray">KW {stoff.kw}</Badge>}
+      />
 
-        {stoff.lbHinweis && (
-          <div className="text-sm rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-3 py-2">
-            Leistungsbeurteilung: {stoff.lbHinweis}
-          </div>
-        )}
+      {stoff.lbHinweis && (
+        <Notification kind="warning" titel="Leistungsbeurteilung" className="mb-4">
+          {stoff.lbHinweis}
+        </Notification>
+      )}
 
-        {stoff.bloecke.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Kein Aufgabenbaum hinterlegt — er entsteht beim Import des
-            Smartlearn-Exports im Modul.
-          </p>
-        ) : (
-          stoff.bloecke.map((b) => (
-            <div key={b.schluessel} className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">Block {b.schluessel}</Badge>
-                <span className="text-sm font-medium">{b.titel}</span>
+      {stoff.bloecke.length === 0 ? (
+        <p className="type-body-02 bg-layer p-6 text-text-secondary">
+          Kein Aufgabenbaum hinterlegt — er entsteht beim Import des
+          Smartlearn-Exports im Modul.
+        </p>
+      ) : (
+        <div className="space-y-px">
+          {stoff.bloecke.map((b) => (
+            <div key={b.schluessel} className="bg-layer">
+              {/* Blockkopf: eigene Fläche, damit die Hierarchie sichtbar bleibt */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border-strong bg-layer-accent px-4 py-3">
+                <Badge variant="high-contrast" size="sm">
+                  Block {b.schluessel}
+                </Badge>
+                <span className="type-heading-compact-02 min-w-0 flex-1 text-foreground">
+                  {b.titel}
+                </span>
                 {b.slides?.href && (
                   <a
                     href={b.slides.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                    className="type-body-compact-02 inline-flex items-center gap-2 text-link underline-offset-2 hover:underline"
                   >
                     {b.slides.titel}
                     {b.slides.von !== null && (
@@ -74,24 +68,29 @@ export function WochenstoffSection({ stoff }: { stoff: Wochenstoff }) {
                         {b.slides.bis !== null && `–${b.slides.bis}`}
                       </>
                     )}
-                    <ExternalLink className="h-3 w-3" />
+                    <Launch size={16} />
                   </a>
                 )}
               </div>
 
               {b.auftraege.map((a) => (
-                <div key={a.code} className="pl-1 space-y-1">
-                  <code className="text-xs text-muted-foreground">{a.code}</code>
-                  <ul className="space-y-1">
+                <div
+                  key={a.code}
+                  className="border-b border-border-subtle px-4 py-3 last:border-b-0"
+                >
+                  <code className="type-helper-02 font-mono text-text-helper">
+                    {a.code}
+                  </code>
+                  <ul className="mt-2 space-y-2">
                     {a.aufgaben.map((auf) => (
-                      <li key={auf.bezeichnung} className="text-sm">
-                        <span className="font-medium">{auf.bezeichnung}</span>
+                      <li key={auf.bezeichnung} className="type-body-02">
+                        <span className="type-heading-compact-02 text-foreground">
+                          {auf.bezeichnung}
+                        </span>
                         {auf.teilaufgaben.length > 0 && (
-                          <span className="text-muted-foreground">
+                          <span className="text-text-secondary">
                             {" · "}
-                            {auf.teilaufgaben
-                              .map((t) => t.bezeichnung)
-                              .join(", ")}
+                            {auf.teilaufgaben.map((t) => t.bezeichnung).join(", ")}
                           </span>
                         )}
                       </li>
@@ -100,9 +99,9 @@ export function WochenstoffSection({ stoff }: { stoff: Wochenstoff }) {
                 </div>
               ))}
             </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

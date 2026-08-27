@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { MachineLearningModel } from "@carbon/icons-react";
+
 import { Button } from "@/components/ui/button";
-import { Sparkles, Loader2 } from "lucide-react";
+import { InlineLoading } from "@/components/ui/loading";
 import { erzeugeEntwuerfe } from "@/app/sequenzen/entwurf-actions";
 import { schweizerDatumPlus } from "@/lib/zeit";
 
@@ -31,18 +33,13 @@ export function EntwuerfeButton() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button variant="outline" onClick={starten} disabled={laeuft}>
-        {laeuft ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Sparkles className="h-4 w-4" />
-        )}
+    <div className="flex flex-wrap items-center gap-4">
+      <Button variant="outline" size="sm" onClick={starten} disabled={laeuft}>
         Entwürfe für die nächsten 10 Tage
+        <MachineLearningModel size={16} />
       </Button>
-      {meldung && (
-        <span className="text-sm text-muted-foreground">{meldung}</span>
-      )}
+      {laeuft && <InlineLoading text="Die KI ordnet und formuliert…" />}
+      {!laeuft && meldung && <InlineLoading status="finished" text={meldung} />}
     </div>
   );
 }
