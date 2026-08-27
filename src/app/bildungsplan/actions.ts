@@ -26,7 +26,7 @@ export async function getCoverageData(klasseId?: string) {
 
   const coverageMap = new Map<
     string,
-    { hkId: string; kuerzel: string; sequenzen: { id: string; titel: string; klasse: string; semester: string }[] }
+    { hkId: string; kuerzel: string; sequenzen: { id: string; titel: string; klasse: string; semester: string | null }[] }
   >();
 
   for (const z of filtered) {
@@ -42,7 +42,7 @@ export async function getCoverageData(klasseId?: string) {
       id: z.sequenz.id,
       titel: z.sequenz.titel,
       klasse: z.sequenz.klasse.bezeichnung,
-      semester: z.sequenz.semester.bezeichnung,
+      semester: z.sequenz.semester?.bezeichnung ?? null,
     });
   }
 

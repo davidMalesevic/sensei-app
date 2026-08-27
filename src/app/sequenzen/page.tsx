@@ -109,7 +109,7 @@ export default async function SequenzenPage({
                     )}
                   </TableCell>
                   <TableCell>{s.klasse.bezeichnung}</TableCell>
-                  <TableCell>{s.semester.bezeichnung}</TableCell>
+                  <TableCell>{s.semester?.bezeichnung ?? "–"}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {s.handlungskompetenzen.length === 0 ? (

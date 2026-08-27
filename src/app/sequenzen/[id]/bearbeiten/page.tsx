@@ -42,7 +42,7 @@ export default async function SequenzBearbeitenPage({
           titel: seq.titel,
           beschreibung: seq.beschreibung,
           praxisbezug: seq.praxisbezug,
-          semesterId: seq.semesterId,
+          semesterId: seq.semesterId ?? "",
           klasseId: seq.klasseId,
           modulId: seq.modulId,
           startDatum: seq.startDatum,

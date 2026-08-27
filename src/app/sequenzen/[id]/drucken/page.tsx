@@ -54,7 +54,7 @@ export default async function SequenzDruckenPage({
           <div className="text-sm text-muted-foreground mt-1 flex gap-3">
             {seq.modul && <span>Modul {seq.modul.nummer}</span>}
             <span>{seq.klasse.bezeichnung}</span>
-            <span>{seq.semester.bezeichnung}</span>
+            {seq.semester && <span>{seq.semester.bezeichnung}</span>}
           </div>
         </header>
 

@@ -2,6 +2,7 @@
 
 import {
   Calendar,
+  CalendarDays,
   BookOpen,
   Layers,
   GraduationCap,
@@ -34,6 +35,11 @@ const navigationItems = [
     title: "Semester",
     url: "/semester",
     icon: Calendar,
+  },
+  {
+    title: "Stundenplan",
+    url: "/stundenplan",
+    icon: CalendarDays,
   },
   {
     title: "Klassen",

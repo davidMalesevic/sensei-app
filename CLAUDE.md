@@ -136,6 +136,30 @@ Pendenzen der Klasse. Die Aggregation macht `src/lib/kontext.ts`.
 kompakte Einträge in `sequenz_anker`, nicht als Phasentabelle — die Lehrperson
 soll sie im Unterricht in Sekunden überfliegen können.
 
+## Stundenplan-Import (.ics)
+
+Sequenzen werden nicht mehr von Hand angelegt, sondern aus dem
+WebUntis-Kalenderexport erzeugt (`/stundenplan`, Parser `src/lib/ics.ts`).
+Eine Sequenz ist **Klasse × Modul × Unterrichtstag**. Details und Begründung:
+`erstellungsprozess.md`.
+
+- Aus `SUMMARY` kommen Klassenkürzel, Modulnummer (die Klammer am Ende ist der
+  zuverlässige Anker) und Modulbezeichnung, aus `LOCATION` der Raum.
+- **Pausen zerschneiden Blöcke** in mehrere `VEVENT`s. Merge-Regel: gleicher
+  UID-Präfix + gleicher Tag + Lücke ≤ 20 min.
+- **Lektionenzahl = Anzahl UID-Segmente** nach dem Präfix (1 Segment = 45 min,
+  über den Beispielexport ohne Abweichung verifiziert). Nicht aus der Dauer
+  schätzen — Pausen verfälschen das.
+- Der Kalender nennt Klassen anders als das Team (`BM1WEDB24z; EDB24z` ist
+  *eine* Gruppe, intern `MEDB24A`). Die Zuordnung steht in `klasse_alias` und
+  wird beim Import einmal gesetzt.
+- Idempotent über `(kalender_kurs, start_datum)` — im Export eindeutig.
+  Erneuter Import ändert nichts, ein aktualisierter Export korrigiert Zeiten
+  und Räume. Sequenzen, die im Export fehlen, werden **gemeldet, nicht
+  gelöscht** — dort könnte Planung drinstecken.
+- `sequenz.semesterId` ist dadurch **nullable** geworden; der Semesterbegriff
+  fällt weg.
+
 ## Smartlearn-Import
 
 Die Lernumgebung Smartlearn exportiert Module als HTML (Beispiel:

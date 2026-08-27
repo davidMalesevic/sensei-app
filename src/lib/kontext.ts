@@ -129,22 +129,25 @@ export async function getSequenzKontext(
     }
   }
 
-  // Prüfungstermine aus dem Semesterkalender (ab heute)
+  // Prüfungstermine aus dem Semesterkalender (ab heute).
+  // Sequenzen aus dem Stundenplan-Import haben kein Semester mehr.
   const heute = new Date().toISOString().slice(0, 10);
-  const kalenderPruefungen = await db
-    .select({
-      bezeichnung: kalenderEintrag.bezeichnung,
-      startDatum: kalenderEintrag.startDatum,
-    })
-    .from(kalenderEintrag)
-    .where(
-      and(
-        eq(kalenderEintrag.semesterId, seq.semesterId),
-        eq(kalenderEintrag.typ, "pruefung"),
-        gte(kalenderEintrag.endDatum, heute)
-      )
-    )
-    .orderBy(asc(kalenderEintrag.startDatum));
+  const kalenderPruefungen = seq.semesterId
+    ? await db
+        .select({
+          bezeichnung: kalenderEintrag.bezeichnung,
+          startDatum: kalenderEintrag.startDatum,
+        })
+        .from(kalenderEintrag)
+        .where(
+          and(
+            eq(kalenderEintrag.semesterId, seq.semesterId),
+            eq(kalenderEintrag.typ, "pruefung"),
+            gte(kalenderEintrag.endDatum, heute)
+          )
+        )
+        .orderBy(asc(kalenderEintrag.startDatum))
+    : [];
 
   for (const p of kalenderPruefungen) {
     pruefungen.push({

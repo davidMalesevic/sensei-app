@@ -50,7 +50,8 @@ export default async function SequenzDetailPage({
           <h1 className="text-3xl font-bold tracking-tight">{seq.titel}</h1>
           <p className="text-muted-foreground mt-1">
             {seq.modul && `Modul ${seq.modul.nummer} · `}
-            {seq.klasse.bezeichnung} · {seq.semester.bezeichnung}
+            {seq.klasse.bezeichnung}
+            {seq.semester && ` · ${seq.semester.bezeichnung}`}
           </p>
         </div>
         <div className="flex gap-2">

@@ -14,6 +14,12 @@ import { relations } from "drizzle-orm";
 
 export const blockTypEnum = pgEnum("block_typ", ["2er", "4er"]);
 export const sozialformEnum = pgEnum("sozialform", ["EA", "PA", "GA", "Plenum"]);
+export const sequenzStatusEnum = pgEnum("sequenz_status", [
+  "leer",
+  "entwurf",
+  "bestaetigt",
+  "gehalten",
+]);
 
 // ─── Semester ───
 
@@ -74,6 +80,28 @@ export const klasseRelations = relations(klasse, ({ many }) => ({
   semesterKlassen: many(semesterKlasse),
   sequenzen: many(sequenz),
   pendenzen: many(pendenz),
+}));
+
+// ─── Klassen-Alias (Kalenderkürzel → Klasse) ───
+//
+// Der WebUntis-Export nennt Klassen anders als das Team ("BM1WEDB24z; EDB24z"
+// ist intern "MEDB24A"). Die Zuordnung wird beim Stundenplan-Import einmal
+// gesetzt und danach wiederverwendet.
+
+export const klasseAlias = pgTable("klasse_alias", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  kuerzel: varchar("kuerzel", { length: 200 }).notNull().unique(),
+  klasseId: uuid("klasse_id")
+    .references(() => klasse.id, { onDelete: "cascade" })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const klasseAliasRelations = relations(klasseAlias, ({ one }) => ({
+  klasse: one(klasse, {
+    fields: [klasseAlias.klasseId],
+    references: [klasse.id],
+  }),
 }));
 
 // ─── Semester ↔ Klasse (n:m) ───
@@ -213,9 +241,9 @@ export const modulRelations = relations(modul, ({ many }) => ({
 
 export const sequenz = pgTable("sequenz", {
   id: uuid("id").defaultRandom().primaryKey(),
-  semesterId: uuid("semester_id")
-    .references(() => semester.id, { onDelete: "cascade" })
-    .notNull(),
+  semesterId: uuid("semester_id").references(() => semester.id, {
+    onDelete: "cascade",
+  }),
   klasseId: uuid("klasse_id")
     .references(() => klasse.id, { onDelete: "cascade" })
     .notNull(),
@@ -227,6 +255,14 @@ export const sequenz = pgTable("sequenz", {
   cockpitNotiz: text("cockpit_notiz"),
   startDatum: date("start_datum"),
   endDatum: date("end_datum"),
+  // Aus dem Stundenplan-Import (.ics). kalenderKurs ist der UID-Präfix des
+  // WebUntis-Kurses und zusammen mit startDatum der Idempotenz-Schlüssel.
+  kalenderKurs: varchar("kalender_kurs", { length: 50 }),
+  startZeit: varchar("start_zeit", { length: 5 }),
+  endZeit: varchar("end_zeit", { length: 5 }),
+  lektionen: integer("lektionen"),
+  raum: varchar("raum", { length: 50 }),
+  status: sequenzStatusEnum("status").default("leer").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
