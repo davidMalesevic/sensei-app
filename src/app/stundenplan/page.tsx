@@ -2,6 +2,7 @@ import { StundenplanImport } from "./import-form";
 import { getStundenplanUebersicht } from "./actions";
 import { getOffeneUebertraege } from "@/app/sequenzen/uebertrag-actions";
 import { AlertCircle } from "lucide-react";
+import { EntwuerfeButton } from "./entwuerfe-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,13 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 const WOCHENTAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+const STATUS_LABEL: Record<string, string> = {
+  leer: "kein Ablauf",
+  entwurf: "Entwurf",
+  bestaetigt: "bestätigt",
+  gehalten: "gehalten",
+};
 
 function formatiereTag(datum: string): string {
   const d = new Date(datum + "T00:00:00");
@@ -94,6 +102,8 @@ export default async function StundenplanPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            <EntwuerfeButton />
+
             {wochen.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Keine anstehenden Sequenzen.
@@ -119,6 +129,14 @@ export default async function StundenplanPage() {
                         </span>
                         <Badge variant="outline" className="shrink-0">
                           {e.lektionen} Lekt.
+                        </Badge>
+                        <Badge
+                          variant={
+                            e.status === "bestaetigt" ? "default" : "secondary"
+                          }
+                          className="shrink-0 text-[10px] font-normal"
+                        >
+                          {STATUS_LABEL[e.status] ?? e.status}
                         </Badge>
                         <span className="w-24 shrink-0 font-medium">
                           {e.klasse.bezeichnung}

@@ -15,6 +15,22 @@ import { relations } from "drizzle-orm";
 
 export const blockTypEnum = pgEnum("block_typ", ["2er", "4er"]);
 export const sozialformEnum = pgEnum("sozialform", ["EA", "PA", "GA", "Plenum"]);
+export const ablaufTypEnum = pgEnum("ablauf_typ", [
+  "einstieg",
+  "praxisbezug",
+  "theorie",
+  "aufgabe",
+  "besprechung",
+  "abschluss",
+  "frei",
+]);
+
+/**
+ * Fakten stammen aus dem Material (Aufgabennummern, LA-Codes, Slidebereiche)
+ * und dürfen nicht halluziniert werden. Vorschläge kommen von der KI.
+ */
+export const ablaufQuelleEnum = pgEnum("ablauf_quelle", ["fakt", "vorschlag"]);
+
 export const sequenzStatusEnum = pgEnum("sequenz_status", [
   "leer",
   "entwurf",
@@ -355,6 +371,7 @@ export const sequenz = pgTable("sequenz", {
   uebertragSlideBis: integer("uebertrag_slide_bis"),
   keinUebertrag: boolean("kein_uebertrag").default(false).notNull(),
   uebertragAm: timestamp("uebertrag_am"),
+  entwurfAm: timestamp("entwurf_am"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -376,6 +393,44 @@ export const sequenzRelations = relations(sequenz, ({ one, many }) => ({
   handlungskompetenzen: many(sequenzHandlungskompetenz),
   materialien: many(material),
   anker: many(sequenzAnker),
+  ablauf: many(sequenzAblauf),
+}));
+
+// ─── Ablauf ───
+//
+// Die 8–10 Zeilen, die im Unterricht zählen. Ersetzt Lektionsblöcke und
+// Phasen als Arbeitsergebnis (`erstellungsprozess.md`, Abschnitt 5.2).
+
+export const sequenzAblauf = pgTable("sequenz_ablauf", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sequenzId: uuid("sequenz_id")
+    .references(() => sequenz.id, { onDelete: "cascade" })
+    .notNull(),
+  sortierung: integer("sortierung").default(0).notNull(),
+  typ: ablaufTypEnum("typ").notNull(),
+  quelle: ablaufQuelleEnum("quelle").default("vorschlag").notNull(),
+  titel: varchar("titel", { length: 300 }).notNull(),
+  text: text("text"),
+  /** Herkunft eines Faktums: LA-Code, Aufgaben-Bezeichnung, Material, Seiten. */
+  refCode: varchar("ref_code", { length: 200 }),
+  refAufgabe: varchar("ref_aufgabe", { length: 200 }),
+  refMaterialId: uuid("ref_material_id").references(() => material.id, {
+    onDelete: "set null",
+  }),
+  refSeiteVon: integer("ref_seite_von"),
+  refSeiteBis: integer("ref_seite_bis"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sequenzAblaufRelations = relations(sequenzAblauf, ({ one }) => ({
+  sequenz: one(sequenz, {
+    fields: [sequenzAblauf.sequenzId],
+    references: [sequenz.id],
+  }),
+  refMaterial: one(material, {
+    fields: [sequenzAblauf.refMaterialId],
+    references: [material.id],
+  }),
 }));
 
 // ─── Sequenz ↔ Handlungskompetenz (n:m) ───

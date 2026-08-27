@@ -160,6 +160,40 @@ Eine Sequenz ist **Klasse × Modul × Unterrichtstag**. Details und Begründung:
 - `sequenz.semesterId` ist dadurch **nullable** geworden; der Semesterbegriff
   fällt weg.
 
+## Entwurfsgenerator
+
+Der **Ablauf** (`sequenz_ablauf`) ist das Arbeitsergebnis: 6–10 Schritte, die im
+Unterricht zählen. Erzeugt von `erzeugeEntwurf()` in
+`src/app/sequenzen/entwurf-actions.ts`.
+
+**Die Arbeitsteilung ist der Kern:**
+
+- **Fakten** (`quelle: "fakt"`) — Aufgabennummern, LA-Codes, Slidebereiche —
+  werden serverseitig aus `getWochenstoff()` gesetzt. Die KI bekommt sie nur als
+  nummerierte Liste und darf sie ausschliesslich per `{"typ":"fakt","faktId":…}`
+  referenzieren. Deshalb kann sie keine Aufgabennummer erfinden und keine
+  umformulieren. Fakten, die die KI übergeht, werden hinten angehängt — sonst
+  fehlte im Unterricht eine Aufgabe, die eigentlich ansteht.
+- **Vorschläge** (`quelle: "vorschlag"`) — Vorwissensaktivierung, Praxisbezug,
+  Dramaturgie — stammen von der KI und sind in der Oberfläche markiert.
+
+Bereits erledigte Aufgaben (aus dem Übertrag der Vorwoche) fallen aus der
+Faktenliste heraus. Phasenmodelle (AVIVA/PADUA) fliessen als Prompt-Kontext ein
+und erscheinen nie als Tabelle.
+
+Ohne Modulplan-Eintrag für die KW bricht die Erzeugung mit klarer Meldung ab —
+ohne ihn ist nicht bestimmbar, welcher Block ansteht.
+
+### Nachtlauf
+
+`POST /api/entwuerfe/nacht` mit `Authorization: Bearer $CRON_SECRET`, Fenster
+sind die nächsten 10 Tage (Do, Fr, folgender Di). Angestossen vom Cron des VPS
+über `scripts/nachtlauf.sh` — bewusst kein Timer im App-Prozess, so überlebt der
+Lauf jeden Neustart und ist von aussen prüfbar. `CRON_SECRET` steht in
+`.env.production` auf dem Server; fehlt es, antwortet die Route mit 503.
+
+Zusätzlich gibt es auf `/stundenplan` einen Knopf für den manuellen Anstoss.
+
 ## Übertrag
 
 Nach der Lektion die einzige verbleibende Eingabe: **bis wo sind wir gekommen**.

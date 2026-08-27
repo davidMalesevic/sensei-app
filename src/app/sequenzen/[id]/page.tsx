@@ -22,6 +22,8 @@ import { AnsichtToggle, type Ansicht } from "./ansicht-toggle";
 import { WochenstoffSection } from "./wochenstoff-section";
 import { UebertragSection } from "./uebertrag-section";
 import { StandSection } from "./stand-section";
+import { AblaufSection } from "./ablauf-section";
+import { getAblauf } from "../entwurf-actions";
 import { getVorherigenUebertrag } from "../uebertrag-actions";
 import { getWochenstoff } from "@/lib/modulbaum";
 import { getKWFromDateString } from "@/lib/kw";
@@ -51,6 +53,8 @@ export default async function SequenzDetailPage({
   const kw = getKWFromDateString(seq.startDatum);
   const stoff =
     seq.modulId && kw !== null ? await getWochenstoff(seq.modulId, kw) : null;
+
+  const ablauf = await getAblauf(id);
 
   const stand = await getVorherigenUebertrag(
     seq.klasseId,
@@ -94,6 +98,13 @@ export default async function SequenzDetailPage({
       <ContextHeader kontext={kontext} klasseId={seq.klasseId} />
 
       {stand && <StandSection stand={stand} />}
+
+      <AblaufSection
+        sequenzId={id}
+        status={seq.status}
+        entwurfAm={seq.entwurfAm}
+        zeilen={ablauf}
+      />
 
       {stoff && <WochenstoffSection stoff={stoff} />}
 
