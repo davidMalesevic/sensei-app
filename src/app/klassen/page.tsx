@@ -13,7 +13,9 @@ import { getKlassen } from "./actions";
 import { KlasseDeleteButton } from "./klasse-delete-button";
 import { SortableTableHead } from "@/components/sortable-table-head";
 
-const sortColumns: Record<string, (a: any, b: any) => number> = {
+type Klasse = Awaited<ReturnType<typeof getKlassen>>[number];
+
+const sortColumns: Record<string, (a: Klasse, b: Klasse) => number> = {
   bezeichnung: (a, b) => a.bezeichnung.localeCompare(b.bezeichnung, "de-CH"),
   beruf: (a, b) => a.beruf.localeCompare(b.beruf, "de-CH"),
   lehrjahr: (a, b) => a.lehrjahr - b.lehrjahr,

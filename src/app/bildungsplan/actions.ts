@@ -2,15 +2,12 @@
 
 import { db } from "@/db";
 import {
-  sequenzHandlungskompetenz,
-  sequenz,
-  modul,
   material,
   modulBlock,
   modulAuftrag,
   modulAufgabe,
 } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { parseSmartlearnStruktur } from "@/lib/smartlearn";
 import { extractDokumentText } from "@/lib/dokument-text";
@@ -71,14 +68,14 @@ export async function getKlassenForFilter() {
 }
 
 export async function getModulLookup(): Promise<Record<number, string | null>> {
-  const module = await db.query.modul.findMany({
+  const modulListe = await db.query.modul.findMany({
     columns: { nummer: true, bezeichnung: true },
   });
-  return Object.fromEntries(module.map((m) => [m.nummer, m.bezeichnung]));
+  return Object.fromEntries(modulListe.map((m) => [m.nummer, m.bezeichnung]));
 }
 
 export async function getModuleGrouped() {
-  const module = await db.query.modul.findMany({
+  const modulListe = await db.query.modul.findMany({
     orderBy: (m, { asc }) => [asc(m.nummer)],
     with: {
       materialien: {
@@ -108,7 +105,7 @@ export async function getModuleGrouped() {
       },
     },
   });
-  return module;
+  return modulListe;
 }
 
 // ─── Modulbaum aus dem Smartlearn-Export ───

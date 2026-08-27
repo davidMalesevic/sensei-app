@@ -93,8 +93,14 @@ function AutoTextarea({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [lokal, setLokal] = useState(wert);
+  const [zuletztGesehen, setZuletztGesehen] = useState(wert);
 
-  useEffect(() => setLokal(wert), [wert]);
+  // Ändert der Server den Wert (etwa nach «neu erzeugen»), übernehmen wir ihn.
+  // Anpassung während des Renderns statt im Effect — sonst rendert React zweimal.
+  if (wert !== zuletztGesehen) {
+    setZuletztGesehen(wert);
+    setLokal(wert);
+  }
 
   useEffect(() => {
     const el = ref.current;
@@ -144,8 +150,13 @@ export function AblaufSection({
   const [neuerTyp, setNeuerTyp] = useState("frei");
   const [rueckfrage, setRueckfrage] = useState(false);
   const [laeuft, startTransition] = useTransition();
+  const [zuletztGeladen, setZuletztGeladen] = useState(zeilen);
 
-  useEffect(() => setItems(zeilen), [zeilen]);
+  // Nach einem router.refresh() kommen neue Zeilen vom Server.
+  if (zeilen !== zuletztGeladen) {
+    setZuletztGeladen(zeilen);
+    setItems(zeilen);
+  }
 
   const bestaetigt = status === "bestaetigt";
 

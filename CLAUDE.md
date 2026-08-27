@@ -4,6 +4,12 @@
 
 Unterrichtsplanungs-Tool für Berufsschullehrpersonen (Schweiz). UI-Sprache ist Deutsch.
 
+**Der tragende Gedanke:** Eine Sequenz ist *Klasse × Modul × Unterrichtstag* und
+entsteht **aus dem Stundenplan**, nicht aus einem Formular. Alles, was aus einer
+Datei gelesen werden kann — Kalender, Modulplan, Aufgabenbaum — wird gelesen;
+die KI ordnet und formuliert nur das, was wirklich Erfindung ist.
+Anforderungen und Begründungen stehen in `erstellungsprozess.md`.
+
 ## Tech-Stack
 
 - **Next.js 16** (App Router, Turbopack, Server Actions)
@@ -73,7 +79,8 @@ Diese Version nutzt `@base-ui/react` statt Radix. Häufige Fehlerquellen:
 
 - **Eigene PostgreSQL 17** im Docker-Compose auf dem Netcup-VPS (kein Supabase mehr)
 - Connection-String in `.env.local` als `DATABASE_URL`
-- Schema: `src/db/schema.ts` (19 Tabellen)
+- Schema: `src/db/schema.ts` (24 Tabellen, davon einige nur noch Archiv —
+  siehe *Bekannte Altlasten*)
 - Seed-Daten: `src/db/seed.ts` (Bildungsplan EDB + Phasenmodelle AVIVA/PADUA)
 
 ### ⚠️ Lokale Entwicklung schreibt in die Produktions-DB
@@ -108,15 +115,16 @@ Alle KI-Features laufen über `src/lib/ai.ts`:
 **Regel: erst deterministisch parsen, KI nur als Fallback.** Beispiel
 Modulplan-Import: JSON direkt → Smartlearn-Parser → erst dann KI.
 
-Bestehende KI-Funktionen:
+**Die KI ordnet und formuliert, sie erfindet keine Fakten.** Aufgabennummern,
+LA-Codes und Slidebereiche kommen aus dem Material und werden serverseitig
+gesetzt — siehe *Entwurfsgenerator*.
 
 | Funktion | Datei | Zweck |
 |---|---|---|
-| `generateWithAI` | `sequenzen/actions.ts` | ganze Sequenz als Lektionsblöcke |
-| `generateBaustein` | `sequenzen/actions.ts` | Einstieg / Repetition als **Anker** |
-| `suggestUebergabenotiz` | `sequenzen/actions.ts` | Entwurf der Übergabenotiz |
+| `erzeugeEntwurf` | `sequenzen/entwurf-actions.ts` | Ablauf aus Fakten + KI-Vorschlägen |
+| `erzeugeEntwuerfe` | `sequenzen/entwurf-actions.ts` | Stapellauf, gruppiert nach Modul + KW |
 | `extractMaterialTasks` | `materialien/actions.ts` | Schüler-Aufgaben aus Material |
-| `importModularPlan` | `sequenzen/actions.ts` | Modulplan aus Freitext/PDF |
+| `importModularPlan` | `bildungsplan/modulplan-actions.ts` | Modulplan, KI nur als letzter Fallback |
 
 ## Sequenz-Seite
 
@@ -344,6 +352,7 @@ npm run dev                       # Dev-Server starten (Port 3000)
 npx tsx src/db/migrate-<name>.ts  # Migration ausführen (NICHT drizzle-kit push)
 npx tsx src/db/seed.ts            # Seed-Daten laden
 npx tsc --noEmit                  # Type-Check
+npx eslint src                    # Lint
 npm run build                     # Build (fängt "use server"-Fehler, die tsc nicht sieht)
 ```
 
@@ -364,58 +373,89 @@ weiter das alte Image. Nach dem Deploy verifizieren, z.B. per
 Schema-Änderungen sind durch den SSH-Tunnel meist schon in der Produktions-DB,
 bevor deployt wird — das Migrations-Script muss dort nicht nochmals laufen.
 
+Auf dem Server ausserhalb des Repos:
+
+- `.env.production` enthält `CRON_SECRET` für den Nachtlauf
+- Die Crontab von root ruft um 03:00 `scripts/nachtlauf.sh` auf,
+  Log unter `/var/log/sensei-nachtlauf.log`
+- **Der Container läuft auf UTC** — siehe *Zeitzonen*
+
 ## Projektstruktur
 
 ```
 src/
 ├── app/
-│   ├── page.tsx                  # Dashboard
+│   ├── page.tsx                  # Dashboard: laufende + nächste Sequenzen
 │   ├── api/
+│   │   ├── entwuerfe/nacht/      # Nachtlauf, per CRON_SECRET geschützt
 │   │   ├── upload/               # Datei-Upload für Modul-Material
 │   │   ├── files/[...path]/      # Ausliefern hochgeladener Dateien
-│   │   └── modulplan/import/     # Modulplan-Import aus Datei (PDF/HTML/JSON)
-│   ├── semester/                 # Semester CRUD + Kalenderansicht
-│   ├── klassen/                  # Klassen CRUD + Pendenzen-Actions
-│   ├── sequenzen/                # Sequenzen CRUD
-│   │   └── [id]/                 # Detailseite: Planung + Cockpit
+│   │   └── modulplan/import/     # Modulplan + Aufgabenbaum aus Datei
+│   ├── stundenplan/              # .ics-Import, Klassenzuordnung, Wochenübersicht
+│   ├── klassen/                  # Klassen CRUD + Pendenzen
+│   ├── sequenzen/
+│   │   ├── actions.ts            # nur noch Lesen, Löschen, Notiz
+│   │   ├── entwurf-actions.ts    # Ablauf: erzeugen, schleifen, übernehmen
+│   │   ├── uebertrag-actions.ts  # Übertrag + offene Überträge
+│   │   └── [id]/                 # eine Ansicht, keine Umschaltung
 │   │       ├── context-header.tsx
-│   │       ├── cockpit-view.tsx
-│   │       ├── ansicht-toggle.tsx
-│   │       └── lektionsbloecke-section.tsx
-│   ├── bildungsplan/             # HKB/HK-Übersicht, Coverage-Matrix, Modulplan
+│   │       ├── stand-section.tsx        # Übertrag der Vorwoche
+│   │       ├── ablauf-section.tsx       # das Arbeitsergebnis, bearbeitbar
+│   │       ├── geschwister-section.tsx  # Parallelklassen
+│   │       ├── wochenstoff-section.tsx  # Fakten aus dem Modulbaum
+│   │       ├── uebertrag-section.tsx
+│   │       └── notizen-section.tsx
+│   ├── bildungsplan/             # HKB/HK, Module, Modulplan, Aufgabenbaum
 │   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
 ├── components/
 │   ├── ui/                       # shadcn/ui Komponenten
-│   ├── app-sidebar.tsx           # Navigation
-│   └── material-section.tsx      # Wiederverwendbare Material-Komponente
+│   └── app-sidebar.tsx           # Navigation (Badge: offene Überträge)
 ├── lib/
 │   ├── ai.ts                     # Ollama-Aufruf + JSON-Parsing
-│   ├── kontext.ts                # Kontext-Aggregation für den ContextHeader
+│   ├── ics.ts                    # WebUntis-Kalenderexport
+│   ├── smartlearn.ts             # Modularbeitsplan + Aufgabenbaum
+│   ├── modulbaum.ts              # KW + Modul ⇒ Block ⇒ LA ⇒ Aufgaben
+│   ├── kontext.ts                # Aggregation für den ContextHeader
+│   ├── zeit.ts                   # Europe/Zurich statt UTC
 │   ├── kw.ts                     # ISO-Kalenderwochen
-│   ├── smartlearn.ts             # Parser für Smartlearn-HTML-Exporte
 │   ├── dokument-text.ts          # Text aus PDF/HTML/TXT
 │   └── material-link.ts          # Deep-Links ins Material (#page=N)
 └── db/
     ├── index.ts                  # DB-Verbindung (postgres-js + Drizzle)
     ├── schema.ts                 # Drizzle Schema
     ├── seed.ts                   # Bildungsplan EDB + AVIVA/PADUA
+    ├── seed-modulplan-219.ts     # Plan aus einer Bildgrafik, von Hand
     └── migrate-*.ts              # Idempotente Migrations-Scripts
 ```
 
 ## Patterns
 
-- **Server Actions** für alle CRUD-Operationen (`"use server"` in `actions.ts` Dateien)
-- **Server Components** für Seiten, **Client Components** für interaktive Teile (`"use client"`)
-- **FormData** basierte Actions mit `revalidatePath` + `redirect`
-- Alle Tabellen nutzen **UUID** Primary Keys mit `defaultRandom()`
-- Cascading Deletes auf Foreign Keys
-- KI-Ergebnisse sind **Entwürfe**: anzeigen, prüfen lassen, erst auf bewusste
-  Aktion speichern (siehe Übergabenotiz-Vorschlag)
+- **Server Actions** für alle Schreiboperationen (`"use server"` in
+  `*-actions.ts`), **Server Components** für Seiten, **Client Components**
+  nur für interaktive Teile
+- Alle Tabellen nutzen **UUID** Primary Keys mit `defaultRandom()`,
+  Cascading Deletes auf Foreign Keys
+- **Erst deterministisch, KI nur als Fallback.** Alles, was aus einer Datei
+  gelesen werden kann, wird gelesen — nicht generiert
+- **KI-Ergebnisse sind Entwürfe**: anzeigen, prüfen lassen, bewusst bestätigen
+- **Idempotente Importe**: erneut dieselbe Datei einlesen ändert nichts, ein
+  aktualisierter Export korrigiert. Nie löschen, was Arbeit enthalten könnte —
+  melden statt entfernen
+- **Alle Routen sind dynamisch** (`force-dynamic` im Layout): der Badge für
+  offene Überträge darf nicht aus der Build-Zeit stammen
+- Datumsberechnungen **nie** über `new Date().toISOString()` — siehe *Zeitzonen*
 
 ## Bekannte Altlasten
 
-- `Button render={<Link/>}` erzeugt in der Dev-Overlay-Konsole eine Base-UI-Warnung
-  (`nativeButton`). Kosmetisch, betrifft mehrere Seiten.
-- Aus `.pptx`/`.docx` kann kein Text gelesen werden — es fehlt ein OOXML-Parser.
-  `extractMaterialTasks` gibt dafür eine klare Fehlermeldung aus.
-- Mehrere `actions.ts` haben ungenutzte Imports (Lint-Warnungen, vorbestehend).
+- **Ungenutzte Tabellen aus dem alten Modell**: `lektionsblock`, `phase`,
+  `sequenz_handlungskompetenz`, `sequenz_anker`, `semester`,
+  `semester_klasse`, `kalender_eintrag`. Dort hängen drei Alt-Sequenzen ohne
+  `kalender_kurs` als Archiv. Kein Code liest sie mehr; bewusst nicht
+  gelöscht.
+- Die **Coverage-Matrix** im Bildungsplan hat dadurch keine Datenbasis mehr.
+- Aus `.pptx`/`.docx` kann kein Text gelesen werden — es fehlt ein
+  OOXML-Parser. Präsentationen deshalb als **PDF** ablegen.
+- `Button render={<Link/>}` erzeugt in der Dev-Overlay-Konsole eine
+  Base-UI-Warnung (`nativeButton`). Kosmetisch, betrifft mehrere Seiten.
+- `src/hooks/use-mobile.ts` (aus shadcn) verletzt die React-Regel
+  `set-state-in-effect`. Vendor-Datei, nicht angefasst.

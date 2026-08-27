@@ -253,13 +253,13 @@ export type IcsUebersicht = {
 
 export function fasseZusammen(termine: IcsTermin[]): IcsUebersicht {
   const klassen = new Map<string, number>();
-  const module = new Map<number, { bezeichnung: string | null; anzahl: number }>();
+  const modulListe = new Map<number, { bezeichnung: string | null; anzahl: number }>();
 
   for (const t of termine) {
     klassen.set(t.klassenKuerzel, (klassen.get(t.klassenKuerzel) ?? 0) + 1);
     if (t.modulNummer !== null) {
-      const vorhanden = module.get(t.modulNummer);
-      module.set(t.modulNummer, {
+      const vorhanden = modulListe.get(t.modulNummer);
+      modulListe.set(t.modulNummer, {
         bezeichnung: vorhanden?.bezeichnung ?? t.modulBezeichnung,
         anzahl: (vorhanden?.anzahl ?? 0) + 1,
       });
@@ -273,7 +273,7 @@ export function fasseZusammen(termine: IcsTermin[]): IcsUebersicht {
     klassenKuerzel: [...klassen.entries()]
       .map(([kuerzel, anzahl]) => ({ kuerzel, anzahl }))
       .sort((a, b) => b.anzahl - a.anzahl),
-    module: [...module.entries()]
+    module: [...modulListe.entries()]
       .map(([nummer, m]) => ({ nummer, ...m }))
       .sort((a, b) => a.nummer - b.nummer),
     vonDatum: daten[0] ?? null,
