@@ -24,7 +24,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { htmlToText } from "@/lib/dokument-text";
-import { isSmartlearnExport, parseModularbeitsplan } from "@/lib/smartlearn";
+import {
+  isSmartlearnExport,
+  parseModularbeitsplan,
+  parseModularbeitsplanHtml,
+} from "@/lib/smartlearn";
 
 export async function getSequenzen() {
   return db.query.sequenz.findMany({
@@ -964,7 +968,7 @@ type ModularPlanEintrag = {
   beschreibung?: string | null;
   lbHinweis?: string | null;
   /** Nur aus dem Smartlearn-Pfad: KW → Block ist die Kette zu den Aufgaben. */
-  bloecke?: number[];
+  bloecke?: string[];
   laCodes?: string[];
 };
 
@@ -1068,12 +1072,21 @@ export async function importModularPlan(
   const direkt = parseJsonFromAI<unknown>(roh);
   if (direkt) eintraege = normalisiereEintraege(direkt);
 
-  // 2. Smartlearn-Export deterministisch lesen (keine KI nötig)
+  // 2. Smartlearn-Export deterministisch lesen (keine KI nötig).
+  //    Die HTML-Tabelle zuerst: sie trägt über alle Exportschemata hinweg,
+  //    der Textparser nur über das eine mit «Block & Lern- und Arbeitsauftrag».
   if (eintraege.length === 0) {
-    const text = /<[a-z][\s\S]*>/i.test(roh) ? htmlToText(roh) : roh;
-    if (isSmartlearnExport(text)) {
-      eintraege = parseModularbeitsplan(text);
+    const istHtml = /<[a-z][\s\S]*>/i.test(roh);
+    if (istHtml) {
+      eintraege = parseModularbeitsplanHtml(roh);
       if (eintraege.length > 0) quelle = "smartlearn";
+    }
+    if (eintraege.length === 0) {
+      const text = istHtml ? htmlToText(roh) : roh;
+      if (isSmartlearnExport(text)) {
+        eintraege = parseModularbeitsplan(text);
+        if (eintraege.length > 0) quelle = "smartlearn";
+      }
     }
   }
 

@@ -91,8 +91,8 @@ export async function getModuleGrouped() {
       },
       // Nur Bezeichnungen, keine Aufgabentexte — die Liste dient der Übersicht.
       bloecke: {
-        columns: { id: true, nummer: true, titel: true, slideMaterialId: true, slideVon: true, slideBis: true },
-        orderBy: (b, { asc }) => [asc(b.nummer)],
+        columns: { id: true, schluessel: true, nummer: true, titel: true, slideMaterialId: true, slideVon: true, slideBis: true },
+        orderBy: (b, { asc }) => [asc(b.nummer), asc(b.schluessel)],
         with: {
           auftraege: {
             columns: { id: true, code: true },
@@ -150,10 +150,15 @@ export async function importModulBaum(
   for (const b of geparst) {
     const [block] = await db
       .insert(modulBlock)
-      .values({ modulId, nummer: b.nummer, titel: b.titel })
+      .values({
+        modulId,
+        schluessel: b.schluessel,
+        nummer: b.nummer,
+        titel: b.titel,
+      })
       .onConflictDoUpdate({
-        target: [modulBlock.modulId, modulBlock.nummer],
-        set: { titel: b.titel },
+        target: [modulBlock.modulId, modulBlock.schluessel],
+        set: { titel: b.titel, nummer: b.nummer },
       })
       .returning({ id: modulBlock.id });
 
@@ -301,10 +306,10 @@ export async function leseModulAusMaterial(materialId: string): Promise<{
     };
   }
 
+  // Plan und Baum sind unabhängig voneinander: Modul 219 hat seinen
+  // Arbeitsplan nur als Bild im Export, aber einen vollständigen
+  // Aufgabenbaum. Ein fehlender Plan darf den Baum nicht verhindern.
   const plan = await importModularPlan(eintrag.modulId, text);
-  if (!plan.success) {
-    return { ok: false, fehler: plan.error ?? "Modulplan konnte nicht gelesen werden." };
-  }
 
   // Der Aufgabenbaum braucht das rohe HTML — dort trägt die
   // Überschriftenebene die Bedeutung, im geglätteten Text ist sie weg.
@@ -313,13 +318,20 @@ export async function leseModulAusMaterial(materialId: string): Promise<{
     ? await importModulBaum(eintrag.modulId, roh)
     : null;
 
+  if (!plan.success && !baum?.ok) {
+    return {
+      ok: false,
+      fehler: plan.error ?? baum?.error ?? "Datei konnte nicht ausgewertet werden.",
+    };
+  }
+
   revalidatePath("/bildungsplan");
 
   return {
     ok: true,
-    wochenziele: plan.count,
+    wochenziele: plan.success ? plan.count : 0,
     bloecke: baum?.ok ? baum.bloecke : 0,
     aufgaben: baum?.ok ? baum.aufgaben : 0,
-    fehler: baum && !baum.ok ? baum.error : undefined,
+    fehler: !plan.success ? `Kein Modulplan: ${plan.error}` : undefined,
   };
 }

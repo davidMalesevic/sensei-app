@@ -14,11 +14,27 @@ export type SmartlearnWoche = {
   ziel: string;
   beschreibung: string | null;
   lbHinweis: string | null;
-  /** Blocknummern dieser Woche — eine Woche kann zwei Blöcke berühren. */
-  bloecke: number[];
+  /**
+   * Blockschlüssel dieser Woche, normalisiert («1», «A»). Eine Woche kann
+   * zwei Blöcke berühren. String statt Zahl, weil die Exporte Blöcke
+   * unterschiedlich benennen: «Block 01», «Block 1», «Block A».
+   */
+  bloecke: string[];
   /** In dieser Woche genannte Lern- und Arbeitsaufträge. */
   laCodes: string[];
 };
+
+/**
+ * Blockschlüssel vereinheitlichen: «01» und «1» sind derselbe Block, «a» und
+ * «A» auch. Nur fürs Vergleichen — angezeigt wird der Titel des Blocks.
+ */
+export function normalisiereBlock(roh: string): string {
+  const t = roh.trim().toUpperCase();
+  return /^\d+$/.test(t) ? String(Number(t)) : t;
+}
+
+/** LA-Codes enthalten je nach Modul Punkte und Bindestriche: LA_A.10_… */
+const LA_MUSTER = /LA[_][A-Za-z0-9_.\-]+/g;
 
 const ROW_START = /^(KW\s*(\d{1,2})|FERIEN)\b/i;
 const LA_SECTION_START = /^Block\s+\d{1,2}\s*[-–]\s*/i;
@@ -26,10 +42,11 @@ const LB_PREFIX = /^(?:\*+\s*)?LB\s*:\s*/i;
 
 /** Erkennt, ob ein Text überhaupt aus einem Smartlearn-Export stammt. */
 export function isSmartlearnExport(text: string): boolean {
-  return (
-    /Modularbeitsplan/i.test(text) &&
-    /Block\s*&\s*Lern-\s*und\s*Arbeitsauftrag/i.test(text)
-  );
+  if (!/Modularbeitsplan/i.test(text)) {
+    // Modul 219 hat gar keinen Modularbeitsplan, aber denselben Aufgabenbaum.
+    return /\bLA[_][A-Za-z0-9_.\-]+/.test(text) && /\bBlock\s+\w/i.test(text);
+  }
+  return true;
 }
 
 /** Schneidet den Abschnitt «Modularbeitsplan» aus dem Gesamttext. */
@@ -124,18 +141,8 @@ export function parseModularbeitsplan(text: string): SmartlearnWoche[] {
 
     // «Block 01 und Block 02» → [1, 2]; LA-Codes bleiben im Original.
     const inhaltText = inhaltZeilen.join(" ");
-    const bloecke = [
-      ...new Set(
-        [...inhaltText.matchAll(/Block\s+(\d{1,2})/gi)].map((m) => Number(m[1]))
-      ),
-    ].sort((a, b) => a - b);
-    const laCodes = [
-      ...new Set(
-        [...inhaltText.matchAll(/LA[_][A-Za-z0-9_]+/g)].map((m) =>
-          m[0].replace(/\.docx?$/i, "")
-        )
-      ),
-    ];
+    const bloecke = bloeckeAus(inhaltText);
+    const laCodes = laCodesAus(inhaltText);
 
     wochen.push({
       kw,
@@ -187,7 +194,10 @@ export type SmartlearnLA = {
 };
 
 export type SmartlearnBlock = {
-  nummer: number;
+  /** Normalisierter Schlüssel: «1», «2», «A» — passend zum Modularbeitsplan. */
+  schluessel: string;
+  /** Reihenfolge im Dokument; für Buchstaben die Position im Alphabet. */
+  nummer: number | null;
   titel: string;
   auftraege: SmartlearnLA[];
 };
@@ -196,9 +206,38 @@ type Ueberschrift = { ebene: number; titel: string; text: string };
 
 const AUFGABE = /^Aufgabe\s+\d/i;
 const TEILAUFGABE = /^Teilaufgabe\s+\d/i;
-const LA_CODE = /^LA[_\s][A-Za-z0-9_]+/;
-const BLOCK = /^Block\s+(\d{1,2})\s*[-–—]?\s*(.*)$/i;
+const LA_CODE = /^LA[_\s][A-Za-z0-9_.\-]+/;
 const RUBRIK = /^(Ausgangslage|Aufgabenstellung|Gütekriterien)$/i;
+
+/**
+ * Blocküberschriften kommen in drei Schreibweisen vor:
+ *
+ *   «Block 01 - Einführung»      (119)
+ *   «Block 1: Vorkenntnisse …»   (219, 278)
+ *   «A - Reifegrade beurteilen»  (168)
+ */
+const BLOCK_MIT_WORT = /^Block\s+([0-9]{1,2}|[A-Z])\s*[-–—:]?\s*(.*)$/i;
+const BLOCK_NUR_KUERZEL = /^([A-Z]|[0-9]{1,2})\s*[-–—:]\s*(.+)$/;
+
+function alsBlock(titel: string): { schluessel: string; titel: string } | null {
+  const mitWort = titel.match(BLOCK_MIT_WORT);
+  if (mitWort) {
+    return {
+      schluessel: normalisiereBlock(mitWort[1]),
+      titel: mitWort[2].trim() || `Block ${mitWort[1]}`,
+    };
+  }
+
+  const kuerzel = titel.match(BLOCK_NUR_KUERZEL);
+  if (kuerzel) {
+    return {
+      schluessel: normalisiereBlock(kuerzel[1]),
+      titel: kuerzel[2].trim(),
+    };
+  }
+
+  return null;
+}
 
 function textAus(html: string): string {
   return html
@@ -258,14 +297,24 @@ export function parseSmartlearnStruktur(html: string): SmartlearnBlock[] {
   let aufgabe: SmartlearnAufgabe | null = null;
 
   for (const a of schneideUeberschriften(html)) {
-    const blockTreffer = a.titel.match(BLOCK);
-    if (blockTreffer) {
-      block = {
-        nummer: Number(blockTreffer[1]),
-        titel: blockTreffer[2].trim() || `Block ${blockTreffer[1]}`,
-        auftraege: [],
-      };
-      bloecke.push(block);
+    // Blöcke stehen auf h2; tiefere Ebenen wiederholen den Titel teilweise
+    // («A - Reifegrade beurteilen» auch als h3) und würden sonst doppeln.
+    const alsBlockErkannt = a.ebene <= 2 ? alsBlock(a.titel) : null;
+    if (alsBlockErkannt) {
+      const vorhanden = bloecke.find(
+        (b) => b.schluessel === alsBlockErkannt.schluessel
+      );
+      block =
+        vorhanden ??
+        {
+          schluessel: alsBlockErkannt.schluessel,
+          nummer: /^\d+$/.test(alsBlockErkannt.schluessel)
+            ? Number(alsBlockErkannt.schluessel)
+            : alsBlockErkannt.schluessel.charCodeAt(0) - 64,
+          titel: alsBlockErkannt.titel,
+          auftraege: [],
+        };
+      if (!vorhanden) bloecke.push(block);
       la = null;
       aufgabe = null;
       continue;
@@ -317,4 +366,155 @@ export function parseSmartlearnStruktur(html: string): SmartlearnBlock[] {
   }
 
   return bloecke.filter((b) => b.auftraege.length > 0);
+}
+
+// ─── Modularbeitsplan aus der HTML-Tabelle ────────────────────────────────
+//
+// Die Exporte unterscheiden sich stärker, als ein Textparser verkraftet:
+//
+//   119  Datum | Block & Lern- und Arbeitsauftrag | Bemerkung   «KW 33», «LB:»
+//   168  KW    | Block Lern- und Arbeitsauftrag   | Bemerkung   «KW33», «Checkpoint 01:»
+//   278  KW | HZ | Block | Thema | Unterrichtsmaterial          «33/34», «LB-2:»
+//   219  gar keine Tabelle
+//
+// Über die Tabellenstruktur statt über geglätteten Text zu gehen, macht das
+// beherrschbar: Spalten werden über ihre Kopfzeile zugeordnet.
+
+/** Alle Blockschlüssel aus einem Text, normalisiert. */
+function bloeckeAus(text: string): string[] {
+  const treffer = [...text.matchAll(/Block\s+([0-9]{1,2}|[A-Z])\b/gi)].map((m) =>
+    normalisiereBlock(m[1])
+  );
+  return [...new Set(treffer)];
+}
+
+/** Alle LA-Codes aus einem Text, ohne Dateiendung. */
+function laCodesAus(text: string): string[] {
+  const treffer = (text.match(LA_MUSTER) ?? []).map((c) =>
+    c.replace(/\.docx?$/i, "")
+  );
+  return [...new Set(treffer)];
+}
+
+/** Leistungsbeurteilungen heissen je nach Modul «LB:», «LB-2:» oder «Checkpoint 01:». */
+const LB_MUSTER = /(?:LB\s*-?\s*\d*|Checkpoint\s*\d*)\s*:\s*([^|\n]+)/gi;
+
+function zellenText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type Spalten = {
+  kw: number;
+  block: number | null;
+  inhalt: number;
+  bemerkung: number | null;
+};
+
+/** Ordnet die Spalten über ihre Kopfzeile zu. */
+function erkenneSpalten(kopf: string[]): Spalten | null {
+  const finde = (muster: RegExp) => kopf.findIndex((h) => muster.test(h));
+
+  const kw = finde(/^(kw|datum|woche)\b/i);
+  if (kw === -1) return null;
+
+  const block = finde(/^block$/i);
+  // Die inhaltliche Spalte ist bei 278 «Thema», sonst die breite Block-Spalte.
+  let inhalt = finde(/^thema/i);
+  if (inhalt === -1) inhalt = finde(/block.*(auftrag|lern)/i);
+  if (inhalt === -1) inhalt = block !== -1 ? block : kw + 1;
+
+  const bemerkung = finde(/bemerkung|unterrichtsmaterial|material/i);
+
+  return {
+    kw,
+    block: block === -1 ? null : block,
+    inhalt,
+    bemerkung: bemerkung === -1 || bemerkung === inhalt ? null : bemerkung,
+  };
+}
+
+/** «KW 33» → [33], «KW33» → [33], «33/34/37» → [33, 34, 37], «Ferien» → [] */
+function kalenderwochenAus(zelle: string): number[] {
+  if (/ferien|unterrichtsfrei/i.test(zelle)) return [];
+  const zahlen = [...zelle.matchAll(/\d{1,2}/g)]
+    .map((m) => Number(m[0]))
+    .filter((n) => n >= 1 && n <= 53);
+  return [...new Set(zahlen)];
+}
+
+/**
+ * Liest den Modularbeitsplan aus dem rohen HTML.
+ *
+ * Gibt eine leere Liste zurück, wenn keine auswertbare Tabelle existiert —
+ * dann greift der Aufrufer auf den Textparser oder die KI zurück.
+ */
+export function parseModularbeitsplanHtml(html: string): SmartlearnWoche[] {
+  const start = html.search(/Modularbeitsplan/i);
+  if (start === -1) return [];
+
+  const tabelle = html.slice(start).match(/<table[\s\S]*?<\/table>/i);
+  if (!tabelle) return [];
+
+  const zeilen = [...tabelle[0].matchAll(/<tr[\s\S]*?<\/tr>/gi)].map((z) =>
+    [...z[0].matchAll(/<t[dh][\s\S]*?<\/t[dh]>/gi)].map((c) => zellenText(c[0]))
+  );
+  if (zeilen.length < 2) return [];
+
+  const spalten = erkenneSpalten(zeilen[0]);
+  if (!spalten) return [];
+
+  const wochen: SmartlearnWoche[] = [];
+
+  for (const zellen of zeilen.slice(1)) {
+    if (zellen.length === 0) continue;
+
+    const kws = kalenderwochenAus(zellen[spalten.kw] ?? "");
+    if (kws.length === 0) continue; // Ferienzeile
+
+    const inhalt = zellen[spalten.inhalt] ?? "";
+    const bemerkung =
+      spalten.bemerkung !== null ? (zellen[spalten.bemerkung] ?? "") : "";
+    const ganzeZeile = zellen.join(" | ");
+
+    // Eigene Block-Spalte (278) hat Vorrang vor der Erwähnung im Fliesstext.
+    const bloecke =
+      spalten.block !== null && zellen[spalten.block]
+        ? [...new Set(
+            [...(zellen[spalten.block].match(/[0-9]{1,2}|[A-Z]/g) ?? [])].map(
+              normalisiereBlock
+            )
+          )]
+        : bloeckeAus(ganzeZeile);
+
+    const lbTreffer = [...ganzeZeile.matchAll(LB_MUSTER)].map((m) =>
+      m[1].trim()
+    );
+
+    const ziel =
+      inhalt.replace(LB_MUSTER, "").replace(/\s+/g, " ").trim() ||
+      lbTreffer.join(" · ");
+    if (!ziel) continue;
+
+    for (const kw of kws) {
+      wochen.push({
+        kw,
+        ziel: ziel.slice(0, 300),
+        beschreibung: bemerkung || null,
+        lbHinweis: lbTreffer.length > 0 ? lbTreffer.join(" · ") : null,
+        bloecke,
+        laCodes: laCodesAus(ganzeZeile),
+      });
+    }
+  }
+
+  return wochen;
 }

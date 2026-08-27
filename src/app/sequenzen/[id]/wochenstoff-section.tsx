@@ -55,11 +55,9 @@ export function WochenstoffSection({ stoff }: { stoff: Wochenstoff }) {
           </p>
         ) : (
           stoff.bloecke.map((b) => (
-            <div key={b.nummer} className="space-y-2">
+            <div key={b.schluessel} className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">
-                  Block {String(b.nummer).padStart(2, "0")}
-                </Badge>
+                <Badge variant="outline">Block {b.schluessel}</Badge>
                 <span className="text-sm font-medium">{b.titel}</span>
                 {b.slides?.href && (
                   <a

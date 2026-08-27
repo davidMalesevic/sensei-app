@@ -62,7 +62,7 @@ function sammleFakten(stoff: Wochenstoff, erledigt: string[]): Fakt[] {
   for (const b of stoff.bloecke) {
     if (b.slides) {
       fakten.push({
-        id: `theorie-${b.nummer}`,
+        id: `theorie-${b.schluessel}`,
         typ: "theorie",
         titel: b.slides.von
           ? `${b.slides.titel}, Slide ${b.slides.von}${b.slides.bis ? `–${b.slides.bis}` : ""}`
@@ -76,6 +76,23 @@ function sammleFakten(stoff: Wochenstoff, erledigt: string[]): Fakt[] {
     }
 
     for (const a of b.auftraege) {
+      // Manche Module nummerieren ihre Aufgaben gar nicht (dort heissen sie
+      // schlicht «Neue Aufgabe»). Dann ist der Lern- und Arbeitsauftrag selbst
+      // die Einheit, die die Lehrperson der Klasse nennt.
+      if (a.aufgaben.length === 0) {
+        fakten.push({
+          id: `aufgabe-${fakten.length}`,
+          typ: "aufgabe",
+          titel: a.code,
+          text: a.aufgabenstellung?.slice(0, 400) ?? null,
+          refCode: a.code,
+          refAufgabe: null,
+          refSeiteVon: null,
+          refSeiteBis: null,
+        });
+        continue;
+      }
+
       for (const auf of a.aufgaben) {
         const marke = `${a.code} · ${auf.bezeichnung}`;
         if (erledigt.includes(marke)) continue; // letzte Woche erledigt

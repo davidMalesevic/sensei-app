@@ -268,7 +268,10 @@ export const modulBlock = pgTable(
     modulId: uuid("modul_id")
       .references(() => modul.id, { onDelete: "cascade" })
       .notNull(),
-    nummer: integer("nummer").notNull(),
+    /** Normalisiert: «1», «2», «A» — die Exporte benennen Blöcke verschieden. */
+    schluessel: varchar("schluessel", { length: 10 }).notNull(),
+    /** Reihenfolge; bei Buchstaben die Position im Alphabet. */
+    nummer: integer("nummer"),
     titel: varchar("titel", { length: 300 }).notNull(),
     /** Slidezuordnung, wenn eine Präsentation fürs ganze Modul gilt. */
     slideMaterialId: uuid("slide_material_id").references(() => material.id, {
@@ -278,7 +281,7 @@ export const modulBlock = pgTable(
     slideBis: integer("slide_bis"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [unique().on(t.modulId, t.nummer)]
+  (t) => [unique().on(t.modulId, t.schluessel)]
 );
 
 export const modulBlockRelations = relations(modulBlock, ({ one, many }) => ({
@@ -572,7 +575,7 @@ export const modularPlan = pgTable("modular_plan", {
   ziel: varchar("ziel", { length: 300 }).notNull(),
   beschreibung: text("beschreibung"),
   /** Blocknummern dieser Woche — eine Woche kann zwei Blöcke berühren. */
-  bloecke: integer("bloecke").array(),
+  bloecke: text("bloecke").array(),
   laCodes: text("la_codes").array(),
   /** Leistungsbeurteilung dieser Woche (aus «LB:»-Zeilen des Modulplans). */
   lbHinweis: text("lb_hinweis"),

@@ -26,7 +26,7 @@ export type StoffAuftrag = {
 };
 
 export type StoffBlock = {
-  nummer: number;
+  schluessel: string;
   titel: string;
   auftraege: StoffAuftrag[];
   slides: {
@@ -69,8 +69,8 @@ export async function getWochenstoff(
     return { kw, ziel: null, lbHinweis: null, bloecke: [], ohneModulplan: true };
   }
 
-  const nummern = woche.bloecke ?? [];
-  if (nummern.length === 0) {
+  const schluessel = woche.bloecke ?? [];
+  if (schluessel.length === 0) {
     return {
       kw,
       ziel: woche.ziel,
@@ -82,7 +82,7 @@ export async function getWochenstoff(
 
   const alleBloecke = await db.query.modulBlock.findMany({
     where: eq(modulBlock.modulId, modulId),
-    orderBy: (b, { asc }) => [asc(b.nummer)],
+    orderBy: (b, { asc }) => [asc(b.nummer), asc(b.schluessel)],
     with: {
       slideMaterial: {
         columns: { id: true, titel: true, dateiPfad: true, url: true },
@@ -97,14 +97,14 @@ export async function getWochenstoff(
   const laFilter = new Set(woche.laCodes ?? []);
 
   const bloecke: StoffBlock[] = alleBloecke
-    .filter((b) => nummern.includes(b.nummer))
+    .filter((b) => schluessel.includes(b.schluessel))
     .map((b) => {
       const relevant = laFilter.size
         ? b.auftraege.filter((a) => laFilter.has(a.code))
         : b.auftraege;
 
       return {
-        nummer: b.nummer,
+        schluessel: b.schluessel,
         titel: b.titel,
         slides: b.slideMaterial
           ? {

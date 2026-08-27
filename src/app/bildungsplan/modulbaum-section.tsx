@@ -31,7 +31,8 @@ export type BaumAuftrag = {
 
 export type BaumBlock = {
   id: string;
-  nummer: number;
+  schluessel: string;
+  nummer: number | null;
   titel: string;
   slideMaterialId: string | null;
   slideVon: number | null;
@@ -156,9 +157,7 @@ export function ModulBaumSection({
         {bloecke.map((b) => (
           <div key={b.id} className="rounded-lg border p-3 space-y-2">
             <div className="flex items-center gap-2">
-              <Badge variant="outline">
-                Block {String(b.nummer).padStart(2, "0")}
-              </Badge>
+              <Badge variant="outline">Block {b.schluessel}</Badge>
               <span className="text-sm font-medium">{b.titel}</span>
             </div>
 

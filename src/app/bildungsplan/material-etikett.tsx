@@ -36,10 +36,7 @@ export function MaterialBlockEtikett({
   const items: Record<string, string> = {
     [GANZES_MODUL]: "ganzes Modul",
     ...Object.fromEntries(
-      bloecke.map((b) => [
-        String(b.nummer),
-        `Block ${String(b.nummer).padStart(2, "0")}`,
-      ])
+      bloecke.map((b) => [b.schluessel, `Block ${b.schluessel}`])
     ),
   };
 
@@ -65,8 +62,8 @@ export function MaterialBlockEtikett({
       <SelectContent>
         <SelectItem value={GANZES_MODUL}>ganzes Modul</SelectItem>
         {bloecke.map((b) => (
-          <SelectItem key={b.id} value={String(b.nummer)}>
-            Block {String(b.nummer).padStart(2, "0")} – {b.titel}
+          <SelectItem key={b.id} value={b.schluessel}>
+            Block {b.schluessel} – {b.titel}
           </SelectItem>
         ))}
       </SelectContent>

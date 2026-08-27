@@ -219,6 +219,38 @@ Die Lernumgebung Smartlearn exportiert Module als HTML (Beispiel:
 - Zeilen beginnen mit `KW nn` oder `FERIEN` und können mehrzeilig sein
 - `LB:`-Zeilen sind Leistungsbeurteilungen → `modular_plan.lbHinweis`
 
+### ⚠️ Jedes Modul exportiert anders
+
+Der Export ist **nicht einheitlich**. Belegt an vier Modulen:
+
+| Modul | Arbeitsplan-Tabelle | Block-Überschrift | KW-Format | LB-Marker |
+|---|---|---|---|---|
+| 119 | `Datum ǀ Block & Lern- und Arbeitsauftrag ǀ Bemerkung` | `Block 01 - Einführung` | `KW 33` | `LB:` |
+| 168 | `KW ǀ Block Lern- und Arbeitsauftrag ǀ Bemerkung` | `A - Reifegrade beurteilen` | `KW33` | `Checkpoint 01:` |
+| 219 | **keine** — nur als Bild im Export | `Block 1: Vorkenntnisse …` | — | — |
+| 278 | `KW ǀ HZ ǀ Block ǀ Thema ǀ Unterrichtsmaterial` | `Block 1: Analysiert …` | `33/34` | `LB-2:` |
+
+Konsequenzen im Code:
+
+- **Blockschlüssel sind Strings**, nicht Zahlen (`modul_block.schluessel`,
+  `modular_plan.bloecke` als `text[]`): «01», «1» und «A» kommen alle vor.
+  `normalisiereBlock()` vereinheitlicht fürs Vergleichen.
+- **`parseModularbeitsplanHtml()` liest die HTML-Tabelle**, nicht den
+  geglätteten Text: Spalten werden über die Kopfzeile zugeordnet. Der alte
+  Textparser bleibt als Fallback. Eine Zeile kann mehrere KWs betreffen
+  (`33/34` → zwei Einträge).
+- Manche Module **nummerieren ihre Aufgaben nicht** (dort heissen alle «Neue
+  Aufgabe»). Dann ist der LA selbst die Einheit — `sammleFakten()` gibt in dem
+  Fall den LA-Code als Fakt aus.
+- **Plan und Baum sind unabhängig.** Modul 219 hat einen vollständigen
+  Aufgabenbaum, aber keinen maschinenlesbaren Arbeitsplan; sein Plan liegt
+  von Hand in `src/db/seed-modulplan-219.ts` (aus der Bild-Grafik übertragen).
+  Ein fehlgeschlagener Plan-Import löscht nichts — `importModularPlan` bricht
+  vor dem Delete ab.
+
+Bevor ein neues Modul importiert wird: **erst den Export anschauen**, nicht
+annehmen, er sehe aus wie die bisherigen.
+
 ### Modulbaum
 
 `parseSmartlearnStruktur(html)` liest aus dem **rohen HTML** (nicht aus dem
