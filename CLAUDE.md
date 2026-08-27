@@ -184,6 +184,20 @@ und erscheinen nie als Tabelle.
 Ohne Modulplan-Eintrag für die KW bricht die Erzeugung mit klarer Meldung ab —
 ohne ihn ist nicht bestimmbar, welcher Block ansteht.
 
+### Schleifen
+
+Der Ablauf wird per **Direktmanipulation** bearbeitet, nicht per KI-Ping-Pong:
+umordnen, Texte an Ort und Stelle ändern, Schritte löschen und ergänzen
+(`erstellungsprozess.md`, Abschnitt 6.2).
+
+Das Umordnen läuft über **Pointer-Events**, nicht über HTML5-Drag-and-Drop:
+letzteres reagiert nicht auf synthetische Mausereignisse (also nicht
+testbar) und ist auf Trackpad und Touch unzuverlässig.
+
+Texte sichern beim Verlassen des Felds (`onBlur`), nicht bei jedem Tastendruck.
+Fakten aus dem Material behalten ihre Referenz auf LA-Code und Material auch
+nach dem Umschreiben.
+
 ### Nachtlauf
 
 `POST /api/entwuerfe/nacht` mit `Authorization: Bearer $CRON_SECRET`, Fenster

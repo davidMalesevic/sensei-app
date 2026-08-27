@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { sequenz, sequenzAblauf } from "@/db/schema";
-import { and, asc, eq, gte, isNotNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { getWochenstoff, type Wochenstoff } from "@/lib/modulbaum";
@@ -404,4 +404,75 @@ export async function getAblauf(sequenzId: string) {
     orderBy: (a, { asc: s }) => [s(a.sortierung)],
     with: { refMaterial: { columns: { id: true, titel: true, dateiPfad: true, url: true } } },
   });
+}
+
+// ─── Schleifen: Direktmanipulation am Ablauf ──────────────────────────────
+//
+// Kein KI-Ping-Pong: umordnen, umschreiben, löschen, ergänzen. Die Lehrperson
+// geht den Entwurf am Mittwoch durch und korrigiert direkt
+// (`erstellungsprozess.md`, Abschnitt 6.2).
+
+export async function aktualisiereAblaufZeile(
+  zeilenId: string,
+  werte: { titel?: string; text?: string | null }
+) {
+  const titel = werte.titel?.trim();
+  const text = werte.text?.trim();
+
+  const [aktualisiert] = await db
+    .update(sequenzAblauf)
+    .set({
+      ...(titel !== undefined ? { titel: titel.slice(0, 300) } : {}),
+      ...(werte.text !== undefined ? { text: text || null } : {}),
+    })
+    .where(eq(sequenzAblauf.id, zeilenId))
+    .returning({ sequenzId: sequenzAblauf.sequenzId });
+
+  if (aktualisiert) revalidatePath(`/sequenzen/${aktualisiert.sequenzId}`);
+}
+
+export async function loescheAblaufZeile(zeilenId: string) {
+  const [geloescht] = await db
+    .delete(sequenzAblauf)
+    .where(eq(sequenzAblauf.id, zeilenId))
+    .returning({ sequenzId: sequenzAblauf.sequenzId });
+
+  if (geloescht) revalidatePath(`/sequenzen/${geloescht.sequenzId}`);
+}
+
+/** Neue Reihenfolge festhalten; `ids` ist die Liste in der gewünschten Folge. */
+export async function sortiereAblauf(sequenzId: string, ids: string[]) {
+  for (const [i, id] of ids.entries()) {
+    await db
+      .update(sequenzAblauf)
+      .set({ sortierung: i })
+      .where(
+        and(eq(sequenzAblauf.id, id), eq(sequenzAblauf.sequenzId, sequenzId))
+      );
+  }
+  revalidatePath(`/sequenzen/${sequenzId}`);
+}
+
+/** Eigener Schritt — zählt als Vorschlag, weil er nicht aus dem Material stammt. */
+export async function fuegeAblaufZeileHinzu(
+  sequenzId: string,
+  typ: AblaufTyp,
+  titel: string
+) {
+  const [letzte] = await db
+    .select({ sortierung: sequenzAblauf.sortierung })
+    .from(sequenzAblauf)
+    .where(eq(sequenzAblauf.sequenzId, sequenzId))
+    .orderBy(desc(sequenzAblauf.sortierung))
+    .limit(1);
+
+  await db.insert(sequenzAblauf).values({
+    sequenzId,
+    sortierung: (letzte?.sortierung ?? -1) + 1,
+    typ,
+    quelle: "vorschlag",
+    titel: titel.trim().slice(0, 300) || "Neuer Schritt",
+  });
+
+  revalidatePath(`/sequenzen/${sequenzId}`);
 }

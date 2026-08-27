@@ -173,9 +173,9 @@ export async function getSequenzKontext(
   return {
     kw,
     kwQuelle,
-    modulLabel: seq.modul
-      ? `Modul ${seq.modul.nummer}${seq.modul.bezeichnung ? ` – ${seq.modul.bezeichnung}` : ""}`
-      : null,
+    // Kurz halten: das Label steht als Badge in der Kontextleiste, der volle
+    // Modultitel steht ohnehin in der Seitenüberschrift.
+    modulLabel: seq.modul ? `Modul ${seq.modul.nummer}` : null,
     aktuellesZiel,
     naechstesZiel,
     pruefungen,

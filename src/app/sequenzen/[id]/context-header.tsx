@@ -53,11 +53,14 @@ function Abschnitt({
         disabled={!hatDetails}
         className={`w-full text-left ${hatDetails ? "cursor-pointer" : "cursor-default"}`}
       >
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          <Icon className="h-3.5 w-3.5" />
-          {label}
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide min-w-0">
+          <Icon className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{label}</span>
           {badge && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+            <Badge
+              variant="secondary"
+              className="text-[10px] px-1.5 py-0 max-w-[12rem] truncate"
+            >
               {badge}
             </Badge>
           )}
