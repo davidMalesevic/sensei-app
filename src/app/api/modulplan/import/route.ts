@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractDokumentText } from "@/lib/dokument-text";
 import { importModularPlan } from "@/app/sequenzen/actions";
+import { importModulBaum } from "@/app/bildungsplan/actions";
 
 const MAX_SIZE = 20 * 1024 * 1024;
 
@@ -29,12 +30,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const rohBytes = Buffer.from(await file.arrayBuffer());
+
   let text: string | null;
   try {
-    text = await extractDokumentText(
-      file.name,
-      Buffer.from(await file.arrayBuffer())
-    );
+    text = await extractDokumentText(file.name, rohBytes);
   } catch (e) {
     return NextResponse.json(
       { error: `Datei konnte nicht gelesen werden: ${e}` },
@@ -53,5 +53,20 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await importModularPlan(modulId, text);
-  return NextResponse.json(result, { status: result.success ? 200 : 400 });
+
+  // Beim HTML-Export hängt am selben Dokument der ganze Aufgabenbaum
+  // (Block → LA → Aufgabe). Der Modulplan bleibt auch dann gültig, wenn die
+  // Struktur nicht gelesen werden kann — deshalb nur als Zusatz gemeldet.
+  let baum: Awaited<ReturnType<typeof importModulBaum>> | null = null;
+  if (result.success) {
+    const roh = rohBytes.toString("utf-8");
+    if (/<h[1-6][\s>]/i.test(roh)) {
+      baum = await importModulBaum(modulId, roh);
+    }
+  }
+
+  return NextResponse.json(
+    { ...result, baum },
+    { status: result.success ? 200 : 400 }
+  );
 }

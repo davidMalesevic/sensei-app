@@ -9,6 +9,7 @@ import {
   pgEnum,
   jsonb,
   boolean,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -235,6 +236,88 @@ export const modulRelations = relations(modul, ({ many }) => ({
   sequenzen: many(sequenz),
   materialien: many(material),
   modularPlan: many(modularPlan),
+  bloecke: many(modulBlock),
+}));
+
+// ─── Modulbaum: Block → Lern- und Arbeitsauftrag → Aufgabe ───
+//
+// Deterministisch aus dem Smartlearn-HTML gelesen (`src/lib/smartlearn.ts`).
+// Zusammen mit `modular_plan.bloecke` gilt: KW + Modul ⇒ Block ⇒ LA ⇒ Aufgaben.
+// Original-Bezeichnungen bleiben unverändert.
+
+export const modulBlock = pgTable(
+  "modul_block",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    modulId: uuid("modul_id")
+      .references(() => modul.id, { onDelete: "cascade" })
+      .notNull(),
+    nummer: integer("nummer").notNull(),
+    titel: varchar("titel", { length: 300 }).notNull(),
+    /** Slidezuordnung, wenn eine Präsentation fürs ganze Modul gilt. */
+    slideMaterialId: uuid("slide_material_id").references(() => material.id, {
+      onDelete: "set null",
+    }),
+    slideVon: integer("slide_von"),
+    slideBis: integer("slide_bis"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [unique().on(t.modulId, t.nummer)]
+);
+
+export const modulBlockRelations = relations(modulBlock, ({ one, many }) => ({
+  modul: one(modul, {
+    fields: [modulBlock.modulId],
+    references: [modul.id],
+  }),
+  slideMaterial: one(material, {
+    fields: [modulBlock.slideMaterialId],
+    references: [material.id],
+  }),
+  auftraege: many(modulAuftrag),
+}));
+
+export const modulAuftrag = pgTable(
+  "modul_auftrag",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    blockId: uuid("block_id")
+      .references(() => modulBlock.id, { onDelete: "cascade" })
+      .notNull(),
+    code: varchar("code", { length: 200 }).notNull(),
+    ausgangslage: text("ausgangslage"),
+    aufgabenstellung: text("aufgabenstellung"),
+    guetekriterien: text("guetekriterien"),
+    sortierung: integer("sortierung").default(0).notNull(),
+  },
+  (t) => [unique().on(t.blockId, t.code)]
+);
+
+export const modulAuftragRelations = relations(modulAuftrag, ({ one, many }) => ({
+  block: one(modulBlock, {
+    fields: [modulAuftrag.blockId],
+    references: [modulBlock.id],
+  }),
+  aufgaben: many(modulAufgabe),
+}));
+
+export const modulAufgabe = pgTable("modul_aufgabe", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  auftragId: uuid("auftrag_id")
+    .references(() => modulAuftrag.id, { onDelete: "cascade" })
+    .notNull(),
+  /** Gesetzt bei Teilaufgaben; zeigt auf die übergeordnete Aufgabe. */
+  parentId: uuid("parent_id"),
+  bezeichnung: varchar("bezeichnung", { length: 200 }).notNull(),
+  text: text("text"),
+  sortierung: integer("sortierung").default(0).notNull(),
+});
+
+export const modulAufgabeRelations = relations(modulAufgabe, ({ one }) => ({
+  auftrag: one(modulAuftrag, {
+    fields: [modulAufgabe.auftragId],
+    references: [modulAuftrag.id],
+  }),
 }));
 
 // ─── Sequenz ───
@@ -388,6 +471,8 @@ export const material = pgTable("material", {
   }),
   phaseId: uuid("phase_id").references(() => phase.id, { onDelete: "cascade" }),
   modulId: uuid("modul_id").references(() => modul.id, { onDelete: "cascade" }),
+  /** Etikett: null = gilt fürs ganze Modul, sonst genau dieser Block. */
+  blockNummer: integer("block_nummer"),
   dateiPfad: text("datei_pfad"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -422,6 +507,9 @@ export const modularPlan = pgTable("modular_plan", {
   kw: integer("kw").notNull(),
   ziel: varchar("ziel", { length: 300 }).notNull(),
   beschreibung: text("beschreibung"),
+  /** Blocknummern dieser Woche — eine Woche kann zwei Blöcke berühren. */
+  bloecke: integer("bloecke").array(),
+  laCodes: text("la_codes").array(),
   /** Leistungsbeurteilung dieser Woche (aus «LB:»-Zeilen des Modulplans). */
   lbHinweis: text("lb_hinweis"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

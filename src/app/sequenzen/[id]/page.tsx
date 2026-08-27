@@ -19,6 +19,9 @@ import { UebergabenotizSection } from "./uebergabenotiz-section";
 import { ContextHeader } from "./context-header";
 import { CockpitView } from "./cockpit-view";
 import { AnsichtToggle, type Ansicht } from "./ansicht-toggle";
+import { WochenstoffSection } from "./wochenstoff-section";
+import { getWochenstoff } from "@/lib/modulbaum";
+import { getKWFromDateString } from "@/lib/kw";
 
 export default async function SequenzDetailPage({
   params,
@@ -40,6 +43,11 @@ export default async function SequenzDetailPage({
   if (!seq || !kontext) return notFound();
 
   const cockpitData = ansicht === "cockpit" ? await getCockpitData(id) : null;
+
+  // KW + Modul ⇒ Block ⇒ LA ⇒ Aufgaben; rein gerechnet, ohne KI.
+  const kw = getKWFromDateString(seq.startDatum);
+  const stoff =
+    seq.modulId && kw !== null ? await getWochenstoff(seq.modulId, kw) : null;
   const vorherigeNotiz = await getVorherigeNotiz(seq.klasseId, seq.modulId, id);
   const saveNotizAction = saveUebergabenotiz.bind(null, id);
 
@@ -74,6 +82,8 @@ export default async function SequenzDetailPage({
       </div>
 
       <ContextHeader kontext={kontext} klasseId={seq.klasseId} />
+
+      {stoff && <WochenstoffSection stoff={stoff} />}
 
       <AnsichtToggle sequenzId={id} aktiv={ansicht} />
 

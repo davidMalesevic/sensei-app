@@ -963,6 +963,9 @@ type ModularPlanEintrag = {
   ziel: string;
   beschreibung?: string | null;
   lbHinweis?: string | null;
+  /** Nur aus dem Smartlearn-Pfad: KW → Block ist die Kette zu den Aufgaben. */
+  bloecke?: number[];
+  laCodes?: string[];
 };
 
 /** Normalisiert beliebige Eingabeformen auf `{ kw, ziel, beschreibung }`. */
@@ -1118,6 +1121,8 @@ export async function importModularPlan(
       ziel: e.ziel,
       beschreibung: e.beschreibung ?? null,
       lbHinweis: e.lbHinweis ?? null,
+      bloecke: e.bloecke?.length ? e.bloecke : null,
+      laCodes: e.laCodes?.length ? e.laCodes : null,
     }))
   );
 

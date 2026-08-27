@@ -37,6 +37,8 @@ import {
   Paperclip,
 } from "lucide-react";
 import { createMaterial, deleteMaterial } from "@/app/materialien/actions";
+import { ModulBaumSection, type BaumBlock } from "./modulbaum-section";
+import { MaterialBlockEtikett } from "./material-etikett";
 import {
   ModulplanSection,
   type ModularPlanEintragItem,
@@ -50,6 +52,8 @@ type MaterialItem = {
   url: string | null;
   notiz: string | null;
   createdAt: Date;
+  /** Etikett: null = gilt fürs ganze Modul, sonst genau dieser Block. */
+  blockNummer: number | null;
 };
 
 type ModulData = {
@@ -59,6 +63,7 @@ type ModulData = {
   lehrjahr: number | null;
   materialien: MaterialItem[];
   modularPlan: ModularPlanEintragItem[];
+  bloecke: BaumBlock[];
 };
 
 const typLabels: Record<string, string> = {
@@ -437,6 +442,11 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                           <Badge variant="outline" className="text-xs shrink-0">
                             {typLabels[mat.typ] ?? mat.typ}
                           </Badge>
+                          <MaterialBlockEtikett
+                            materialId={mat.id}
+                            blockNummer={mat.blockNummer}
+                            bloecke={selectedModul.bloecke}
+                          />
                           {mat.dateiPfad && (
                             <a
                               href={`/api/files/${mat.dateiPfad}`}
@@ -482,6 +492,18 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                   </div>
                 )}
               </DropZone>
+
+              <div className="mt-6 border-t pt-4">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-1.5">
+                  Aufgabenbaum
+                </h4>
+                <ModulBaumSection
+                  bloecke={selectedModul.bloecke}
+                  praesentationen={selectedModul.materialien
+                    .filter((m) => m.typ === "praesentation" || m.dateiPfad?.endsWith(".pdf"))
+                    .map((m) => ({ id: m.id, titel: m.titel }))}
+                />
+              </div>
 
               <div className="mt-6 border-t pt-4">
                 <ModulplanSection

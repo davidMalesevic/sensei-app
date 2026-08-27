@@ -169,6 +169,35 @@ Die Lernumgebung Smartlearn exportiert Module als HTML (Beispiel:
 - Zeilen beginnen mit `KW nn` oder `FERIEN` und können mehrzeilig sein
 - `LB:`-Zeilen sind Leistungsbeurteilungen → `modular_plan.lbHinweis`
 
+### Modulbaum
+
+`parseSmartlearnStruktur(html)` liest aus dem **rohen HTML** (nicht aus dem
+geglätteten Text) den Aufgabenbaum — dort trägt die Überschriftenebene die
+Bedeutung:
+
+```
+h2  Block 01 – Einführung
+h3  LA_119_1000_Kommunikationstechniken
+h5  Ausgangslage / Aufgabenstellung / Gütekriterien
+h4  Aufgabe 1
+h6  Teilaufgabe 1
+```
+
+Er landet in `modul_block` → `modul_auftrag` → `modul_aufgabe`
+(Teilaufgaben über `parent_id`). Der Modularbeitsplan liefert zusätzlich
+`modular_plan.bloecke` und `.laCodes`, womit die Kette
+**KW + Modul ⇒ Block ⇒ LA ⇒ Aufgaben** rein gerechnet wird — `getWochenstoff()`
+in `src/lib/modulbaum.ts`. Keine KI im Spiel.
+
+Blöcke werden beim Reimport über `(modulId, nummer)` aktualisiert, nicht neu
+angelegt — sonst ginge die gepflegte Slidezuordnung verloren.
+
+**Material hängt am Modul**, nicht an der Sequenz, und trägt ein Etikett
+(`material.blockNummer`): `null` = ganzes Modul, sonst genau ein Block. Gilt
+eine Präsentation fürs ganze Modul, steht der Slidebereich am Block
+(`modul_block.slideVon/slideBis`). Präsentationen als **PDF** — Seite = Slide,
+Deep-Link `#page=N`; für `.pptx` fehlt weiterhin ein OOXML-Parser.
+
 Bei der Aufgaben-Extraktion aus Materialien werden die **Original-Bezeichnungen
 beibehalten** («Aufgabe 1 / Teilaufgabe 2», LA-Codes). Nicht umformulieren — die
 Lehrperson muss der Klasse «macht Aufgabe 4.2» sagen können.
