@@ -64,7 +64,9 @@ export default async function SequenzDetailPage({
   const [ablauf, geschwister, stoff, stand] = await Promise.all([
     getAblauf(id),
     getGeschwister(id),
-    seq.modulId && kw !== null ? getWochenstoff(seq.modulId, kw) : null,
+    seq.modulId && kw !== null
+      ? getWochenstoff(seq.benutzerId, seq.modulId, kw)
+      : null,
     getVorherigenUebertrag(seq.klasseId, seq.modulId, seq.startDatum, id),
   ]);
 

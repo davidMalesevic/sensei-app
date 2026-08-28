@@ -7,7 +7,6 @@ import {
   handlungskompetenz,
   phasenmodell,
   phasenTemplate,
-  modul,
 } from "./schema";
 
 dotenv.config({ path: ".env.local" });
@@ -296,31 +295,9 @@ async function seed() {
 
   console.log("Bildungsplan EDB erfolgreich geseedet (5 HKB, 28 HK).");
 
-  // ─── Module (Berufsfachschule) ───
-  console.log("Seeding Module...");
-
-  const moduleMitLehrjahr: { nummer: number; lehrjahr: number }[] = [
-    // 1. Lehrjahr
-    ...[119, 134, 162, 224, 230, 254, 319, 331, 332, 370, 374, 375].map(
-      (nr) => ({ nummer: nr, lehrjahr: 1 })
-    ),
-    // 2. Lehrjahr
-    ...[164, 213, 218, 231, 278, 279, 325, 333, 336, 338, 349, 367, 371, 377, 395].map(
-      (nr) => ({ nummer: nr, lehrjahr: 2 })
-    ),
-    // 3. Lehrjahr
-    ...[168, 219, 220, 282, 337, 372, 378, 392, 394].map(
-      (nr) => ({ nummer: nr, lehrjahr: 3 })
-    ),
-    // 4. Lehrjahr
-    ...[229, 235, 339, 373, 379, 396].map(
-      (nr) => ({ nummer: nr, lehrjahr: 4 })
-    ),
-  ];
-
-  await db.insert(modul).values(moduleMitLehrjahr);
-
-  console.log(`${moduleMitLehrjahr.length} Module geseedet.`);
+  // Module werden NICHT mehr geseedet: seit der Datentrennung gehören sie
+  // je einem Benutzer und entstehen beim Stundenplan-Import. Die Zuordnung
+  // Nummer → Lehrjahr steht in `src/lib/modul-lehrjahr.ts`.
 
   // ─── Phasenmodell AVIVA ───
   console.log("Seeding Phasenmodelle...");

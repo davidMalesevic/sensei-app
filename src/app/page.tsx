@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, gte, isNotNull } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull } from "drizzle-orm";
 import {
   ArrowRight,
   Calendar,
@@ -27,6 +27,7 @@ import { getOffeneUebertraege } from "./sequenzen/uebertrag-actions";
 import { getKWFromDateString } from "@/lib/kw";
 import { findeAktuelle, schweizerHeute, schweizerJetzt } from "@/lib/zeit";
 import { statusTag } from "@/lib/status";
+import { benutzerId } from "@/lib/dal";
 
 export const dynamic = "force-dynamic";
 
@@ -66,10 +67,15 @@ function tag(datum: string): string {
 
 /** Die nächsten Unterrichtstage — die Sequenz ist die Einheit, nicht der Block. */
 async function getNaechsteSequenzen() {
+  const bId = await benutzerId();
   const heute = schweizerHeute();
 
   return db.query.sequenz.findMany({
-    where: and(isNotNull(sequenz.kalenderKurs), gte(sequenz.startDatum, heute)),
+    where: and(
+      eq(sequenz.benutzerId, bId),
+      isNotNull(sequenz.kalenderKurs),
+      gte(sequenz.startDatum, heute)
+    ),
     orderBy: [asc(sequenz.startDatum), asc(sequenz.startZeit)],
     limit: 8,
     columns: {

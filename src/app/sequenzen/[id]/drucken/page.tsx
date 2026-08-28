@@ -43,7 +43,9 @@ export default async function DruckenPage({
   const kw = getKWFromDateString(seq.startDatum);
   const [ablauf, stoff] = await Promise.all([
     getAblauf(id),
-    seq.modulId && kw !== null ? getWochenstoff(seq.modulId, kw) : null,
+    seq.modulId && kw !== null
+      ? getWochenstoff(seq.benutzerId, seq.modulId, kw)
+      : null,
   ]);
 
   return (

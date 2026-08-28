@@ -23,6 +23,78 @@ Anforderungen und Begründungen stehen in `erstellungsprozess.md`.
 - **IBM Plex Sans / IBM Plex Mono** über `next/font/google`
 - **unpdf** für PDF-Textextraktion
 - **KI**: Ollama Cloud API (OpenAI-kompatibel)
+- **Anmeldung**: eigene Sessions (scrypt + Cookie), Daten pro Benutzer getrennt
+
+## Anmeldung und Datentrennung
+
+Eigenes Login, nach dem Vorbild der Menüplanungs-App: Passwort-Hash in
+`benutzer`, zufälliges Token in `session`, httpOnly-Cookie (30 Tage). Kein
+fremder Dienst.
+
+**Jedes Konto sieht nur seine eigenen Daten.** Klassen, Sequenzen, Module,
+Material, Pendenzen und Kalenderzuordnungen tragen eine `benutzer_id`. Ein
+neues Konto startet leer und importiert seinen eigenen Stundenplan.
+
+Geteilt bleiben **Bildungsplan, HKB, HK und die Phasenmodelle** — der
+offizielle EDB-Plan ist niemandes Eigentum. `bildungsplan.benutzer_id IS NULL`
+heisst «geteilt»; bei der Registrierung wählt man einen geteilten Plan oder
+legt einen eigenen an (`benutzer.bildungsplan_id`).
+
+### Die drei Schichten
+
+| Datei | Rolle |
+|---|---|
+| `src/proxy.ts` | **In Next 16 heisst `middleware.ts` neu `proxy.ts`.** Prüft nur, *ob* ein Cookie da ist — optimistisch, ohne DB, weil der Proxy bei jedem Request und jedem Prefetch läuft. |
+| `src/lib/dal.ts` | Die echte Prüfung. `aktuelleSession()` gibt `null` zurück, `aktuellerBenutzer()` leitet auf `/anmelden` um. Über `cache()` pro Render nur eine Abfrage. |
+| `src/lib/auth.ts` | scrypt aus `node:crypto` statt bcrypt — keine native Abhängigkeit, die im Docker-Build bricht. Format `scrypt$<salt>$<hash>`. |
+
+### Regeln
+
+- **Keine Abfrage ohne Besitzer.** Jede Server Action beginnt mit
+  `const bId = await benutzerId()`, und jedes `where` enthält
+  `eq(<tabelle>.benutzerId, bId)`. Auch beim Schreiben: `eq(id)` allein würde
+  eine geratene UUID auf fremde Zeilen treffen lassen.
+- **Kindtabellen** (`sequenz_ablauf`, `modul_block`, `modul_auftrag`,
+  `modul_aufgabe`, `modular_plan`, `material_task`) tragen keinen eigenen
+  Besitzer — sie werden über den Elternteil geprüft. Dafür gibt es in den
+  Action-Dateien kleine Helfer wie `eigeneSequenz()`, `eigenesModul()`,
+  `eigeneAblaufZeile()`.
+- **Route Handler laufen am DAL vorbei.** `/api/upload`, `/api/files`,
+  `/api/materialien/...` und `/api/modulplan/import` prüfen die Session von
+  Hand und antworten mit 401 statt mit einer Weiterleitung.
+  `/api/files` liefert nur aus, was als eigenes Material in der DB steht —
+  vorher genügte die Kenntnis des Pfades.
+- **Der Entwurfsgenerator liegt in `src/lib/entwurf.ts`, nicht in einer
+  `"use server"`-Datei.** Er nimmt die Benutzer-ID als ersten Parameter, damit
+  der Nachtlauf sie ohne Session hereinreichen kann. Läge er in einer
+  Action-Datei, könnte jeder Browser ihn mit einer fremden ID aufrufen.
+  Gleiches gilt für `src/lib/uebertrag.ts`.
+- Der **Nachtlauf** (`/api/entwuerfe/nacht`) läuft jetzt **pro Konto** in einer
+  Schleife; ein Fehler in einem Konto reisst die übrigen nicht mit.
+
+### Registrierung
+
+Nur mit Einladungscode: `REGISTRIERUNG_CODE` in `.env.local` bzw.
+`.env.production`. Fehlt er, weist `/registrieren` jede Anmeldung ab.
+
+### Migration
+
+```bash
+npx tsx src/db/migrate-benutzer.ts          # Tabellen + nullbare Spalten
+# dann über /registrieren ein Konto anlegen
+npx tsx src/db/besitz-uebertragen.ts <email>  # Bestand zuweisen, NOT NULL setzen
+```
+
+Die Spalten entstehen bewusst **nullbar** und werden erst auf NOT NULL gezogen,
+wenn alle Zeilen einen Eigentümer haben — sonst schlägt die Migration auf einer
+Datenbank mit Inhalt fehl. Beide Scripts sind idempotent.
+
+Zwei früher globale Unique-Constraints gelten jetzt **pro Konto**:
+`klasse_alias.kuerzel` und `modul.nummer`. Dasselbe Kalenderkürzel und
+dieselbe Modulnummer kommen bei mehreren Lehrpersonen vor.
+
+Module werden **nicht mehr geseedet** — sie entstehen beim Stundenplan-Import.
+Die Zuordnung Nummer → Lehrjahr steht in `src/lib/modul-lehrjahr.ts`.
 
 ## Carbon
 
@@ -511,6 +583,7 @@ src/
 │   │       └── notizen-section.tsx
 │   ├── bildungsplan/             # HKB/HK, Module, Modulplan, Aufgabenbaum
 │   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
+│   ├── (auth)/                   # Anmelden, Registrieren (ohne UI Shell)
 ├── components/
 │   ├── ui/                       # Primitives, nach Carbon-Spezifikation
 │   ├── shell/ui-shell.tsx        # Carbon UI Shell: Kopfleiste + SideNav
@@ -524,6 +597,11 @@ src/
 │   ├── kontext.ts                # Aggregation für den ContextHeader
 │   ├── zeit.ts                   # Europe/Zurich statt UTC
 │   ├── kw.ts                     # ISO-Kalenderwochen
+│   ├── auth.ts                   # scrypt-Hashing, Session-Token
+│   ├── dal.ts                    # aktuelleSession / aktuellerBenutzer
+│   ├── entwurf.ts                # Entwurfsgenerator (nimmt benutzerId)
+│   ├── uebertrag.ts              # vorheriger Übertrag (nimmt benutzerId)
+│   ├── modul-lehrjahr.ts         # Modulnummer → Lehrjahr
 │   ├── status.ts                 # Sequenz-Status als Carbon-Tag
 │   ├── dokument-text.ts          # Text aus PDF/HTML/TXT
 │   └── material-link.ts          # Deep-Links ins Material (#page=N)

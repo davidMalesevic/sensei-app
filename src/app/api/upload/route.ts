@@ -3,17 +3,26 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
-import { material, modularPlan } from "@/db/schema";
-import { count, eq } from "drizzle-orm";
+import { material, modul, modularPlan } from "@/db/schema";
+import { and, count, eq } from "drizzle-orm";
 import { isSmartlearnExport } from "@/lib/smartlearn";
 import { htmlToText } from "@/lib/dokument-text";
 import { leseModulAusMaterial } from "@/app/bildungsplan/actions";
+import { aktuelleSession } from "@/lib/dal";
 
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 const MAX_SIZE = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  // Route Handler laufen am DAL vorbei — die Prüfung muss hier von Hand
+  // stehen. `aktuelleSession()` leitet nicht um, sondern gibt null zurück;
+  // eine API antwortet mit 401 statt mit einer Weiterleitung.
+  const angemeldet = await aktuelleSession();
+  if (!angemeldet) {
+    return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
+  }
+
   let formData;
   try {
     formData = await request.formData();
@@ -43,6 +52,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Das Modul muss dem angemeldeten Benutzer gehören — sonst könnte man
+  // Dateien in fremde Module laden.
+  const eigenesModul = await db.query.modul.findFirst({
+    where: and(eq(modul.id, modulId), eq(modul.benutzerId, angemeldet.id)),
+    columns: { id: true },
+  });
+  if (!eigenesModul) {
+    return NextResponse.json({ error: "Modul nicht gefunden." }, { status: 404 });
+  }
+
   const moduleDir = join(UPLOAD_DIR, "module", modulId);
   await mkdir(moduleDir, { recursive: true });
 
@@ -57,6 +76,7 @@ export async function POST(request: NextRequest) {
   const [created] = await db
     .insert(material)
     .values({
+      benutzerId: angemeldet.id,
       titel: titel || file.name,
       typ: typ as "arbeitsblatt" | "praesentation" | "link" | "video" | "dokument" | "notiz" | "sonstiges",
       modulId,

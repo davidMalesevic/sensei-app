@@ -2,21 +2,61 @@
 
 import { db } from "@/db";
 import {
+  bildungsplan,
   material,
+  modul,
   modulBlock,
   modulAuftrag,
   modulAufgabe,
+  sequenz,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { parseSmartlearnStruktur } from "@/lib/smartlearn";
 import { extractDokumentText } from "@/lib/dokument-text";
 import { importModularPlan } from "./modulplan-actions";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { aktuellerBenutzer, benutzerId } from "@/lib/dal";
+
+/**
+ * Besitzprüfungen. Kindtabellen (modul_block, modul_auftrag, modul_aufgabe)
+ * tragen selbst keine `benutzer_id` — sie hängen immer an einem Modul. Wer
+ * eine ID von aussen hereinreicht, muss deshalb über den Elternteil geprüft
+ * werden, sonst käme man mit einer geratenen UUID an fremde Daten.
+ */
+async function eigenesModul(modulId: string, bId: string) {
+  return db.query.modul.findFirst({
+    where: and(eq(modul.id, modulId), eq(modul.benutzerId, bId)),
+    columns: { id: true },
+  });
+}
+
+async function eigenesMaterial(materialId: string, bId: string) {
+  return db.query.material.findFirst({
+    where: and(eq(material.id, materialId), eq(material.benutzerId, bId)),
+    columns: { id: true, titel: true, dateiPfad: true, modulId: true },
+  });
+}
 
 export async function getCoverageData(klasseId?: string) {
+  const bId = await benutzerId();
+
+  // Nur eigene Sequenzen. Die Tabelle ist eine Altlast und praktisch leer —
+  // die Einschränkung steht trotzdem hier, damit sie es bleibt.
+  const eigeneSequenzen = await db
+    .select({ id: sequenz.id })
+    .from(sequenz)
+    .where(eq(sequenz.benutzerId, bId));
+
+  if (eigeneSequenzen.length === 0) return {};
+
   const zuordnungen = await db.query.sequenzHandlungskompetenz.findMany({
+    where: (sh, { inArray: drin }) =>
+      drin(
+        sh.sequenzId,
+        eigeneSequenzen.map((s) => s.id)
+      ),
     with: {
       sequenz: {
         columns: { id: true, titel: true, klasseId: true },
@@ -61,21 +101,27 @@ export async function getCoverageData(klasseId?: string) {
 }
 
 export async function getKlassenForFilter() {
+  const bId = await benutzerId();
   return db.query.klasse.findMany({
+    where: (k, { eq: gleich }) => gleich(k.benutzerId, bId),
     orderBy: (k, { asc }) => [asc(k.bezeichnung)],
     columns: { id: true, bezeichnung: true },
   });
 }
 
 export async function getModulLookup(): Promise<Record<number, string | null>> {
+  const bId = await benutzerId();
   const modulListe = await db.query.modul.findMany({
+    where: eq(modul.benutzerId, bId),
     columns: { nummer: true, bezeichnung: true },
   });
   return Object.fromEntries(modulListe.map((m) => [m.nummer, m.bezeichnung]));
 }
 
 export async function getModuleGrouped() {
+  const bId = await benutzerId();
   const modulListe = await db.query.modul.findMany({
+    where: eq(modul.benutzerId, bId),
     orderBy: (m, { asc }) => [asc(m.nummer)],
     with: {
       materialien: {
@@ -131,6 +177,11 @@ export async function importModulBaum(
   const leer = { ok: false, bloecke: 0, auftraege: 0, aufgaben: 0 };
 
   if (!modulId) return { ...leer, error: "Kein Modul gewählt." };
+
+  const bId = await benutzerId();
+  if (!(await eigenesModul(modulId, bId))) {
+    return { ...leer, error: "Modul nicht gefunden." };
+  }
 
   const geparst = parseSmartlearnStruktur(html);
   if (geparst.length === 0) {
@@ -215,6 +266,9 @@ export async function importModulBaum(
 
 /** Der Baum eines Moduls für die Anzeige. */
 export async function getModulBaum(modulId: string) {
+  const bId = await benutzerId();
+  if (!(await eigenesModul(modulId, bId))) return [];
+
   return db.query.modulBlock.findMany({
     where: eq(modulBlock.modulId, modulId),
     orderBy: (b, { asc }) => [asc(b.nummer)],
@@ -235,10 +289,11 @@ export async function setzeMaterialBlock(
   materialId: string,
   blockNummer: number | null
 ) {
+  const bId = await benutzerId();
   await db
     .update(material)
     .set({ blockNummer })
-    .where(eq(material.id, materialId));
+    .where(and(eq(material.id, materialId), eq(material.benutzerId, bId)));
   revalidatePath("/bildungsplan");
 }
 
@@ -249,6 +304,19 @@ export async function setzeBlockSlides(
   von: number | null,
   bis: number | null
 ) {
+  const bId = await benutzerId();
+
+  // Der Block muss zu einem eigenen Modul gehören …
+  const eigeneBloecke = await db
+    .select({ id: modulBlock.id })
+    .from(modulBlock)
+    .innerJoin(modul, eq(modulBlock.modulId, modul.id))
+    .where(and(eq(modulBlock.id, blockId), eq(modul.benutzerId, bId)));
+  if (eigeneBloecke.length === 0) return;
+
+  // … und das verknüpfte Material ebenfalls einem selbst.
+  if (materialId && !(await eigenesMaterial(materialId, bId))) return;
+
   await db
     .update(modulBlock)
     .set({ slideMaterialId: materialId, slideVon: von, slideBis: bis })
@@ -271,10 +339,8 @@ export async function leseModulAusMaterial(materialId: string): Promise<{
   aufgaben?: number;
   fehler?: string;
 }> {
-  const eintrag = await db.query.material.findFirst({
-    where: eq(material.id, materialId),
-    columns: { id: true, titel: true, dateiPfad: true, modulId: true },
-  });
+  const bId = await benutzerId();
+  const eintrag = await eigenesMaterial(materialId, bId);
 
   if (!eintrag) return { ok: false, fehler: "Material nicht gefunden." };
   if (!eintrag.modulId) return { ok: false, fehler: "Material hängt an keinem Modul." };
@@ -335,7 +401,16 @@ export async function leseModulAusMaterial(materialId: string): Promise<{
 
 /** Bildungsplan mit Handlungskompetenzbereichen und -kompetenzen. */
 export async function getBildungsplanMitHK() {
+  const b = await aktuellerBenutzer();
+
+  // Der Plan, den dieses Konto benutzt. Ohne Zuweisung fällt es auf die
+  // geteilten Pläne zurück (der offizielle EDB-Plan aus dem Seed).
+  const wo = b.bildungsplanId
+    ? eq(bildungsplan.id, b.bildungsplanId)
+    : isNull(bildungsplan.benutzerId);
+
   return db.query.bildungsplan.findMany({
+    where: wo,
     with: {
       handlungskompetenzbereiche: {
         orderBy: (hkb, { asc }) => [asc(hkb.sortierung)],

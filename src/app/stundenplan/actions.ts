@@ -2,9 +2,11 @@
 
 import { db } from "@/db";
 import { sequenz, klasse, klasseAlias, modul } from "@/db/schema";
-import { eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { parseIcs, fasseZusammen, type IcsTermin } from "@/lib/ics";
+import { benutzerId } from "@/lib/dal";
+import { lehrjahrFuerModul } from "@/lib/modul-lehrjahr";
 
 export type KlassenZuordnung = {
   kuerzel: string;
@@ -58,6 +60,8 @@ function normalisiere(text: string): string {
 export async function analysiereStundenplan(
   inhalt: string
 ): Promise<AnalyseErgebnis> {
+  const bId = await benutzerId();
+
   let termine: IcsTermin[];
   try {
     termine = parseIcs(inhalt);
@@ -76,9 +80,12 @@ export async function analysiereStundenplan(
   const uebersicht = fasseZusammen(termine);
 
   const [klassenListe, aliasse, vorhandeneModule] = await Promise.all([
-    db.select({ id: klasse.id, bezeichnung: klasse.bezeichnung }).from(klasse),
-    db.select().from(klasseAlias),
-    db.select({ nummer: modul.nummer }).from(modul),
+    db
+      .select({ id: klasse.id, bezeichnung: klasse.bezeichnung })
+      .from(klasse)
+      .where(eq(klasse.benutzerId, bId)),
+    db.select().from(klasseAlias).where(eq(klasseAlias.benutzerId, bId)),
+    db.select({ nummer: modul.nummer }).from(modul).where(eq(modul.benutzerId, bId)),
   ]);
 
   const aliasMap = new Map(aliasse.map((a) => [a.kuerzel, a.klasseId]));
@@ -125,6 +132,8 @@ export async function importiereStundenplan(
   inhalt: string,
   zuordnungen: { kuerzel: string; klasseId: string }[]
 ): Promise<ImportErgebnis> {
+  const bId = await benutzerId();
+
   let termine: IcsTermin[];
   try {
     termine = parseIcs(inhalt);
@@ -140,14 +149,18 @@ export async function importiereStundenplan(
     if (!z.klasseId) continue;
     await db
       .insert(klasseAlias)
-      .values({ kuerzel: z.kuerzel, klasseId: z.klasseId })
+      .values({ benutzerId: bId, kuerzel: z.kuerzel, klasseId: z.klasseId })
       .onConflictDoUpdate({
-        target: klasseAlias.kuerzel,
+        // Eindeutig ist das Kürzel nur innerhalb eines Kontos.
+        target: [klasseAlias.benutzerId, klasseAlias.kuerzel],
         set: { klasseId: z.klasseId },
       });
   }
 
-  const aliasse = await db.select().from(klasseAlias);
+  const aliasse = await db
+    .select()
+    .from(klasseAlias)
+    .where(eq(klasseAlias.benutzerId, bId));
   const klasseVon = new Map(aliasse.map((a) => [a.kuerzel, a.klasseId]));
 
   // 2) Module sicherstellen und fehlende Bezeichnungen aus dem Kalender füllen.
@@ -159,7 +172,10 @@ export async function importiereStundenplan(
     }
   }
 
-  const vorhandene = await db.select().from(modul);
+  const vorhandene = await db
+    .select()
+    .from(modul)
+    .where(eq(modul.benutzerId, bId));
   const modulIdVon = new Map(vorhandene.map((m) => [m.nummer, m.id]));
 
   for (const [nummer, bezeichnung] of modulInfos) {
@@ -167,11 +183,21 @@ export async function importiereStundenplan(
     if (!vorhanden) {
       const [neu] = await db
         .insert(modul)
-        .values({ nummer, bezeichnung })
+        .values({
+          benutzerId: bId,
+          nummer,
+          bezeichnung,
+          // Der Kalender kennt nur die Nummer; das Lehrjahr kommt aus dem
+          // Modulbaukasten, damit die Gruppierung im Bildungsplan stimmt.
+          lehrjahr: lehrjahrFuerModul(nummer),
+        })
         .returning({ id: modul.id });
       modulIdVon.set(nummer, neu.id);
     } else if (!vorhanden.bezeichnung && bezeichnung) {
-      await db.update(modul).set({ bezeichnung }).where(eq(modul.id, vorhanden.id));
+      await db
+        .update(modul)
+        .set({ bezeichnung })
+        .where(and(eq(modul.id, vorhanden.id), eq(modul.benutzerId, bId)));
     }
   }
 
@@ -180,7 +206,9 @@ export async function importiereStundenplan(
   const bestehende = await db
     .select()
     .from(sequenz)
-    .where(inArray(sequenz.kalenderKurs, kurse));
+    .where(
+      and(eq(sequenz.benutzerId, bId), inArray(sequenz.kalenderKurs, kurse))
+    );
 
   const schluessel = (kurs: string, datum: string) => `${kurs}|${datum}`;
   const bestandVon = new Map(
@@ -214,6 +242,7 @@ export async function importiereStundenplan(
 
     if (!vorhanden) {
       anzulegen.push({
+        benutzerId: bId,
         titel,
         klasseId,
         modulId,
@@ -252,7 +281,7 @@ export async function importiereStundenplan(
         raum: t.raum,
         updatedAt: new Date(),
       })
-      .where(eq(sequenz.id, vorhanden.id));
+      .where(and(eq(sequenz.id, vorhanden.id), eq(sequenz.benutzerId, bId)));
     aktualisiert++;
   }
 
@@ -284,8 +313,10 @@ export async function importiereStundenplan(
 
 /** Übersicht der importierten Sequenzen für die Stundenplan-Seite. */
 export async function getStundenplanUebersicht() {
+  const bId = await benutzerId();
+
   const eintraege = await db.query.sequenz.findMany({
-    where: isNotNull(sequenz.kalenderKurs),
+    where: and(eq(sequenz.benutzerId, bId), isNotNull(sequenz.kalenderKurs)),
     orderBy: (s, { asc }) => [asc(s.startDatum), asc(s.startZeit)],
     with: { klasse: true, modul: true },
   });
@@ -297,6 +328,7 @@ export async function getStundenplanUebersicht() {
     })
     .from(klasseAlias)
     .innerJoin(klasse, eq(klasseAlias.klasseId, klasse.id))
+    .where(eq(klasseAlias.benutzerId, bId))
     .orderBy(klasseAlias.kuerzel);
 
   return { eintraege, aliasse };
@@ -304,6 +336,11 @@ export async function getStundenplanUebersicht() {
 
 /** Eine gespeicherte Kürzel-Zuordnung wieder entfernen. */
 export async function loescheAlias(kuerzel: string) {
-  await db.delete(klasseAlias).where(eq(klasseAlias.kuerzel, kuerzel));
+  const bId = await benutzerId();
+  await db
+    .delete(klasseAlias)
+    .where(
+      and(eq(klasseAlias.kuerzel, kuerzel), eq(klasseAlias.benutzerId, bId))
+    );
   revalidatePath("/stundenplan");
 }

@@ -2,9 +2,11 @@
 
 import { db } from "@/db";
 import { sequenz, klasse, modul } from "@/db/schema";
-import { and, desc, eq, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { schweizerHeute } from "@/lib/zeit";
+import { aktuelleSession, benutzerId } from "@/lib/dal";
+import { holeVorherigenUebertrag } from "@/lib/uebertrag";
 
 /**
  * Übertrag nach der Lektion: bis wo sind wir gekommen, was fliesst in die
@@ -13,6 +15,7 @@ import { schweizerHeute } from "@/lib/zeit";
  * Bewusst manuell — die App kann nichts wissen, was nicht getippt wird.
  */
 export async function speichereUebertrag(sequenzId: string, formData: FormData) {
+  const bId = await benutzerId();
   const text = ((formData.get("uebertrag") as string) ?? "").trim();
   const erledigt = (formData.getAll("erledigt") as string[]).filter(Boolean);
   const slideBisRoh = ((formData.get("slideBis") as string) ?? "").trim();
@@ -30,7 +33,7 @@ export async function speichereUebertrag(sequenzId: string, formData: FormData) 
       status: "gehalten",
       updatedAt: new Date(),
     })
-    .where(eq(sequenz.id, sequenzId));
+    .where(and(eq(sequenz.id, sequenzId), eq(sequenz.benutzerId, bId)));
 
   revalidatePath(`/sequenzen/${sequenzId}`);
   revalidatePath("/stundenplan");
@@ -39,6 +42,7 @@ export async function speichereUebertrag(sequenzId: string, formData: FormData) 
 
 /** «Kein Übertrag» — bewusst nichts nachzutragen, zählt als erledigt. */
 export async function keinUebertragSetzen(sequenzId: string) {
+  const bId = await benutzerId();
   await db
     .update(sequenz)
     .set({
@@ -47,7 +51,7 @@ export async function keinUebertragSetzen(sequenzId: string) {
       status: "gehalten",
       updatedAt: new Date(),
     })
-    .where(eq(sequenz.id, sequenzId));
+    .where(and(eq(sequenz.id, sequenzId), eq(sequenz.benutzerId, bId)));
 
   revalidatePath(`/sequenzen/${sequenzId}`);
   revalidatePath("/stundenplan");
@@ -56,6 +60,7 @@ export async function keinUebertragSetzen(sequenzId: string) {
 
 /** Einen gesetzten Übertrag wieder öffnen. */
 export async function uebertragZuruecksetzen(sequenzId: string) {
+  const bId = await benutzerId();
   await db
     .update(sequenz)
     .set({
@@ -66,7 +71,7 @@ export async function uebertragZuruecksetzen(sequenzId: string) {
       uebertragAm: null,
       updatedAt: new Date(),
     })
-    .where(eq(sequenz.id, sequenzId));
+    .where(and(eq(sequenz.id, sequenzId), eq(sequenz.benutzerId, bId)));
 
   revalidatePath(`/sequenzen/${sequenzId}`);
   revalidatePath("/stundenplan");
@@ -78,6 +83,11 @@ export async function uebertragZuruecksetzen(sequenzId: string) {
  * Punkt. Ohne sie fehlt der Folgewoche der Ausgangspunkt.
  */
 export async function getOffeneUebertraege() {
+  // Wird im Root-Layout aufgerufen, auch auf der Anmeldeseite: hier darf
+  // nicht umgeleitet werden, sonst dreht sich die Weiterleitung im Kreis.
+  const angemeldet = await aktuelleSession();
+  if (!angemeldet) return [];
+
   const heute = schweizerHeute();
 
   return db
@@ -93,6 +103,7 @@ export async function getOffeneUebertraege() {
     .leftJoin(modul, eq(sequenz.modulId, modul.id))
     .where(
       and(
+        eq(sequenz.benutzerId, angemeldet.id),
         isNotNull(sequenz.kalenderKurs),
         lt(sequenz.startDatum, heute),
         eq(sequenz.keinUebertrag, false),
@@ -103,8 +114,8 @@ export async function getOffeneUebertraege() {
 }
 
 /**
- * Der letzte Übertrag derselben Klasse im selben Modul vor dieser Sequenz —
- * die Antwort auf «wo fange ich an».
+ * Der letzte Übertrag derselben Klasse im selben Modul vor dieser Sequenz.
+ * Die Abfrage liegt in `src/lib/uebertrag.ts` — hier nur die Session.
  */
 export async function getVorherigenUebertrag(
   klasseId: string,
@@ -112,29 +123,6 @@ export async function getVorherigenUebertrag(
   datum: string | null,
   currentSequenzId: string
 ) {
-  if (!modulId || !datum) return null;
-
-  const [vorherige] = await db
-    .select({
-      id: sequenz.id,
-      startDatum: sequenz.startDatum,
-      uebertrag: sequenz.uebertrag,
-      uebertragErledigt: sequenz.uebertragErledigt,
-      uebertragSlideBis: sequenz.uebertragSlideBis,
-      keinUebertrag: sequenz.keinUebertrag,
-    })
-    .from(sequenz)
-    .where(
-      and(
-        eq(sequenz.klasseId, klasseId),
-        eq(sequenz.modulId, modulId),
-        ne(sequenz.id, currentSequenzId),
-        lt(sequenz.startDatum, datum),
-        or(isNotNull(sequenz.uebertrag), eq(sequenz.keinUebertrag, true))
-      )
-    )
-    .orderBy(desc(sequenz.startDatum))
-    .limit(1);
-
-  return vorherige ?? null;
+  const bId = await benutzerId();
+  return holeVorherigenUebertrag(bId, klasseId, modulId, datum, currentSequenzId);
 }

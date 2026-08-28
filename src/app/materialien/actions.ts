@@ -2,15 +2,28 @@
 
 import { db } from "@/db";
 import { material, materialTask } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { extractDokumentText } from "@/lib/dokument-text";
 import { readFile, unlink } from "fs/promises";
 import { join } from "path";
+import { benutzerId } from "@/lib/dal";
+
+/**
+ * material_task hängt am Material und trägt selbst keinen Besitzer — die
+ * Prüfung läuft deshalb über das Elternmaterial.
+ */
+async function eigenesMaterial(id: string, bId: string) {
+  return db.query.material.findFirst({
+    where: and(eq(material.id, id), eq(material.benutzerId, bId)),
+  });
+}
 
 export async function getMaterialien() {
+  const bId = await benutzerId();
   return db.query.material.findMany({
+    where: eq(material.benutzerId, bId),
     orderBy: (m, { desc }) => [desc(m.createdAt)],
     with: {
       sequenz: { columns: { id: true, titel: true } },
@@ -21,34 +34,39 @@ export async function getMaterialien() {
 }
 
 export async function getMaterialienForSequenz(sequenzId: string) {
+  const bId = await benutzerId();
   return db.query.material.findMany({
-    where: eq(material.sequenzId, sequenzId),
+    where: and(eq(material.sequenzId, sequenzId), eq(material.benutzerId, bId)),
     orderBy: (m, { desc }) => [desc(m.createdAt)],
   });
 }
 
 export async function getMaterialienForBlock(lektionsblockId: string) {
+  const bId = await benutzerId();
   return db.query.material.findMany({
-    where: eq(material.lektionsblockId, lektionsblockId),
+    where: and(eq(material.lektionsblockId, lektionsblockId), eq(material.benutzerId, bId)),
     orderBy: (m, { desc }) => [desc(m.createdAt)],
   });
 }
 
 export async function getMaterialienForPhase(phaseId: string) {
+  const bId = await benutzerId();
   return db.query.material.findMany({
-    where: eq(material.phaseId, phaseId),
+    where: and(eq(material.phaseId, phaseId), eq(material.benutzerId, bId)),
     orderBy: (m, { desc }) => [desc(m.createdAt)],
   });
 }
 
 export async function getMaterialienForModul(modulId: string) {
+  const bId = await benutzerId();
   return db.query.material.findMany({
-    where: eq(material.modulId, modulId),
+    where: and(eq(material.modulId, modulId), eq(material.benutzerId, bId)),
     orderBy: (m, { desc }) => [desc(m.createdAt)],
   });
 }
 
 export async function createMaterial(formData: FormData) {
+  const bId = await benutzerId();
   const titel = formData.get("titel") as string;
   const typ = formData.get("typ") as string;
   const url = formData.get("url") as string;
@@ -63,6 +81,7 @@ export async function createMaterial(formData: FormData) {
   }
 
   await db.insert(material).values({
+    benutzerId: bId,
     titel,
     typ: typ as "arbeitsblatt" | "praesentation" | "link" | "video" | "dokument" | "notiz" | "sonstiges",
     url: url || null,
@@ -79,11 +98,13 @@ export async function createMaterial(formData: FormData) {
 }
 
 export async function deleteMaterial(id: string) {
-  const mat = await db.query.material.findFirst({
-    where: eq(material.id, id),
-  });
+  const bId = await benutzerId();
+  const mat = await eigenesMaterial(id, bId);
+  if (!mat) return;
 
-  await db.delete(material).where(eq(material.id, id));
+  await db
+    .delete(material)
+    .where(and(eq(material.id, id), eq(material.benutzerId, bId)));
 
   if (mat?.dateiPfad) {
     const uploadDir = process.env.UPLOAD_DIR || "./uploads";
@@ -102,6 +123,9 @@ export async function deleteMaterial(id: string) {
 // ─── Material-Tasks (KI-Extraktion) ──────────────────────────────────────
 
 export async function getMaterialTasks(materialId: string) {
+  const bId = await benutzerId();
+  if (!(await eigenesMaterial(materialId, bId))) return [];
+
   return db.query.materialTask.findMany({
     where: eq(materialTask.materialId, materialId),
     orderBy: (t, { asc }) => [asc(t.sortierung)],
@@ -109,10 +133,15 @@ export async function getMaterialTasks(materialId: string) {
 }
 
 export async function deleteMaterialTask(id: string) {
+  const bId = await benutzerId();
   const task = await db.query.materialTask.findFirst({
     where: eq(materialTask.id, id),
-    with: { material: { columns: { sequenzId: true, modulId: true } } },
+    with: {
+      material: { columns: { sequenzId: true, modulId: true, benutzerId: true } },
+    },
   });
+
+  if (!task || task.material?.benutzerId !== bId) return;
 
   await db.delete(materialTask).where(eq(materialTask.id, id));
 
@@ -165,9 +194,8 @@ Material:
 export async function extractMaterialTasks(
   materialId: string
 ): Promise<{ success: boolean; count: number; error?: string }> {
-  const mat = await db.query.material.findFirst({
-    where: eq(material.id, materialId),
-  });
+  const bId = await benutzerId();
+  const mat = await eigenesMaterial(materialId, bId);
 
   if (!mat) {
     return { success: false, count: 0, error: "Material nicht gefunden." };

@@ -5,6 +5,7 @@ import { UiShell } from "@/components/shell/ui-shell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Analytics } from "@vercel/analytics/next";
 import { getOffeneUebertraege } from "@/app/sequenzen/uebertrag-actions";
+import { aktuelleSession } from "@/lib/dal";
 
 const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
@@ -33,7 +34,11 @@ export const dynamic = "force-dynamic";
 const THEME_SCRIPT = `try{if(localStorage.getItem("sensei-theme")==="dark")document.documentElement.classList.add("dark")}catch(e){}`;
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const offen = await getOffeneUebertraege();
+  // `aktuelleSession()` leitet NICHT um, wenn niemand angemeldet ist — sonst
+  // gäbe es auf der Anmeldeseite eine Weiterleitungsschleife. Ohne Anmeldung
+  // wird die Shell gar nicht gerendert und auch nichts aus der DB geladen.
+  const angemeldet = await aktuelleSession();
+  const offen = angemeldet ? await getOffeneUebertraege() : [];
 
   return (
     <html
@@ -46,7 +51,16 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full">
         <TooltipProvider>
-          <UiShell offeneUebertraege={offen.length}>{children}</UiShell>
+          {angemeldet ? (
+            <UiShell
+              offeneUebertraege={offen.length}
+              benutzerName={angemeldet.name}
+            >
+              {children}
+            </UiShell>
+          ) : (
+            children
+          )}
         </TooltipProvider>
         <Analytics />
       </body>

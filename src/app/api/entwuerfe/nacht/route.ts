@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { erzeugeEntwuerfe } from "@/app/sequenzen/entwurf-actions";
+
+import { db } from "@/db";
+import { erzeugeEntwuerfe } from "@/lib/entwurf";
 import { schweizerDatumPlus } from "@/lib/zeit";
 
 /**
@@ -11,6 +13,11 @@ import { schweizerDatumPlus } from "@/lib/zeit";
  *
  * Standardfenster sind die nächsten 10 Tage — das deckt Donnerstag, Freitag und
  * den folgenden Dienstag ab.
+ *
+ * Seit der Datentrennung läuft er **pro Benutzer**: es gibt keine gemeinsame
+ * Sequenzliste mehr. Die Route weist sich mit CRON_SECRET aus und hat kein
+ * Session-Cookie — deshalb ruft sie die Engine aus `lib/entwurf.ts` direkt auf
+ * und nicht die Server Actions.
  */
 const TAGE_VORAUS = 10;
 
@@ -36,14 +43,49 @@ export async function POST(request: NextRequest) {
   const von = schweizerDatumPlus(0);
   const bis = schweizerDatumPlus(TAGE_VORAUS);
 
-  const start = Date.now();
-  const ergebnis = await erzeugeEntwuerfe(von, bis);
-  const dauer = Math.round((Date.now() - start) / 1000);
+  const alle = await db.query.benutzer.findMany({
+    columns: { id: true, email: true },
+  });
 
+  const start = Date.now();
+  let erzeugt = 0;
+  let uebernommen = 0;
+  let uebersprungen = 0;
+  const fehler: { sequenzId: string; grund: string }[] = [];
+
+  for (const b of alle) {
+    // Ein Fehler in einem Konto darf die übrigen nicht mitreissen.
+    try {
+      const res = await erzeugeEntwuerfe(b.id, von, bis);
+      erzeugt += res.erzeugt;
+      uebernommen += res.uebernommen;
+      uebersprungen += res.uebersprungen;
+      fehler.push(...res.fehler);
+      console.log(
+        `[nachtlauf] ${b.email}: ${res.erzeugt} Entwürfe, ` +
+          `${res.uebernommen} übernommen, ${res.fehler.length} Fehler`
+      );
+    } catch (e) {
+      console.error(`[nachtlauf] ${b.email} fehlgeschlagen:`, e);
+      fehler.push({ sequenzId: "—", grund: `${b.email}: ${e}` });
+    }
+  }
+
+  const dauer = Math.round((Date.now() - start) / 1000);
   console.log(
-    `[nachtlauf] ${von} bis ${bis}: ${ergebnis.erzeugt} Entwürfe, ` +
-      `${ergebnis.fehler.length} Fehler, ${dauer}s`
+    `[nachtlauf] ${von} bis ${bis}, ${alle.length} Konten: ` +
+      `${erzeugt} Entwürfe, ${fehler.length} Fehler, ${dauer}s`
   );
 
-  return NextResponse.json({ von, bis, dauer, ...ergebnis });
+  return NextResponse.json({
+    von,
+    bis,
+    dauer,
+    konten: alle.length,
+    ok: true,
+    erzeugt,
+    uebernommen,
+    uebersprungen,
+    fehler,
+  });
 }

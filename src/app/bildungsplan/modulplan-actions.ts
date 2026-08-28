@@ -1,11 +1,23 @@
 "use server";
 
 import { db } from "@/db";
-import { modularPlan } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { modul, modularPlan } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { htmlToText } from "@/lib/dokument-text";
+import { benutzerId } from "@/lib/dal";
+
+/**
+ * `modular_plan` hängt am Modul und trägt keinen eigenen Besitzer — geprüft
+ * wird deshalb über das Elternmodul.
+ */
+async function eigenesModul(modulId: string, bId: string) {
+  return db.query.modul.findFirst({
+    where: and(eq(modul.id, modulId), eq(modul.benutzerId, bId)),
+    columns: { id: true },
+  });
+}
 import {
   isSmartlearnExport,
   parseModularbeitsplan,
@@ -23,6 +35,9 @@ import {
 // ─── Modulplan (Wochenziele) ──────────────────────────────────────────────
 
 export async function getModularPlan(modulId: string) {
+  const bId = await benutzerId();
+  if (!(await eigenesModul(modulId, bId))) return [];
+
   return db.query.modularPlan.findMany({
     where: eq(modularPlan.modulId, modulId),
     orderBy: (mp, { asc: a }) => [a(mp.kw)],
@@ -124,6 +139,11 @@ export async function importModularPlan(
   quelle?: "json" | "smartlearn" | "ki";
   error?: string;
 }> {
+  const bId = await benutzerId();
+  if (!(await eigenesModul(modulId, bId))) {
+    return { success: false, count: 0, error: "Modul nicht gefunden." };
+  }
+
   const roh = input?.trim();
   if (!modulId) {
     return { success: false, count: 0, error: "Kein Modul gewaehlt." };
@@ -194,6 +214,7 @@ export async function importModularPlan(
     await db.delete(modularPlan).where(eq(modularPlan.modulId, modulId));
   }
 
+
   await db.insert(modularPlan).values(
     eintraege.map((e) => ({
       modulId,
@@ -213,6 +234,7 @@ export async function importModularPlan(
 }
 
 export async function createModularPlanEintrag(formData: FormData) {
+  const bId = await benutzerId();
   const modulId = formData.get("modulId") as string;
   const kw = parseInt(formData.get("kw") as string, 10);
   const ziel = formData.get("ziel") as string;
@@ -220,6 +242,9 @@ export async function createModularPlanEintrag(formData: FormData) {
 
   if (!modulId || !Number.isFinite(kw) || !ziel) {
     throw new Error("Modul, Kalenderwoche und Ziel sind erforderlich.");
+  }
+  if (!(await eigenesModul(modulId, bId))) {
+    throw new Error("Modul nicht gefunden.");
   }
 
   await db.insert(modularPlan).values({
@@ -234,6 +259,16 @@ export async function createModularPlanEintrag(formData: FormData) {
 }
 
 export async function deleteModularPlanEintrag(id: string) {
+  const bId = await benutzerId();
+
+  // Nur löschen, wenn der Eintrag an einem eigenen Modul hängt.
+  const eigene = await db
+    .select({ id: modularPlan.id })
+    .from(modularPlan)
+    .innerJoin(modul, eq(modularPlan.modulId, modul.id))
+    .where(and(eq(modularPlan.id, id), eq(modul.benutzerId, bId)));
+  if (eigene.length === 0) return;
+
   await db.delete(modularPlan).where(eq(modularPlan.id, id));
   revalidatePath("/bildungsplan");
 }

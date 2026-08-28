@@ -484,6 +484,31 @@
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='%23161616'%3E%3Cpath d='M13 24 4 15l1.414-1.414L13 21.171 26.586 7.586 28 9z'/%3E%3C/svg%3E");
   }
 
+  /* Carbon Radio Button: 18px Kreis, gefüllter Punkt bei Auswahl.
+     Gleiche Begründung wie oben — plain CSS statt Tailwind-Utilities. */
+  .carbon-radio {
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    border: 1px solid var(--border-inverse);
+    border-radius: 50%;
+    background-color: transparent;
+    cursor: pointer;
+    transition: box-shadow 70ms var(--ease-carbon-standard);
+  }
+
+  .carbon-radio:checked {
+    box-shadow: inset 0 0 0 0.25rem var(--border-inverse);
+  }
+
+  .carbon-radio:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+
   .carbon-checkbox:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 1px;

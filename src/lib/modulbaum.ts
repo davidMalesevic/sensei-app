@@ -8,7 +8,7 @@
  */
 
 import { db } from "@/db";
-import { modulBlock, modularPlan } from "@/db/schema";
+import { modul, modulBlock, modularPlan } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { materialHref } from "@/lib/material-link";
 
@@ -54,10 +54,20 @@ export type Wochenstoff = {
  * ganze Block. Eine Woche kann zwei Blöcke berühren («Block 01 und Block 02»).
  */
 export async function getWochenstoff(
+  benutzerId: string,
   modulId: string,
   kw: number
 ): Promise<Wochenstoff | null> {
   if (!modulId || !Number.isFinite(kw)) return null;
+
+  // Der Besitzer steht bewusst als Pflichtparameter da, obwohl alle heutigen
+  // Aufrufer den Modulbezug aus einer bereits geprüften Sequenz nehmen: sonst
+  // hinge die Absicherung an der Disziplin künftiger Aufrufer.
+  const eigenes = await db.query.modul.findFirst({
+    where: and(eq(modul.id, modulId), eq(modul.benutzerId, benutzerId)),
+    columns: { id: true },
+  });
+  if (!eigenes) return null;
 
   const [woche] = await db
     .select()

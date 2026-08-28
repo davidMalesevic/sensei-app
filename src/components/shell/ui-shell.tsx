@@ -15,10 +15,13 @@ import {
   Notification,
   Asleep,
   Light,
+  UserAvatar,
+  Logout,
 } from "@carbon/icons-react";
 
 import { cn } from "@/lib/utils";
 import { FeedbackButton } from "@/components/feedback-button";
+import { abmelden } from "@/app/(auth)/actions";
 
 const NAVIGATION = [
   { title: "Dashboard", url: "/", icon: Dashboard },
@@ -50,9 +53,11 @@ function useIstDesktop() {
  */
 export function UiShell({
   offeneUebertraege,
+  benutzerName,
   children,
 }: {
   offeneUebertraege: number;
+  benutzerName: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -122,6 +127,7 @@ export function UiShell({
           </Link>
           <FeedbackButton />
           <ThemeToggle />
+          <BenutzerMenue name={benutzerName} />
         </div>
       </header>
 
@@ -180,7 +186,7 @@ export function UiShell({
           </ul>
 
           <div className="type-label-02 mt-auto px-4 pt-4 text-text-helper">
-            EDB — Berufsfachschule
+            Angemeldet als {benutzerName}
           </div>
         </div>
       </nav>
@@ -240,5 +246,65 @@ function ThemeToggle() {
     >
       {dunkel ? <Light size={20} /> : <Asleep size={20} />}
     </button>
+  );
+}
+
+/**
+ * Global Action mit dem eigenen Namen und dem Weg hinaus.
+ * Abmelden läuft über eine Form Action — ein onClick würde `revalidatePath`
+ * und die Weiterleitung nicht zuverlässig auslösen.
+ */
+function BenutzerMenue({ name }: { name: string }) {
+  const [offen, setOffen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOffen((o) => !o)}
+        aria-expanded={offen}
+        aria-haspopup="menu"
+        aria-label={`Angemeldet als ${name}`}
+        title={name}
+        className="flex h-12 items-center gap-2 px-4 text-shell-text transition-colors duration-[110ms] ease-carbon-standard hover:bg-shell-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
+      >
+        <UserAvatar size={20} />
+        <span className="type-body-compact-02 hidden max-w-32 truncate md:inline">
+          {name}
+        </span>
+      </button>
+
+      {offen && (
+        <>
+          {/* Klick daneben schliesst das Menü. */}
+          <div
+            className="fixed inset-0 z-40"
+            aria-hidden="true"
+            onClick={() => setOffen(false)}
+          />
+          <div
+            role="menu"
+            className="absolute right-0 z-50 w-64 bg-layer shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
+          >
+            <div className="border-b border-border-subtle px-4 py-3">
+              <div className="type-label-02 text-text-helper">Angemeldet als</div>
+              <div className="type-body-compact-02 truncate text-foreground">
+                {name}
+              </div>
+            </div>
+            <form action={abmelden}>
+              <button
+                type="submit"
+                role="menuitem"
+                className="type-body-compact-02 flex h-12 w-full items-center justify-between px-4 text-left text-foreground transition-colors duration-[110ms] ease-carbon-standard hover:bg-layer-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
+              >
+                Abmelden
+                <Logout size={16} />
+              </button>
+            </form>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

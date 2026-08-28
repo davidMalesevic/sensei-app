@@ -2,9 +2,11 @@
 
 import { db } from "@/db";
 import { sequenz } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
+import { benutzerId } from "@/lib/dal";
 
 /**
  * Sequenzen entstehen aus dem Stundenplan-Import, nicht über ein Formular.
@@ -14,7 +16,9 @@ import { redirect } from "next/navigation";
  */
 
 export async function getSequenzen() {
+  const bId = await benutzerId();
   return db.query.sequenz.findMany({
+    where: eq(sequenz.benutzerId, bId),
     orderBy: (s, { asc }) => [asc(s.startDatum), asc(s.startZeit)],
     with: {
       klasse: { columns: { bezeichnung: true } },
@@ -30,8 +34,9 @@ export async function getSequenzById(id: string) {
   // Seite antwortet mit 500 statt 404 — etwa auf alte Links wie /sequenzen/neu.
   if (!UUID.test(id)) return undefined;
 
+  const bId = await benutzerId();
   return db.query.sequenz.findFirst({
-    where: eq(sequenz.id, id),
+    where: and(eq(sequenz.id, id), eq(sequenz.benutzerId, bId)),
     with: {
       klasse: true,
       modul: true,
@@ -40,7 +45,10 @@ export async function getSequenzById(id: string) {
 }
 
 export async function deleteSequenz(id: string) {
-  await db.delete(sequenz).where(eq(sequenz.id, id));
+  const bId = await benutzerId();
+  await db
+    .delete(sequenz)
+    .where(and(eq(sequenz.id, id), eq(sequenz.benutzerId, bId)));
   revalidatePath("/sequenzen");
   revalidatePath("/stundenplan");
   revalidatePath("/");
@@ -48,12 +56,13 @@ export async function deleteSequenz(id: string) {
 }
 
 export async function saveCockpitNotiz(id: string, formData: FormData) {
+  const bId = await benutzerId();
   const notiz = formData.get("cockpitNotiz") as string;
 
   await db
     .update(sequenz)
     .set({ cockpitNotiz: notiz || null, updatedAt: new Date() })
-    .where(eq(sequenz.id, id));
+    .where(and(eq(sequenz.id, id), eq(sequenz.benutzerId, bId)));
 
   revalidatePath(`/sequenzen/${id}`);
 }

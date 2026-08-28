@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   pgTable,
   uuid,
   varchar,
@@ -37,6 +38,58 @@ export const sequenzStatusEnum = pgEnum("sequenz_status", [
   "bestaetigt",
   "gehalten",
 ]);
+
+
+// ─── Benutzer & Session ───
+//
+// Eigenes Login statt eines fremden Dienstes — dieselbe Bauart wie die
+// Menüplanungs-App: Passwort-Hash in `benutzer`, ein zufälliges Token in
+// `session`, das als httpOnly-Cookie beim Browser liegt.
+//
+// `bildungsplanId` hält fest, mit welchem Bildungsplan diese Person arbeitet:
+// entweder ein geteilter (offizieller EDB-Plan, `bildungsplan.benutzerId IS
+// NULL`) oder ein eigener.
+
+export const benutzer = pgTable("benutzer", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  /** Immer kleingeschrieben gespeichert — die Eindeutigkeit ignoriert Gross/Klein. */
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  name: varchar("name", { length: 200 }).notNull(),
+  passwortHash: text("passwort_hash").notNull(),
+  // Zirkelbezug zu `bildungsplan` — Drizzle braucht dafür die explizite
+  // Rückgabeannotation, sonst kann TypeScript den Typ nicht auflösen.
+  bildungsplanId: uuid("bildungsplan_id").references(
+    (): AnyPgColumn => bildungsplan.id,
+    { onDelete: "set null" }
+  ),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const benutzerRelations = relations(benutzer, ({ one, many }) => ({
+  bildungsplan: one(bildungsplan, {
+    fields: [benutzer.bildungsplanId],
+    references: [bildungsplan.id],
+  }),
+  sessions: many(session),
+}));
+
+export const session = pgTable("session", {
+  /** Zufälliges Token, 32 Byte urlsafe — steht so im Cookie. */
+  token: text("token").primaryKey(),
+  benutzerId: uuid("benutzer_id")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  benutzer: one(benutzer, {
+    fields: [session.benutzerId],
+    references: [benutzer.id],
+  }),
+}));
 
 // ─── Semester ───
 
@@ -86,6 +139,9 @@ export const kalenderEintragRelations = relations(kalenderEintrag, ({ one }) => 
 
 export const klasse = pgTable("klasse", {
   id: uuid("id").defaultRandom().primaryKey(),
+  benutzerId: uuid("benutzer_id")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
   bezeichnung: varchar("bezeichnung", { length: 100 }).notNull(),
   beruf: varchar("beruf", { length: 200 }).notNull(),
   lehrjahr: integer("lehrjahr").notNull(),
@@ -105,14 +161,23 @@ export const klasseRelations = relations(klasse, ({ many }) => ({
 // ist intern "MEDB24A"). Die Zuordnung wird beim Stundenplan-Import einmal
 // gesetzt und danach wiederverwendet.
 
-export const klasseAlias = pgTable("klasse_alias", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  kuerzel: varchar("kuerzel", { length: 200 }).notNull().unique(),
-  klasseId: uuid("klasse_id")
-    .references(() => klasse.id, { onDelete: "cascade" })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const klasseAlias = pgTable(
+  "klasse_alias",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    benutzerId: uuid("benutzer_id")
+      .references(() => benutzer.id, { onDelete: "cascade" })
+      .notNull(),
+    kuerzel: varchar("kuerzel", { length: 200 }).notNull(),
+    klasseId: uuid("klasse_id")
+      .references(() => klasse.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  // Früher global eindeutig. Zwei Lehrpersonen können dasselbe
+  // Kalenderkürzel führen — eindeutig ist es nur innerhalb eines Kontos.
+  (t) => [unique().on(t.benutzerId, t.kuerzel)]
+);
 
 export const klasseAliasRelations = relations(klasseAlias, ({ one }) => ({
   klasse: one(klasse, {
@@ -148,6 +213,13 @@ export const semesterKlasseRelations = relations(semesterKlasse, ({ one }) => ({
 
 export const bildungsplan = pgTable("bildungsplan", {
   id: uuid("id").defaultRandom().primaryKey(),
+  /**
+   * NULL = geteilter Plan, den alle sehen (der offizielle EDB-Bildungsplan
+   * aus dem Seed). Sonst gehört der Plan genau dieser Person.
+   */
+  benutzerId: uuid("benutzer_id").references((): AnyPgColumn => benutzer.id, {
+    onDelete: "cascade",
+  }),
   bezeichnung: varchar("bezeichnung", { length: 300 }).notNull(),
   berufsnummer: varchar("berufsnummer", { length: 20 }).notNull(),
   version: varchar("version", { length: 50 }).notNull(),
@@ -241,12 +313,21 @@ export const phasenTemplateRelations = relations(phasenTemplate, ({ one }) => ({
 
 // ─── Modul ───
 
-export const modul = pgTable("modul", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  nummer: integer("nummer").notNull().unique(),
-  bezeichnung: varchar("bezeichnung", { length: 300 }),
-  lehrjahr: integer("lehrjahr"),
-});
+export const modul = pgTable(
+  "modul",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    benutzerId: uuid("benutzer_id")
+      .references(() => benutzer.id, { onDelete: "cascade" })
+      .notNull(),
+    nummer: integer("nummer").notNull(),
+    bezeichnung: varchar("bezeichnung", { length: 300 }),
+    lehrjahr: integer("lehrjahr"),
+  },
+  // Modul 119 gibt es bei jeder Lehrperson — mit eigenem Modulplan,
+  // eigenem Aufgabenbaum und eigenem Material.
+  (t) => [unique().on(t.benutzerId, t.nummer)]
+);
 
 export const modulRelations = relations(modul, ({ many }) => ({
   sequenzen: many(sequenz),
@@ -343,6 +424,9 @@ export const modulAufgabeRelations = relations(modulAufgabe, ({ one }) => ({
 
 export const sequenz = pgTable("sequenz", {
   id: uuid("id").defaultRandom().primaryKey(),
+  benutzerId: uuid("benutzer_id")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
   semesterId: uuid("semester_id").references(() => semester.id, {
     onDelete: "cascade",
   }),
@@ -533,6 +617,9 @@ export const materialTypEnum = pgEnum("material_typ", [
 
 export const material = pgTable("material", {
   id: uuid("id").defaultRandom().primaryKey(),
+  benutzerId: uuid("benutzer_id")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
   titel: varchar("titel", { length: 300 }).notNull(),
   typ: materialTypEnum("typ").notNull(),
   url: text("url"),
@@ -620,6 +707,9 @@ export const materialTaskRelations = relations(materialTask, ({ one }) => ({
 
 export const pendenz = pgTable("pendenz", {
   id: uuid("id").defaultRandom().primaryKey(),
+  benutzerId: uuid("benutzer_id")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
   klasseId: uuid("klasse_id")
     .references(() => klasse.id, { onDelete: "cascade" })
     .notNull(),

@@ -3,6 +3,7 @@ import { kalenderEintrag, modularPlan, pendenz, sequenz } from "@/db/schema";
 import { and, asc, eq, gte } from "drizzle-orm";
 import { getKW, getKWFromDateString } from "@/lib/kw";
 import { schweizerHeute } from "@/lib/zeit";
+import { benutzerId } from "@/lib/dal";
 
 export type ModulplanZiel = {
   kw: number;
@@ -50,8 +51,10 @@ export async function getSequenzKontext(
     return null;
   }
 
+  const bId = await benutzerId();
+
   const seq = await db.query.sequenz.findFirst({
-    where: eq(sequenz.id, sequenzId),
+    where: and(eq(sequenz.id, sequenzId), eq(sequenz.benutzerId, bId)),
     with: {
       modul: { columns: { id: true, nummer: true, bezeichnung: true } },
       lektionsbloecke: {
@@ -93,6 +96,8 @@ export async function getSequenzKontext(
         lbHinweis: modularPlan.lbHinweis,
       })
       .from(modularPlan)
+      // Das Modul gehört bereits dem angemeldeten Benutzer — die Sequenz
+      // oben wurde darauf geprüft.
       .where(eq(modularPlan.modulId, seq.modul.id))
       .orderBy(asc(modularPlan.kw));
 
@@ -120,6 +125,7 @@ export async function getSequenzKontext(
     const vorherige = await db.query.sequenz.findFirst({
       where: (s, { and: a, eq: e, ne }) =>
         a(
+          e(s.benutzerId, bId),
           e(s.klasseId, seq.klasseId),
           e(s.modulId, seq.modulId!),
           ne(s.id, sequenzId)
@@ -174,7 +180,13 @@ export async function getSequenzKontext(
   const pendenzen = await db
     .select({ id: pendenz.id, text: pendenz.text })
     .from(pendenz)
-    .where(and(eq(pendenz.klasseId, seq.klasseId), eq(pendenz.erledigt, false)));
+    .where(
+      and(
+        eq(pendenz.benutzerId, bId),
+        eq(pendenz.klasseId, seq.klasseId),
+        eq(pendenz.erledigt, false)
+      )
+    );
 
   return {
     kw,

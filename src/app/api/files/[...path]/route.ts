@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, stat } from "fs/promises";
 import { join, extname } from "path";
+import { and, eq } from "drizzle-orm";
+
+import { db } from "@/db";
+import { material } from "@/db/schema";
+import { aktuelleSession } from "@/lib/dal";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 
@@ -28,11 +33,30 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  const angemeldet = await aktuelleSession();
+  if (!angemeldet) {
+    return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
+  }
+
   const { path } = await params;
   const relativePath = path.join("/");
 
   if (relativePath.includes("..")) {
     return NextResponse.json({ error: "Ungültiger Pfad." }, { status: 400 });
+  }
+
+  // Ausgeliefert wird nur, was als eigenes Material in der Datenbank steht.
+  // Vorher genügte die Kenntnis des Pfades — die UUIDs sind zwar schwer zu
+  // raten, aber Unratbarkeit ist keine Berechtigung.
+  const eintrag = await db.query.material.findFirst({
+    where: and(
+      eq(material.dateiPfad, relativePath),
+      eq(material.benutzerId, angemeldet.id)
+    ),
+    columns: { id: true },
+  });
+  if (!eintrag) {
+    return NextResponse.json({ error: "Datei nicht gefunden." }, { status: 404 });
   }
 
   const absolutePath = join(UPLOAD_DIR, relativePath);
@@ -50,7 +74,7 @@ export async function GET(
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": contentType,
-      "Cache-Control": "public, max-age=31536000, immutable",
+      "Cache-Control": "private, max-age=3600",
     },
   });
 }

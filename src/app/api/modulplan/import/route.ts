@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractDokumentText } from "@/lib/dokument-text";
 import { importModularPlan } from "@/app/bildungsplan/modulplan-actions";
+import { aktuelleSession } from "@/lib/dal";
 import { importModulBaum } from "@/app/bildungsplan/actions";
 
 const MAX_SIZE = 20 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  // Ohne diese Prüfung würde die Server Action dahinter eine Weiterleitung
+  // werfen — eine API soll aber mit 401 antworten.
+  const angemeldet = await aktuelleSession();
+  if (!angemeldet) {
+    return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
