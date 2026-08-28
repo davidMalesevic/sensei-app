@@ -472,15 +472,22 @@ Dasselbe Modul läuft mit mehreren Klassen — freitags zweimal 168 und zweimal
   Trägt eine Parallelklasse bereits einen Ablauf, wird der übernommen statt
   ein zweiter erzeugt.
 
-### Nachtlauf
+### Vorbereitungsdurchgang (früher «Nachtlauf»)
 
-`POST /api/entwuerfe/nacht` mit `Authorization: Bearer $CRON_SECRET`, Fenster
-sind die nächsten 10 Tage (Do, Fr, folgender Di). Angestossen vom Cron des VPS
-über `scripts/nachtlauf.sh` — bewusst kein Timer im App-Prozess, so überlebt der
-Lauf jeden Neustart und ist von aussen prüfbar. `CRON_SECRET` steht in
-`.env.production` auf dem Server; fehlt es, antwortet die Route mit 503.
+`POST /api/entwuerfe/nacht` mit `Authorization: Bearer $CRON_SECRET`.
+Angestossen vom Cron des VPS über `scripts/nachtlauf.sh` — bewusst kein Timer
+im App-Prozess, so überlebt der Lauf jeden Neustart und ist von aussen prüfbar.
+`CRON_SECRET` steht in `.env.production`; fehlt es, antwortet die Route mit 503.
 
-Zusätzlich gibt es auf `/stundenplan` einen Knopf für den manuellen Anstoss.
+**Der Cron läuft stündlich** (`0 * * * *`), nicht mehr täglich um 03:00. Wann
+jemand drankommt, steht am Konto — siehe *Vorbereitungsdurchgang* im Abschnitt
+«Anmeldung und Datentrennung». Die Route schleift über alle Konten, prüft
+Wochentag und Stunde in Schweizer Zeit und benutzt den persönlichen Vorlauf.
+Ein Fehler in einem Konto reisst die übrigen nicht mit.
+
+`?alle=1` ignoriert die eingestellten Zeitpunkte — für den Handbetrieb.
+Zusätzlich gibt es auf `/stundenplan` einen Knopf, der nur das eigene Konto
+sofort durchrechnet.
 
 ## Zeitzonen
 
@@ -591,6 +598,9 @@ Lehrperson muss der Klasse «macht Aufgabe 4.2» sagen können.
 ```bash
 npm run dev                       # Dev-Server starten (Port 3000)
 npx tsx src/db/migrate-<name>.ts  # Migration ausführen (NICHT drizzle-kit push)
+npx tsx src/db/migrate-benutzer.ts     # Login + Datentrennung
+npx tsx src/db/besitz-uebertragen.ts <email>  # Bestand einem Konto zuweisen
+npx tsx src/db/migrate-admin.ts        # Verwaltung, Einladungen, Zeitplan
 npx tsx src/db/seed.ts            # Seed-Daten laden
 npx tsc --noEmit                  # Type-Check
 npx eslint src                    # Lint
@@ -616,9 +626,12 @@ bevor deployt wird — das Migrations-Script muss dort nicht nochmals laufen.
 
 Auf dem Server ausserhalb des Repos:
 
-- `.env.production` enthält `CRON_SECRET` für den Nachtlauf
-- Die Crontab von root ruft um 03:00 `scripts/nachtlauf.sh` auf,
-  Log unter `/var/log/sensei-nachtlauf.log`
+- `.env.production` enthält `CRON_SECRET`. **`REGISTRIERUNG_CODE` ist dort
+  entfernt** — der Weg herein führt nur noch über Einladungslinks.
+- Die Crontab von root ruft **stündlich** (`0 * * * *`)
+  `scripts/nachtlauf.sh` auf, Log unter `/var/log/sensei-nachtlauf.log`.
+  Dadurch 24 Einträge pro Tag statt einem — eine Log-Rotation gibt es noch
+  nicht.
 - **Der Container läuft auf UTC** — siehe *Zeitzonen*
 
 ## Projektstruktur
@@ -627,16 +640,16 @@ Auf dem Server ausserhalb des Repos:
 src/
 ├── app/
 │   ├── page.tsx                  # Dashboard: laufende + nächste Sequenzen
-│   ├── api/
-│   │   ├── entwuerfe/nacht/      # Nachtlauf, per CRON_SECRET geschützt
+│   ├── api/                      # alle prüfen die Session selbst (401)
+│   │   ├── entwuerfe/nacht/      # Vorbereitungsdurchgang, CRON_SECRET
 │   │   ├── upload/               # Datei-Upload für Modul-Material
-│   │   ├── files/[...path]/      # Ausliefern hochgeladener Dateien
+│   │   ├── files/[...path]/      # nur eigenes Material, Cache private
 │   │   └── modulplan/import/     # Modulplan + Aufgabenbaum aus Datei
 │   ├── stundenplan/              # .ics-Import, Klassenzuordnung, Wochenübersicht
 │   ├── klassen/                  # Klassen CRUD + Pendenzen
 │   ├── sequenzen/
 │   │   ├── actions.ts            # nur noch Lesen, Löschen, Notiz
-│   │   ├── entwurf-actions.ts    # Ablauf: erzeugen, schleifen, übernehmen
+│   │   ├── entwurf-actions.ts    # dünne Hüllen um lib/entwurf.ts
 │   │   ├── uebertrag-actions.ts  # Übertrag + offene Überträge
 │   │   └── [id]/                 # eine Ansicht, keine Umschaltung
 │   │       ├── context-header.tsx
