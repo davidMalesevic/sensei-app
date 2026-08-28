@@ -56,6 +56,25 @@ export const benutzer = pgTable("benutzer", {
   email: varchar("email", { length: 320 }).notNull().unique(),
   name: varchar("name", { length: 200 }).notNull(),
   passwortHash: text("passwort_hash").notNull(),
+  /** Darf die Verwaltung sehen. Der erste angelegte Benutzer ist Admin. */
+  istAdmin: boolean("ist_admin").default(false).notNull(),
+  /** Für die Verwaltungsübersicht — wird bei jeder Anmeldung gesetzt. */
+  letzteAnmeldung: timestamp("letzte_anmeldung"),
+
+  // ─ Vorbereitungsdurchgang (früher fix «Nachtlauf um 03:00 für alle») ─
+  //
+  // Der Cron auf dem Server läuft stündlich und fragt für jedes Konto, ob
+  // jetzt sein Zeitpunkt ist. Wann jemand vorbereitet, ist eine persönliche
+  // Gewohnheit — die Mittwochnacht passt nicht für alle.
+  vorbereitungAktiv: boolean("vorbereitung_aktiv").default(true).notNull(),
+  /** 0 = Sonntag … 6 = Samstag. NULL = jeden Tag. */
+  vorbereitungTag: integer("vorbereitung_tag"),
+  /** Stunde in Schweizer Zeit, 0–23. */
+  vorbereitungStunde: integer("vorbereitung_stunde").default(3).notNull(),
+  /** Wie weit im Voraus geplant wird. */
+  vorbereitungTageVoraus: integer("vorbereitung_tage_voraus")
+    .default(10)
+    .notNull(),
   // Zirkelbezug zu `bildungsplan` — Drizzle braucht dafür die explizite
   // Rückgabeannotation, sonst kann TypeScript den Typ nicht auflösen.
   bildungsplanId: uuid("bildungsplan_id").references(
@@ -72,6 +91,7 @@ export const benutzerRelations = relations(benutzer, ({ one, many }) => ({
     references: [bildungsplan.id],
   }),
   sessions: many(session),
+  resets: many(passwortReset),
 }));
 
 export const session = pgTable("session", {
@@ -87,6 +107,62 @@ export const session = pgTable("session", {
 export const sessionRelations = relations(session, ({ one }) => ({
   benutzer: one(benutzer, {
     fields: [session.benutzerId],
+    references: [benutzer.id],
+  }),
+}));
+
+/**
+ * Einmal-Link zum Setzen eines neuen Passworts.
+ *
+ * Gespeichert wird nur der SHA-256-Hash des Tokens: wer die Datenbank liest,
+ * bekommt damit keinen funktionierenden Link. Der Klartext existiert genau
+ * einmal — in dem Link, den der Admin weitergibt.
+ */
+export const passwortReset = pgTable("passwort_reset", {
+  tokenHash: text("token_hash").primaryKey(),
+  benutzerId: uuid("benutzer_id")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  /** Gesetzt, sobald der Link benutzt wurde — danach ist er tot. */
+  verwendetAm: timestamp("verwendet_am"),
+});
+
+export const passwortResetRelations = relations(passwortReset, ({ one }) => ({
+  benutzer: one(benutzer, {
+    fields: [passwortReset.benutzerId],
+    references: [benutzer.id],
+  }),
+}));
+
+/**
+ * Einladung: ein Einmal-Link pro Person statt eines gemeinsamen Codes.
+ *
+ * Ein geteiltes Geheimnis läuft nie ab, lässt sich nicht einzeln zurücknehmen
+ * und wandert weiter. Eine Einladung gehört genau einer E-Mail, verfällt nach
+ * sieben Tagen und ist danach — oder nach der Verwendung — tot.
+ *
+ * Wie beim Passwort-Reset steht nur der SHA-256-Hash in der Datenbank.
+ */
+export const einladung = pgTable("einladung", {
+  tokenHash: text("token_hash").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  erstelltVon: uuid("erstellt_von")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  verwendetAm: timestamp("verwendet_am"),
+  /** Das Konto, das daraus entstanden ist. */
+  benutzerId: uuid("benutzer_id").references((): AnyPgColumn => benutzer.id, {
+    onDelete: "set null",
+  }),
+});
+
+export const einladungRelations = relations(einladung, ({ one }) => ({
+  ersteller: one(benutzer, {
+    fields: [einladung.erstelltVon],
     references: [benutzer.id],
   }),
 }));

@@ -1,32 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-
 import { db } from "@/db";
 import { erzeugeEntwuerfe } from "@/lib/entwurf";
-import { schweizerDatumPlus } from "@/lib/zeit";
+import { schweizerDatumPlus, schweizerJetzt } from "@/lib/zeit";
 
 /**
- * Nachtlauf für die Ablaufentwürfe.
+ * Vorbereitungsdurchgang.
  *
  * Bewusst als Route statt als Timer im App-Prozess: so wird der Lauf von einem
  * Cron auf dem VPS angestossen, überlebt jeden Neustart und ist von aussen
  * prüfbar. Siehe `erstellungsprozess.md`, Abschnitt 5.1.
  *
- * Standardfenster sind die nächsten 10 Tage — das deckt Donnerstag, Freitag und
- * den folgenden Dienstag ab.
+ * Der Cron ruft **stündlich** auf; wer wann drankommt, steht am Konto
+ * (`vorbereitung_tag`, `vorbereitung_stunde`). Die Mittwochnacht war nur die
+ * Gewohnheit einer einzelnen Person — jetzt stellt sie jede selbst ein.
  *
- * Seit der Datentrennung läuft er **pro Benutzer**: es gibt keine gemeinsame
- * Sequenzliste mehr. Die Route weist sich mit CRON_SECRET aus und hat kein
- * Session-Cookie — deshalb ruft sie die Engine aus `lib/entwurf.ts` direkt auf
- * und nicht die Server Actions.
+ * Die Route weist sich mit CRON_SECRET aus und hat kein Session-Cookie —
+ * deshalb ruft sie die Engine aus `lib/entwurf.ts` direkt auf und nicht die
+ * Server Actions.
  */
-const TAGE_VORAUS = 10;
-
 function autorisiert(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-
-  const header = request.headers.get("authorization");
-  return header === `Bearer ${secret}`;
+  return request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -40,11 +35,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nicht autorisiert." }, { status: 401 });
   }
 
-  const von = schweizerDatumPlus(0);
-  const bis = schweizerDatumPlus(TAGE_VORAUS);
+  // `alle=1` ignoriert die eingestellten Zeitpunkte — für den Handbetrieb.
+  const alleErzwingen = request.nextUrl.searchParams.get("alle") === "1";
 
-  const alle = await db.query.benutzer.findMany({
-    columns: { id: true, email: true },
+  const jetzt = schweizerJetzt();
+  const stundeJetzt = Number(jetzt.zeit.slice(0, 2));
+  const wochentag = new Date(jetzt.datum + "T12:00:00").getDay();
+
+  const konten = await db.query.benutzer.findMany({
+    columns: {
+      id: true,
+      email: true,
+      vorbereitungAktiv: true,
+      vorbereitungTag: true,
+      vorbereitungStunde: true,
+      vorbereitungTageVoraus: true,
+    },
+  });
+
+  const faellig = konten.filter((b) => {
+    if (alleErzwingen) return true;
+    if (!b.vorbereitungAktiv) return false;
+    if (b.vorbereitungStunde !== stundeJetzt) return false;
+    // NULL heisst «jeden Tag».
+    return b.vorbereitungTag === null || b.vorbereitungTag === wochentag;
   });
 
   const start = Date.now();
@@ -53,7 +67,10 @@ export async function POST(request: NextRequest) {
   let uebersprungen = 0;
   const fehler: { sequenzId: string; grund: string }[] = [];
 
-  for (const b of alle) {
+  for (const b of faellig) {
+    const von = schweizerDatumPlus(0);
+    const bis = schweizerDatumPlus(b.vorbereitungTageVoraus);
+
     // Ein Fehler in einem Konto darf die übrigen nicht mitreissen.
     try {
       const res = await erzeugeEntwuerfe(b.id, von, bis);
@@ -62,26 +79,26 @@ export async function POST(request: NextRequest) {
       uebersprungen += res.uebersprungen;
       fehler.push(...res.fehler);
       console.log(
-        `[nachtlauf] ${b.email}: ${res.erzeugt} Entwürfe, ` +
+        `[vorbereitung] ${b.email} (${von}–${bis}): ${res.erzeugt} Entwürfe, ` +
           `${res.uebernommen} übernommen, ${res.fehler.length} Fehler`
       );
     } catch (e) {
-      console.error(`[nachtlauf] ${b.email} fehlgeschlagen:`, e);
+      console.error(`[vorbereitung] ${b.email} fehlgeschlagen:`, e);
       fehler.push({ sequenzId: "—", grund: `${b.email}: ${e}` });
     }
   }
 
   const dauer = Math.round((Date.now() - start) / 1000);
   console.log(
-    `[nachtlauf] ${von} bis ${bis}, ${alle.length} Konten: ` +
-      `${erzeugt} Entwürfe, ${fehler.length} Fehler, ${dauer}s`
+    `[vorbereitung] ${jetzt.datum} ${jetzt.zeit}: ${faellig.length} von ` +
+      `${konten.length} Konten fällig, ${erzeugt} Entwürfe, ${dauer}s`
   );
 
   return NextResponse.json({
-    von,
-    bis,
+    zeitpunkt: `${jetzt.datum} ${jetzt.zeit}`,
+    kontenGesamt: konten.length,
+    kontenFaellig: faellig.length,
     dauer,
-    konten: alle.length,
     ok: true,
     erzeugt,
     uebernommen,

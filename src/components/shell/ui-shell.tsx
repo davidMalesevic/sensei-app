@@ -17,6 +17,8 @@ import {
   Light,
   UserAvatar,
   Logout,
+  Settings,
+  UserAdmin,
 } from "@carbon/icons-react";
 
 import { cn } from "@/lib/utils";
@@ -54,10 +56,12 @@ function useIstDesktop() {
 export function UiShell({
   offeneUebertraege,
   benutzerName,
+  istAdmin,
   children,
 }: {
   offeneUebertraege: number;
   benutzerName: string;
+  istAdmin: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -127,7 +131,7 @@ export function UiShell({
           </Link>
           <FeedbackButton />
           <ThemeToggle />
-          <BenutzerMenue name={benutzerName} />
+          <BenutzerMenue name={benutzerName} istAdmin={istAdmin} />
         </div>
       </header>
 
@@ -151,7 +155,10 @@ export function UiShell({
       >
         <div className="flex h-full flex-col overflow-y-auto py-4">
           <ul>
-            {NAVIGATION.map((item) => {
+            {(istAdmin
+              ? [...NAVIGATION, { title: "Verwaltung", url: "/verwaltung", icon: UserAdmin }]
+              : NAVIGATION
+            ).map((item) => {
               const aktiv =
                 item.url === "/"
                   ? pathname === "/"
@@ -254,7 +261,13 @@ function ThemeToggle() {
  * Abmelden läuft über eine Form Action — ein onClick würde `revalidatePath`
  * und die Weiterleitung nicht zuverlässig auslösen.
  */
-function BenutzerMenue({ name }: { name: string }) {
+function BenutzerMenue({
+  name,
+  istAdmin,
+}: {
+  name: string;
+  istAdmin: boolean;
+}) {
   const [offen, setOffen] = useState(false);
 
   return (
@@ -292,7 +305,27 @@ function BenutzerMenue({ name }: { name: string }) {
                 {name}
               </div>
             </div>
-            <form action={abmelden}>
+            <Link
+              href="/mein-konto"
+              role="menuitem"
+              onClick={() => setOffen(false)}
+              className="type-body-compact-02 flex h-12 w-full items-center justify-between px-4 text-foreground transition-colors duration-[110ms] ease-carbon-standard hover:bg-layer-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
+            >
+              Mein Konto
+              <Settings size={16} />
+            </Link>
+            {istAdmin && (
+              <Link
+                href="/verwaltung"
+                role="menuitem"
+                onClick={() => setOffen(false)}
+                className="type-body-compact-02 flex h-12 w-full items-center justify-between border-t border-border-subtle px-4 text-foreground transition-colors duration-[110ms] ease-carbon-standard hover:bg-layer-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
+              >
+                Verwaltung
+                <UserAdmin size={16} />
+              </Link>
+            )}
+            <form action={abmelden} className="border-t border-border-subtle">
               <button
                 type="submit"
                 role="menuitem"

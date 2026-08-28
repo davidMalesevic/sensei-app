@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { SESSION_COOKIE } from "@/lib/auth";
 
+/** Der Proxy reicht diese beiden Angaben ans Root-Layout weiter. */
+export const PFAD_HEADER = "x-sensei-pfad";
+export const OEFFENTLICH_HEADER = "x-sensei-oeffentlich";
+
 /**
  * In Next.js 16 heisst die frühere `middleware.ts` **`proxy.ts`**.
  * https://nextjs.org/docs/app/api-reference/file-conventions/proxy
@@ -12,7 +16,13 @@ import { SESSION_COOKIE } from "@/lib/auth";
  * ausbremsen. Ob die Session gültig ist und wem sie gehört, prüft
  * `src/lib/dal.ts` bei jedem Datenzugriff.
  */
-const OEFFENTLICH = ["/anmelden", "/registrieren"];
+const OEFFENTLICH = [
+  "/anmelden",
+  // Einladungs- und Passwort-Links müssen ohne Anmeldung erreichbar sein —
+  // wer sie öffnet, hat ja gerade noch kein Konto bzw. keinen Zugang.
+  "/einladung",
+  "/neues-passwort",
+];
 
 export function proxy(request: NextRequest) {
   const pfad = request.nextUrl.pathname;
@@ -28,11 +38,25 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(ziel);
   }
 
-  if (angemeldet && istOeffentlich) {
-    return NextResponse.redirect(new URL("/", request.nextUrl));
-  }
+  // Der Pfad wandert als Header weiter, damit das Root-Layout weiss, ob es
+  // die UI Shell zeichnen soll. Die Next-Doku nennt Header ausdrücklich als
+  // den Weg, Information aus dem Proxy in die Anwendung zu geben — ein Layout
+  // kennt den Pfad sonst nicht.
+  const weiter = new Headers(request.headers);
+  weiter.set(PFAD_HEADER, pfad);
+  weiter.set(OEFFENTLICH_HEADER, istOeffentlich ? "1" : "0");
 
-  return NextResponse.next();
+  // Bewusst KEINE Gegenregel «Cookie da → weg von der Anmeldeseite».
+  //
+  // Der Proxy weiss nur, *dass* ein Cookie existiert, nicht ob die Sitzung
+  // noch gilt. Mit einem abgelaufenen Cookie entstünde sonst eine Schleife:
+  // `/` schickt zur Anmeldung (die Sitzung ist ungültig), der Proxy schickt
+  // zurück auf `/` (ein Cookie ist ja da), und so weiter. Das trifft jeden,
+  // dessen Sitzung abläuft oder dem ein Admin die Sitzungen beendet hat.
+  //
+  // Ob jemand bereits angemeldet ist, entscheidet deshalb die Anmeldeseite
+  // selbst — dort wird die Sitzung wirklich geprüft.
+  return NextResponse.next({ request: { headers: weiter } });
 }
 
 export const config = {

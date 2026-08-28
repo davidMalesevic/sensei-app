@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { and, eq, gt } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -14,6 +14,7 @@ export type AngemeldeterBenutzer = {
   email: string;
   name: string;
   bildungsplanId: string | null;
+  istAdmin: boolean;
 };
 
 /**
@@ -37,6 +38,7 @@ export const aktuelleSession = cache(async () => {
       email: benutzer.email,
       name: benutzer.name,
       bildungsplanId: benutzer.bildungsplanId,
+      istAdmin: benutzer.istAdmin,
     })
     .from(session)
     .innerJoin(benutzer, eq(session.benutzerId, benutzer.id))
@@ -53,6 +55,7 @@ export const aktuelleSession = cache(async () => {
     email: b.email,
     name: b.name,
     bildungsplanId: b.bildungsplanId,
+    istAdmin: b.istAdmin,
   } satisfies AngemeldeterBenutzer;
 });
 
@@ -69,3 +72,15 @@ export const aktuellerBenutzer = cache(
 export async function benutzerId(): Promise<string> {
   return (await aktuellerBenutzer()).id;
 }
+
+/**
+ * Für die Verwaltung. Wer kein Admin ist, bekommt 404 statt 403 — eine
+ * Seite, die man nicht betreten darf, muss nicht verraten, dass es sie gibt.
+ */
+export const aktuellerAdmin = cache(
+  async (): Promise<AngemeldeterBenutzer> => {
+    const b = await aktuellerBenutzer();
+    if (!b.istAdmin) notFound();
+    return b;
+  }
+);

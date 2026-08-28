@@ -8,51 +8,50 @@ import { Input } from "@/components/ui/input";
 import { Label, HelperText } from "@/components/ui/label";
 import { Notification } from "@/components/ui/notification";
 import { cn } from "@/lib/utils";
-import { registrieren, type AuthZustand } from "../actions";
+import { einladungAnnehmen, type AuthZustand } from "../../actions";
 
 export type PlanOption = { id: string; bezeichnung: string; version: string };
 
 const EIGENER = "eigener";
 
-export function RegistrierFormular({ plaene }: { plaene: PlanOption[] }) {
+export function EinladungsFormular({
+  token,
+  email,
+  plaene,
+}: {
+  token: string;
+  email: string;
+  plaene: PlanOption[];
+}) {
   const [zustand, action, laeuft] = useActionState<AuthZustand, FormData>(
-    registrieren,
+    einladungAnnehmen,
     {}
   );
   const [plan, setPlan] = useState(plaene[0]?.id ?? EIGENER);
 
   return (
     <form action={action}>
+      <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="bildungsplan" value={plan} />
+
       {zustand.fehler && (
-        <Notification kind="error" titel="Registrierung fehlgeschlagen" className="mb-8">
+        <Notification kind="error" titel="Das hat nicht geklappt" className="mb-8">
           {zustand.fehler}
         </Notification>
       )}
 
       <div className="mb-8">
-        <Label htmlFor="code">Einladungscode</Label>
-        <Input id="code" name="code" required autoFocus className="mt-2" />
+        <Label htmlFor="email-anzeige">E-Mail</Label>
+        {/* Die Adresse steckt in der Einladung und ist nicht änderbar. */}
+        <Input id="email-anzeige" value={email} readOnly disabled className="mt-2" />
         <HelperText className="mt-2">
-          Ohne Code kein Konto — den Code bekommst du von der Person, die Sensei
-          betreibt.
+          Mit dieser Adresse meldest du dich künftig an.
         </HelperText>
       </div>
 
       <div className="mb-8">
         <Label htmlFor="name">Name</Label>
-        <Input id="name" name="name" required className="mt-2" />
-      </div>
-
-      <div className="mb-8">
-        <Label htmlFor="email">E-Mail</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          className="mt-2"
-        />
+        <Input id="name" name="name" required autoFocus className="mt-2" />
       </div>
 
       <div className="mb-8">
@@ -68,7 +67,6 @@ export function RegistrierFormular({ plaene }: { plaene: PlanOption[] }) {
         <HelperText className="mt-2">Mindestens 10 Zeichen.</HelperText>
       </div>
 
-      {/* Carbon Radio Button Group: welcher Bildungsplan gilt für dieses Konto? */}
       <fieldset className="mb-10">
         <legend className="type-label-02 mb-1 text-text-secondary">
           Bildungsplan
@@ -77,8 +75,6 @@ export function RegistrierFormular({ plaene }: { plaene: PlanOption[] }) {
           Klassen, Sequenzen und Module fangen leer an. Beim Bildungsplan kannst
           du einen bestehenden mitbenutzen.
         </HelperText>
-
-        <input type="hidden" name="bildungsplan" value={plan} />
 
         <div className="bg-layer">
           {plaene.map((p) => (

@@ -64,6 +64,17 @@ legt einen eigenen an (`benutzer.bildungsplan_id`).
   Hand und antworten mit 401 statt mit einer Weiterleitung.
   `/api/files` liefert nur aus, was als eigenes Material in der DB steht —
   vorher genügte die Kenntnis des Pfades.
+- **Der Proxy kennt keine Gegenregel «Cookie da → weg von der Anmeldeseite».**
+  Er weiss nur, *dass* ein Cookie existiert, nicht ob die Sitzung noch gilt.
+  Mit einem abgelaufenen Cookie entstand sonst eine Weiterleitungsschleife:
+  `/` schickt zur Anmeldung, der Proxy zurück auf `/`. Das traf jeden, dessen
+  Sitzung ablief oder dem ein Admin die Sitzungen beendet hatte. Ob jemand
+  bereits angemeldet ist, entscheidet die Anmeldeseite selbst.
+- **Anmelden, Einladung und Passwort-Link stehen ohne UI Shell da.** Welcher
+  Pfad öffentlich ist, reicht der Proxy dem Root-Layout über einen Header
+  (`x-sensei-oeffentlich`) — die Next-Doku nennt Header ausdrücklich als den
+  Weg, Information aus dem Proxy in die Anwendung zu geben; ein Layout kennt
+  den Pfad sonst nicht.
 - **Der Entwurfsgenerator liegt in `src/lib/entwurf.ts`, nicht in einer
   `"use server"`-Datei.** Er nimmt die Benutzer-ID als ersten Parameter, damit
   der Nachtlauf sie ohne Session hereinreichen kann. Läge er in einer
@@ -72,17 +83,71 @@ legt einen eigenen an (`benutzer.bildungsplan_id`).
 - Der **Nachtlauf** (`/api/entwuerfe/nacht`) läuft jetzt **pro Konto** in einer
   Schleife; ein Fehler in einem Konto reisst die übrigen nicht mit.
 
-### Registrierung
+### Hereinkommen: nur auf Einladung
 
-Nur mit Einladungscode: `REGISTRIERUNG_CODE` in `.env.local` bzw.
-`.env.production`. Fehlt er, weist `/registrieren` jede Anmeldung ab.
+Es gibt **keine offene Registrierung** und keinen gemeinsamen Code mehr. Ein
+Admin erzeugt in `/verwaltung` einen Einmal-Link pro Person:
+
+| | Gültigkeit | Einmal? | Rücknehmbar |
+|---|---|---|---|
+| Einladung (`/einladung/<token>`) | 7 Tage | ja | ja |
+| Passwort-Link (`/neues-passwort/<token>`) | 24 Stunden | ja | — |
+
+Von beiden steht **nur der SHA-256-Hash** in der Datenbank; der Klartext
+existiert einmal, in dem Link, den der Admin weitergibt. Wer die Datenbank
+liest, hält damit keinen funktionierenden Link in der Hand. SHA-256 genügt,
+weil das Token 32 zufällige Bytes hat — ein langsames Verfahren wie bei
+Passwörtern braucht es nur gegen Raten.
+
+Die E-Mail steckt in der Einladung und ist beim Anlegen nicht änderbar; sonst
+liesse sich mit einem fremden Link eine beliebige Adresse eintragen. Ein
+Passwort-Link beendet zusätzlich alle Sitzungen des Kontos — wer ihn braucht,
+hat den Zugang womöglich verloren.
+
+### Verwaltung
+
+`/verwaltung`, nur für `benutzer.ist_admin`. `aktuellerAdmin()` liefert für
+alle anderen **404 statt 403**: eine Seite, die man nicht betreten darf, muss
+nicht verraten, dass es sie gibt. Jede Server Action prüft dasselbe noch
+einmal selbst — Actions sind vom Browser aufrufbar, die Prüfung darf nie nur
+in der Seite stehen.
+
+Konten auflisten, einladen, Passwort-Link erzeugen, Sitzungen beenden,
+Admin-Rechte vergeben, Konto samt allen Daten löschen (Tippbestätigung der
+E-Mail). Der **letzte Admin** kann nicht entfernt werden, und niemand entzieht
+sich selbst das Recht oder löscht das eigene Konto.
+
+`migrate-admin.ts` macht das älteste Konto zum Admin, falls es noch keinen
+gibt — sonst käme nach der Migration niemand mehr hinein.
+
+### Mein Konto
+
+`/mein-konto`: Name, E-Mail, Passwort ändern (altes zur Bestätigung). Ein
+Passwortwechsel meldet **andere** Geräte ab, das eigene bleibt angemeldet.
+
+### Vorbereitungsdurchgang
+
+Früher lief der Nachtlauf fix um 03:00 für alle. Jetzt steht am Konto, wann er
+läuft: `vorbereitung_aktiv`, `vorbereitung_tag`, `vorbereitung_stunde`,
+`vorbereitung_tage_voraus`. Der Cron ruft **stündlich** auf; die Route filtert,
+wer gerade dran ist.
+
+**`vorbereitung_tag` ist der Wochentag, an dem der Lauf stattfindet** (0 =
+Sonntag, wie `Date.getDay()`), NULL = jeden Tag. Nicht die Nacht davor: eine
+Beschriftung wie «Dienstagnacht auf Mittwoch» wäre um einen Tag verschoben und
+würde ausserdem unsinnig, sobald jemand 14 Uhr einstellt. Wer die Nacht auf
+Mittwoch meint, wählt Mittwoch und 03:00.
+
+`POST /api/entwuerfe/nacht?alle=1` ignoriert die Zeitpunkte — für den
+Handbetrieb.
 
 ### Migration
 
 ```bash
-npx tsx src/db/migrate-benutzer.ts          # Tabellen + nullbare Spalten
-# dann über /registrieren ein Konto anlegen
+npx tsx src/db/migrate-benutzer.ts            # Tabellen + nullbare Spalten
+# dann ein Konto anlegen (Einladungslink)
 npx tsx src/db/besitz-uebertragen.ts <email>  # Bestand zuweisen, NOT NULL setzen
+npx tsx src/db/migrate-admin.ts               # Admin-Flag, Einladungen, Zeitplan
 ```
 
 Die Spalten entstehen bewusst **nullbar** und werden erst auf NOT NULL gezogen,
@@ -583,7 +648,10 @@ src/
 │   │       └── notizen-section.tsx
 │   ├── bildungsplan/             # HKB/HK, Module, Modulplan, Aufgabenbaum
 │   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
-│   ├── (auth)/                   # Anmelden, Registrieren (ohne UI Shell)
+│   ├── (auth)/                   # Anmelden, Einladung, Passwort-Link
+│   │                             #   (ohne UI Shell, siehe Proxy-Header)
+│   ├── verwaltung/               # Konten, Einladungen — nur für Admins
+│   ├── mein-konto/               # Profil, Passwort, Vorbereitungsdurchgang
 ├── components/
 │   ├── ui/                       # Primitives, nach Carbon-Spezifikation
 │   ├── shell/ui-shell.tsx        # Carbon UI Shell: Kopfleiste + SideNav

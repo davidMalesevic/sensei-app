@@ -1,5 +1,6 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { aktuelleSession } from "@/lib/dal";
 import { AnmeldungRahmen } from "../anmeldung-rahmen";
 import { AnmeldeFormular } from "./anmelde-formular";
 
@@ -10,6 +11,11 @@ export default async function AnmeldenPage({
 }: {
   searchParams: Promise<{ weiter?: string }>;
 }) {
+  // Hier — nicht im Proxy — wird geprüft, ob wirklich eine gültige Sitzung
+  // besteht. Ein abgelaufenes Cookie führt so zum Formular statt in eine
+  // Weiterleitungsschleife.
+  if (await aktuelleSession()) redirect("/");
+
   const { weiter } = await searchParams;
 
   return (
@@ -18,13 +24,8 @@ export default async function AnmeldenPage({
       untertitel="Deine Klassen, Sequenzen und Module liegen hinter dieser Tür."
       fussnote={
         <>
-          Noch kein Konto?{" "}
-          <Link
-            href="/registrieren"
-            className="text-link underline underline-offset-2"
-          >
-            Mit Einladungscode registrieren
-          </Link>
+          Noch kein Konto? Sensei ist nur auf Einladung zugänglich — frag die
+          Person, die es betreibt, nach einem Einladungslink.
         </>
       }
     >

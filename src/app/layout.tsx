@@ -5,7 +5,10 @@ import { UiShell } from "@/components/shell/ui-shell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Analytics } from "@vercel/analytics/next";
 import { getOffeneUebertraege } from "@/app/sequenzen/uebertrag-actions";
+import { headers } from "next/headers";
+
 import { aktuelleSession } from "@/lib/dal";
+import { OEFFENTLICH_HEADER } from "@/proxy";
 
 const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
@@ -37,7 +40,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // `aktuelleSession()` leitet NICHT um, wenn niemand angemeldet ist — sonst
   // gäbe es auf der Anmeldeseite eine Weiterleitungsschleife. Ohne Anmeldung
   // wird die Shell gar nicht gerendert und auch nichts aus der DB geladen.
-  const angemeldet = await aktuelleSession();
+  // Anmelden, Einladung und Passwort-Link stehen bewusst ohne Shell da —
+  // auch für jemanden, der bereits angemeldet ist und einen Einladungslink
+  // öffnet. Welcher Pfad das ist, sagt der Proxy über einen Header.
+  const istOeffentlich =
+    (await headers()).get(OEFFENTLICH_HEADER) === "1";
+
+  const angemeldet = istOeffentlich ? null : await aktuelleSession();
   const offen = angemeldet ? await getOffeneUebertraege() : [];
 
   return (
@@ -55,6 +64,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <UiShell
               offeneUebertraege={offen.length}
               benutzerName={angemeldet.name}
+              istAdmin={angemeldet.istAdmin}
             >
               {children}
             </UiShell>

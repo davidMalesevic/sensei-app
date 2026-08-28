@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scryptAsync = promisify(scrypt);
@@ -69,4 +69,34 @@ export function passwortProblem(passwort: string): string | null {
 /** E-Mails werden kleingeschrieben gespeichert und verglichen. */
 export function normalisiereEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+/**
+ * Einmal-Token für Einladungen und Passwort-Rücksetzung.
+ *
+ * In der Datenbank steht nur der SHA-256-Hash: wer sie liest, hält damit
+ * keinen funktionierenden Link in der Hand. Der Klartext existiert genau
+ * einmal — in dem Link, den der Admin weitergibt. SHA-256 genügt hier, weil
+ * das Token 32 zufällige Bytes hat und nicht erraten werden kann; ein
+ * langsames Verfahren wie bei Passwörtern braucht es dafür nicht.
+ */
+export function erzeugeEinmalToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function tokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Wie lange eine Einladung offen bleibt. */
+export const EINLADUNG_TAGE = 7;
+/** Wie lange ein Passwort-Link gilt. */
+export const RESET_STUNDEN = 24;
+
+export function inTagen(tage: number): Date {
+  return new Date(Date.now() + tage * 24 * 60 * 60 * 1000);
+}
+
+export function inStunden(stunden: number): Date {
+  return new Date(Date.now() + stunden * 60 * 60 * 1000);
 }
