@@ -107,7 +107,8 @@ export async function getOffeneUebertraege() {
         isNotNull(sequenz.kalenderKurs),
         lt(sequenz.startDatum, heute),
         eq(sequenz.keinUebertrag, false),
-        isNull(sequenz.uebertrag)
+        // Gespeichert zählt, nicht getippt — siehe `uebertrag-section.tsx`.
+        isNull(sequenz.uebertragAm)
       )
     )
     .orderBy(desc(sequenz.startDatum), desc(sequenz.startZeit));

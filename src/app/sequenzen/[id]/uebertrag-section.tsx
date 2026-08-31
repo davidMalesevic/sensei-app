@@ -20,6 +20,7 @@ export type UebertragDaten = {
   uebertragErledigt: string[] | null;
   uebertragSlideBis: number | null;
   keinUebertrag: boolean;
+  uebertragAm: Date | null;
 };
 
 /**
@@ -32,15 +33,25 @@ export function UebertragSection({
   datum,
   daten,
   stoff,
+  bereitsErledigt = [],
 }: {
   sequenzId: string;
   datum: string | null;
   daten: UebertragDaten;
   stoff: Wochenstoff | null;
+  /** Aufgaben, die der Übertrag der Vorwoche schon als erledigt führt. */
+  bereitsErledigt?: string[];
 }) {
   const heute = schweizerHeute();
   const gehalten = datum !== null && datum <= heute;
-  const erfasst = daten.keinUebertrag || daten.uebertrag !== null;
+  /**
+   * Erfasst ist ein Übertrag, sobald er **gespeichert** wurde — nicht erst,
+   * wenn eine Notiz getippt ist. Vorher galt `uebertrag !== null`: wer nur
+   * Aufgaben abhakte und eine Slidezahl eintrug, sah das Formular danach
+   * unverändert wieder und musste glauben, das Speichern habe nicht
+   * funktioniert. Gespeichert war es die ganze Zeit.
+   */
+  const erfasst = daten.keinUebertrag || daten.uebertragAm !== null;
 
   // Noch nicht stattgefunden und nichts erfasst: nicht im Weg stehen.
   if (!gehalten && !erfasst) return null;
@@ -61,7 +72,7 @@ export function UebertragSection({
         />
 
         <div className="border-l-[3px] border-l-support-success bg-layer p-4">
-          {daten.keinUebertrag && !daten.uebertrag ? (
+          {daten.keinUebertrag && !daten.uebertrag && !daten.uebertragErledigt?.length && daten.uebertragSlideBis === null ? (
             <p className="type-body-02 text-text-secondary">
               Kein Übertrag — nichts nachzutragen.
             </p>
@@ -106,7 +117,7 @@ export function UebertragSection({
   const speichern = speichereUebertrag.bind(null, sequenzId);
   const keiner = keinUebertragSetzen.bind(null, sequenzId);
 
-  const aufgaben = (stoff?.bloecke ?? []).flatMap((b) =>
+  const alleAufgaben = (stoff?.bloecke ?? []).flatMap((b) =>
     b.auftraege.flatMap((a) =>
       a.aufgaben.map((auf) => ({
         wert: `${a.code} · ${auf.bezeichnung}`,
@@ -115,6 +126,13 @@ export function UebertragSection({
       }))
     )
   );
+
+  // Was letzte Woche schon abgehakt wurde, steht hier nicht mehr zur Wahl —
+  // sonst «will» Sensei jede Woche dieselben Aufgaben erledigt haben. Der
+  // Entwurfsgenerator lässt sie aus demselben Grund weg.
+  const schonErledigt = new Set(bereitsErledigt);
+  const aufgaben = alleAufgaben.filter((a) => !schonErledigt.has(a.wert));
+  const uebrig = alleAufgaben.length - aufgaben.length;
 
   return (
     <section className="mb-12">
@@ -132,6 +150,14 @@ export function UebertragSection({
               <legend className="type-label-02 mb-3 text-text-secondary">
                 Erledigt
               </legend>
+              {uebrig > 0 && (
+                <HelperText className="mb-3">
+                  {uebrig}{" "}
+                  {uebrig === 1 ? "Aufgabe gilt" : "Aufgaben gelten"} aus der
+                  Vorwoche bereits als erledigt und {uebrig === 1 ? "steht" : "stehen"}{" "}
+                  hier nicht mehr.
+                </HelperText>
+              )}
               <div>
                 {aufgaben.map((a) => (
                   <label

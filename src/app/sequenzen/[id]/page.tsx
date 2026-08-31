@@ -134,8 +134,10 @@ export default async function SequenzDetailPage({
           uebertragErledigt: seq.uebertragErledigt,
           uebertragSlideBis: seq.uebertragSlideBis,
           keinUebertrag: seq.keinUebertrag,
+          uebertragAm: seq.uebertragAm,
         }}
         stoff={stoff}
+        bereitsErledigt={stand?.uebertragErledigt ?? []}
       />
 
       <NotizenSection sequenzId={id} notiz={seq.cockpitNotiz} />

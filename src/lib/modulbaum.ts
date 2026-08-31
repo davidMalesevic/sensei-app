@@ -53,6 +53,16 @@ export type Wochenstoff = {
  * Nennt der Modulplan LA-Codes, wird auf diese eingegrenzt — sonst gilt der
  * ganze Block. Eine Woche kann zwei Blöcke berühren («Block 01 und Block 02»).
  */
+/**
+ * Auf den identifizierenden Teil eines LA-Codes kürzen: `LA_278_203`.
+ * Die Bezeichnung dahinter ist nicht verlässlich — sie wird je nach Export
+ * unterschiedlich abgeschnitten.
+ */
+export function normalisiereLaCode(code: string): string {
+  const m = /^(LA[_-]?\d+[_-]?\d+)/i.exec(code.trim());
+  return (m ? m[1] : code.trim()).toLowerCase().replace(/[_-]/g, "_");
+}
+
 export async function getWochenstoff(
   benutzerId: string,
   modulId: string,
@@ -104,13 +114,23 @@ export async function getWochenstoff(
     },
   });
 
-  const laFilter = new Set(woche.laCodes ?? []);
+  // Die LA-Codes im Modulplan sind beim Import oft abgeschnitten: der
+  // Arbeitsplan schreibt «LA_278_203_Markt-», der Aufgabenbaum
+  // «LA_278_203_Branchen, Markt- und Konkurrenzanalyse». Ein exakter
+  // Vergleich liess solche Aufträge stillschweigend aus der Woche fallen —
+  // im Extremfall blieb kein einziger Fakt übrig und der Entwurf bestand nur
+  // noch aus KI-Vorschlägen.
+  //
+  // Verglichen wird deshalb nur der identifizierende Teil `LA_<modul>_<nr>`;
+  // der Rest ist eine menschenlesbare Bezeichnung, die je nach Export anders
+  // abgeschnitten ist. Gleiche Sorte Problem wie `normalisiereBlock()`.
+  const laFilter = new Set((woche.laCodes ?? []).map(normalisiereLaCode));
 
   const bloecke: StoffBlock[] = alleBloecke
     .filter((b) => schluessel.includes(b.schluessel))
     .map((b) => {
       const relevant = laFilter.size
-        ? b.auftraege.filter((a) => laFilter.has(a.code))
+        ? b.auftraege.filter((a) => laFilter.has(normalisiereLaCode(a.code)))
         : b.auftraege;
 
       return {

@@ -40,7 +40,11 @@ export async function holeVorherigenUebertrag(
         eq(sequenz.modulId, modulId),
         ne(sequenz.id, currentSequenzId),
         lt(sequenz.startDatum, datum),
-        or(isNotNull(sequenz.uebertrag), eq(sequenz.keinUebertrag, true))
+        // Ein Übertrag zählt, sobald er gespeichert wurde — auch wenn nur
+        // Aufgaben abgehakt und keine Notiz getippt wurde. Vorher wurde
+        // solch ein Stand übersehen, und der Entwurfsgenerator plante die
+        // längst erledigten Aufgaben erneut ein.
+        or(isNotNull(sequenz.uebertragAm), eq(sequenz.keinUebertrag, true))
       )
     )
     .orderBy(desc(sequenz.startDatum))
