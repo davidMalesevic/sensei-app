@@ -9,8 +9,20 @@ import type { Wochenstoff } from "@/lib/modulbaum";
  * Was in dieser Woche ansteht — aus dem Modulplan und dem Smartlearn-Baum
  * gerechnet, nicht von der KI erfunden. Original-Bezeichnungen bleiben stehen,
  * damit die Lehrperson «macht Aufgabe 4.2» sagen kann.
+ *
+ * Erledigtes wird **markiert, nicht entfernt**: der Block ist die Referenz,
+ * und ein Blick zurück auf eine bereits gemachte Aufgabe ist im Unterricht
+ * normal. Ausgeblendet gehört Erledigtes nur dort, wo etwas zu *tun* ist —
+ * im Ablauf und in der Häkchenliste des Übertrags.
  */
-export function WochenstoffSection({ stoff }: { stoff: Wochenstoff }) {
+export function WochenstoffSection({
+  stoff,
+  bereitsErledigt = [],
+}: {
+  stoff: Wochenstoff;
+  /** Aufgaben, die der Übertrag der Vorwoche als erledigt führt. */
+  bereitsErledigt?: string[];
+}) {
   if (stoff.ohneModulplan) {
     return (
       <section className="mb-12">
@@ -22,12 +34,27 @@ export function WochenstoffSection({ stoff }: { stoff: Wochenstoff }) {
     );
   }
 
+  const erledigt = new Set(bereitsErledigt);
+  const alle = stoff.bloecke.flatMap((b) =>
+    b.auftraege.flatMap((a) => a.aufgaben.map((auf) => `${a.code} · ${auf.bezeichnung}`))
+  );
+  const anzahlErledigt = alle.filter((m) => erledigt.has(m)).length;
+
   return (
     <section className="mb-12">
       <SectionHeader
         titel="Stoff dieser Woche"
         beschreibung={stoff.ziel ?? undefined}
-        aktionen={<Badge variant="cool-gray">KW {stoff.kw}</Badge>}
+        aktionen={
+          <div className="flex items-center gap-2">
+            {anzahlErledigt > 0 && (
+              <Badge variant="green" size="sm">
+                {anzahlErledigt} von {alle.length} erledigt
+              </Badge>
+            )}
+            <Badge variant="cool-gray">KW {stoff.kw}</Badge>
+          </div>
+        }
       />
 
       {stoff.lbHinweis && (
@@ -82,19 +109,39 @@ export function WochenstoffSection({ stoff }: { stoff: Wochenstoff }) {
                     {a.code}
                   </code>
                   <ul className="mt-2 space-y-2">
-                    {a.aufgaben.map((auf) => (
-                      <li key={auf.bezeichnung} className="type-body-02">
-                        <span className="type-heading-compact-02 text-foreground">
-                          {auf.bezeichnung}
-                        </span>
-                        {auf.teilaufgaben.length > 0 && (
-                          <span className="text-text-secondary">
-                            {" · "}
-                            {auf.teilaufgaben.map((t) => t.bezeichnung).join(", ")}
+                    {a.aufgaben.map((auf) => {
+                      const fertig = erledigt.has(`${a.code} · ${auf.bezeichnung}`);
+                      return (
+                        <li
+                          key={auf.bezeichnung}
+                          className="type-body-02 flex flex-wrap items-baseline gap-x-2"
+                        >
+                          <span
+                            className={
+                              fertig
+                                ? "type-heading-compact-02 text-text-helper line-through"
+                                : "type-heading-compact-02 text-foreground"
+                            }
+                          >
+                            {auf.bezeichnung}
                           </span>
-                        )}
-                      </li>
-                    ))}
+                          {fertig && (
+                            <Badge variant="green" size="sm">
+                              erledigt
+                            </Badge>
+                          )}
+                          {auf.teilaufgaben.length > 0 && (
+                            <span
+                              className={
+                                fertig ? "text-text-helper" : "text-text-secondary"
+                              }
+                            >
+                              {auf.teilaufgaben.map((t) => t.bezeichnung).join(", ")}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}

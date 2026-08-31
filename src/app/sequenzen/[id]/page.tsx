@@ -124,7 +124,12 @@ export default async function SequenzDetailPage({
         geschwister={geschwister}
       />
 
-      {stoff && <WochenstoffSection stoff={stoff} />}
+      {stoff && (
+        <WochenstoffSection
+          stoff={stoff}
+          bereitsErledigt={stand?.uebertragErledigt ?? []}
+        />
+      )}
 
       <UebertragSection
         sequenzId={id}
