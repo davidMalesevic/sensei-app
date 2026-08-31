@@ -787,6 +787,13 @@ Auf dem Server ausserhalb des Repos:
   Dadurch 24 Einträge pro Tag statt einem — eine Log-Rotation gibt es noch
   nicht.
 - **Der Container läuft auf UTC** — siehe *Zeitzonen*
+- **`client_max_body_size 50m` steht in beiden Nginx-Vhosts.** Ohne die Zeile
+  gilt Nginx' Vorgabe von **1 MB**, und jeder grössere Upload scheitert mit
+  413, *bevor* die App ihn sieht — im App-Log steht dann nichts. Das war
+  monatelang so und fiel erst auf, als eine Präsentation als PDF hochgeladen
+  werden sollte; die bis dahin hochgeladenen Dateien lagen alle unter 1 MB.
+  Der Wert muss zu `MAX_SIZE` in `src/app/api/upload/route.ts` und zu
+  `MAX_UPLOAD` in `modul-section.tsx` passen.
 
 ## Projektstruktur
 

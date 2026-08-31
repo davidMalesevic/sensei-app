@@ -72,6 +72,10 @@ type ModulData = {
   bloecke: BaumBlock[];
 };
 
+/** Muss zu MAX_SIZE in `src/app/api/upload/route.ts` und zu
+ *  `client_max_body_size` im Nginx-Vhost passen. */
+const MAX_UPLOAD = 50 * 1024 * 1024;
+
 const typLabels: Record<string, string> = {
   arbeitsblatt: "Arbeitsblatt",
   praesentation: "Präsentation",
@@ -120,6 +124,7 @@ function DropZone({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
   const [auswertung, setAuswertung] = useState<string | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
   const dragCounter = useState(0);
 
   async function uploadFiles(prepared: { name: string; blob: Blob }[]) {
@@ -127,6 +132,18 @@ function DropZone({
 
     console.log(`[upload] starting ${prepared.length} files:`, prepared.map(p => `${p.name} (${p.blob.size}b)`));
     setAuswertung(null);
+    setFehler(null);
+
+    // Vorab prüfen, statt erst nach dem Hochladen abzulehnen.
+    const zuGross = prepared.find((p) => p.blob.size > MAX_UPLOAD);
+    if (zuGross) {
+      setFehler(
+        `«${zuGross.name}» ist ${(zuGross.blob.size / 1024 / 1024).toFixed(1)} MB gross. ` +
+          `Erlaubt sind ${MAX_UPLOAD / 1024 / 1024} MB.`
+      );
+      return;
+    }
+
     setIsUploading(true);
     setUploadCount(prepared.length);
     try {
@@ -139,6 +156,27 @@ function DropZone({
         formData.append("titel", name);
         formData.append("typ", "dokument");
         const res = await fetch("/api/upload", { method: "POST", body: formData });
+
+        // Nicht blind `res.json()`: bei 413 antwortet **Nginx**, nicht die App,
+        // und zwar mit einer HTML-Seite. Das Parsen scheiterte dann, der Fehler
+        // landete in der Konsole und die Oberfläche schwieg — der Upload sah
+        // aus, als würde er einfach nichts tun.
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          let meldung: string;
+          try {
+            meldung = JSON.parse(text).error ?? text;
+          } catch {
+            meldung =
+              res.status === 413
+                ? "Die Datei ist zu gross für den Webserver."
+                : `Der Server antwortete mit ${res.status}.`;
+          }
+          setFehler(`«${name}» wurde nicht hochgeladen: ${meldung}`);
+          console.error(`[upload] ${res.status}`, text.slice(0, 200));
+          return;
+        }
+
         const json = await res.json();
         console.log(`[upload] ${i + 1}/${prepared.length} response:`, res.status, json);
 
@@ -160,6 +198,7 @@ function DropZone({
       router.refresh();
     } catch (err) {
       console.error("[upload] error:", err);
+      setFehler(`Der Upload ist fehlgeschlagen: ${err}`);
     } finally {
       setIsUploading(false);
       setUploadCount(0);
@@ -241,6 +280,12 @@ function DropZone({
       )}
 
       {children}
+
+      {fehler && (
+        <Notification kind="error" titel="Upload fehlgeschlagen" className="mt-4">
+          {fehler}
+        </Notification>
+      )}
 
       {auswertung && (
         <Notification kind="success" titel="Ausgewertet" className="mt-4">
