@@ -324,18 +324,24 @@ Diese Version nutzt `@base-ui/react` statt Radix. Häufige Fehlerquellen:
   siehe *Bekannte Altlasten*)
 - Seed-Daten: `src/db/seed.ts` (Bildungsplan EDB + Phasenmodelle AVIVA/PADUA)
 
-### ⚠️ Lokale Entwicklung schreibt in die Produktions-DB
+### Lokale Entwicklung hängt an der Testdatenbank
 
-`.env.local` zeigt auf `127.0.0.1:5432` — das ist ein **SSH-Tunnel auf die
-Produktionsdatenbank**. Es gibt keine separate lokale DB. Jeder lokale Test
-verändert echte Daten. Testdaten deshalb nach dem Testen wieder entfernen.
+`.env.local` zeigt auf `127.0.0.1:5433` — den SSH-Tunnel zur **Testinstanz**,
+nicht mehr zur Produktion. Lokale Tests verändern damit nur Testdaten.
 
 ```bash
-# Tunnel öffnen (Port 5432 ist im Heim-WLAN direkt blockiert)
+# Testdatenbank (Normalfall)
+ssh -i ~/.ssh/id_ed25519_menuplan -L 5433:localhost:5433 -N -f root@159.195.241.246
+
+# Produktionsdatenbank — nur wenn es wirklich sein muss
 ssh -i ~/.ssh/id_ed25519_menuplan -L 5432:localhost:5432 -N -f root@159.195.241.246
-# Tunnel beenden
-kill $(lsof -ti:5432)
+
+kill $(lsof -ti:5433)   # bzw. 5432
 ```
+
+Bis August 2026 zeigte `.env.local` auf die Produktion, und jeder lokale Test
+veränderte echte Unterrichtsdaten. Der Port im Connection-String ist der
+einzige Unterschied — beim Umstellen also genau hinsehen.
 
 ### Migrationen
 
@@ -606,6 +612,61 @@ npx tsc --noEmit                  # Type-Check
 npx eslint src                    # Lint
 npm run build                     # Build (fängt "use server"-Fehler, die tsc nicht sieht)
 ```
+
+## Zwei Instanzen: Test und Produktion
+
+| | Produktion | Test |
+|---|---|---|
+| Adresse | https://sensei.maelu.fun | https://sensei-test.maelu.fun |
+| Branch | `main` | `test` |
+| Verzeichnis | `/opt/sensei-app` | `/opt/sensei-test` |
+| Ports (nur localhost) | App 3000, DB 5432 | App 3001, DB 5433 |
+| Vorbereitungsdurchgang | stündlicher Cron | **kein Cron** |
+
+Volumes, Datenbank, Uploads und `CRON_SECRET` sind getrennt; Compose
+namensraumt sie über das Projektverzeichnis (`sensei-app_*` vs `sensei-test_*`).
+Die Host-Ports kommen aus einer `.env` im jeweiligen Projektverzeichnis
+(`APP_PORT`, `DB_PORT`) — ohne Werte gelten 3000/5432.
+
+### Arbeitsweise
+
+**Nie direkt auf `main` committen.** Gearbeitet wird auf `test`; damit ist
+`main` immer ein Vorfahre und das Freigeben ein Fast-Forward:
+
+```bash
+# 1. Auf test arbeiten und dorthin deployen
+git push origin test
+ssh -i ~/.ssh/id_ed25519_menuplan root@159.195.241.246 \
+  'cd /opt/sensei-test && git pull && docker compose up -d --build'
+
+# 2. Nach dem Prüfen freigeben
+git checkout main && git merge --ff-only test && git push origin main
+ssh -i ~/.ssh/id_ed25519_menuplan root@159.195.241.246 \
+  'cd /opt/sensei-app && git pull && docker compose up -d --build'
+git checkout test && git merge main
+```
+
+Schlägt `--ff-only` fehl, sind die Branches auseinandergelaufen — dann liegt
+auf `main` ein Commit, der nie durch `test` gegangen ist.
+
+### Testdaten
+
+Die Testdatenbank ist eine Kopie der Produktion (Stand 31.08.2026), **ohne**
+fremde Konten: dort liegt nur das eigene. Sitzungen und Passwort-Links werden
+beim Kopieren geleert. Neu aufsetzen:
+
+```bash
+docker compose -f /opt/sensei-app/docker-compose.yml --project-directory /opt/sensei-app \
+  exec -T db pg_dump -U sensei -d sensei --clean --if-exists < /dev/null > /tmp/prod.sql
+cd /opt/sensei-test && docker compose exec -T db psql -q -U sensei -d sensei < /tmp/prod.sql
+docker run --rm -v sensei-app_uploads:/von:ro -v sensei-test_uploads:/nach alpine cp -a /von/. /nach/
+```
+
+Ohne das Uploads-Volume laufen die Materialien in der Testinstanz ins Leere —
+`material.dateiPfad` verweist auf Dateien, die es dort sonst nicht gibt.
+
+**`docker compose exec -T` liest von stdin.** In einem Skript, das per SSH-Heredoc
+läuft, frisst es den Rest des Skripts — deshalb überall `< /dev/null` anhängen.
 
 ## Deployment
 

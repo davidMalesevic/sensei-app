@@ -132,16 +132,18 @@ OLLAMA_API_KEY=…
 OLLAMA_MODEL=…
 ```
 
-### ⚠️ Die lokale Entwicklung schreibt in die Produktionsdatenbank
+### Datenbank über SSH-Tunnel
 
-`.env.local` zeigt auf einen SSH-Tunnel zur Produktions-DB. Eine separate
-lokale Datenbank gibt es nicht. **Jeder lokale Test verändert echte Daten** —
-Testdaten danach wieder entfernen.
+Es gibt keine lokale Datenbank. `.env.local` zeigt über einen SSH-Tunnel auf
+die **Testinstanz** (Port 5433):
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_menuplan -L 5432:localhost:5432 -N -f root@…
-kill $(lsof -ti:5432)
+ssh -i ~/.ssh/id_ed25519_menuplan -L 5433:localhost:5433 -N -f root@…
+kill $(lsof -ti:5433)
 ```
+
+Der Tunnel auf `5432` führt zur **Produktionsdatenbank** — den nur öffnen,
+wenn es wirklich nötig ist.
 
 ### Prüfen
 
@@ -161,6 +163,27 @@ ausführen.
 ---
 
 ## Deployment
+
+Zwei Instanzen auf demselben Server:
+
+| | Produktion | Test |
+|---|---|---|
+| Adresse | https://sensei.maelu.fun | https://sensei-test.maelu.fun |
+| Branch | `main` | `test` |
+| Verzeichnis | `/opt/sensei-app` | `/opt/sensei-test` |
+| Vorbereitungsdurchgang | stündlicher Cron | kein Cron |
+
+Datenbanken, Uploads und Secrets sind getrennt.
+
+**Gearbeitet wird auf `test`, nie direkt auf `main`.** Dadurch ist `main`
+immer ein Vorfahre und das Freigeben ein Fast-Forward:
+
+```bash
+git push origin test          # → Testinstanz
+git checkout main && git merge --ff-only test && git push
+```
+
+Deployt wird auf beiden gleich:
 
 ```bash
 ssh -i ~/.ssh/id_ed25519_menuplan root@… \
