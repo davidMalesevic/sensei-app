@@ -517,6 +517,11 @@ Nicht ableitbar — die App kann nichts wissen, was nicht getippt wird
 
 - Felder auf `sequenz`: `uebertrag`, `uebertragErledigt` (Original-Bezeichnungen
   der abgehakten Aufgaben), `uebertragSlideBis`, `keinUebertrag`, `uebertragAm`.
+- **`uebertragAm` ist der Marker, ob ein Übertrag existiert** — nicht der freie
+  Text `uebertrag`. Nicht jede Lektion braucht eine Notiz; oft sind nur Häkchen
+  und eine Slidezahl fällig. Wer den Text als Marker nimmt, zeigt der Person
+  nach dem Speichern wieder das leere Formular, findet den Stand in der
+  Folgewoche nicht und lässt den roten Punkt stehen.
 - Die Häkchen kommen aus `getWochenstoff()` — angeklickt statt getippt.
 - **Roter Punkt**: vergangene Sequenzen ohne Übertrag zählt
   `getOffeneUebertraege()`; die Zahl steht als Badge am Stundenplan in der
@@ -554,6 +559,13 @@ Konsequenzen im Code:
   geglätteten Text: Spalten werden über die Kopfzeile zugeordnet. Der alte
   Textparser bleibt als Fallback. Eine Zeile kann mehrere KWs betreffen
   (`33/34` → zwei Einträge).
+- **LA-Codes im Plan sind abgeschnitten, im Baum vollständig.** Der Plan
+  liefert `LA_278_203_Markt-`, der Aufgabenbaum
+  `LA_278_203_Branchen, Markt- und Konkurrenzanalyse`. Deshalb vergleicht
+  `normalisiereLaCode()` in `src/lib/modulbaum.ts` nur den identifizierenden
+  Teil (`LA_278_203`). Ein exakter Vergleich liess in Modul 278 zwei von vier
+  LAs still aus der Woche fallen — der Entwurf plante dann Aufgaben, die längst
+  erledigt waren, und liess die anstehenden weg. Nie exakt vergleichen.
 - Manche Module **nummerieren ihre Aufgaben nicht** (dort heissen alle «Neue
   Aufgabe»). Dann ist der LA selbst die Einheit — `sammleFakten()` gibt in dem
   Fall den LA-Code als Fakt aus.
