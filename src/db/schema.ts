@@ -830,3 +830,120 @@ export const sequenzAnkerRelations = relations(sequenzAnker, ({ one }) => ({
     references: [sequenz.id],
   }),
 }));
+
+// ─── Smartlearn-Resultate ─────────────────────────────────────────────────
+//
+// Bewusst **eigene Tabellen ohne Eingriff in bestehende**: das Auswerten von
+// Lernendenabgaben ist ein Versuch. Taugt es nichts, genügt ein DROP der vier
+// Tabellen (`src/db/drop-resultate.ts`) und nichts anderes merkt es. Die
+// Verbindung zum Modulbaum und zum Ablauf läuft nur lesend über den LA-Code.
+//
+// Ein Import ist eine **Momentaufnahme**. Der Export trägt keine Zeitstempel
+// pro Antwort — wann etwas gelöst wurde, ergibt sich erst aus der Differenz
+// zweier Importe. Deshalb wird nie überschrieben, sondern angehängt.
+
+export const resultatImport = pgTable("resultat_import", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  benutzerId: uuid("benutzer_id")
+    .references(() => benutzer.id, { onDelete: "cascade" })
+    .notNull(),
+  modulId: uuid("modul_id")
+    .references(() => modul.id, { onDelete: "cascade" })
+    .notNull(),
+  /** Optional — die Durchführung nennt das Kürzel, die Klasse muss es nicht geben. */
+  klasseId: uuid("klasse_id").references(() => klasse.id, { onDelete: "set null" }),
+  /** `M278_EDB25B_Q1` */
+  durchfuehrung: varchar("durchfuehrung", { length: 200 }),
+  klassenKuerzel: varchar("klassen_kuerzel", { length: 100 }),
+  /** Datum aus dem Export, nicht der Zeitpunkt des Hochladens. */
+  exportDatum: varchar("export_datum", { length: 20 }),
+  dateiname: varchar("dateiname", { length: 300 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const resultatImportRelations = relations(resultatImport, ({ one, many }) => ({
+  modul: one(modul, { fields: [resultatImport.modulId], references: [modul.id] }),
+  klasse: one(klasse, { fields: [resultatImport.klasseId], references: [klasse.id] }),
+  personen: many(resultatPerson),
+  aufgaben: many(resultatAufgabe),
+}));
+
+export const resultatPerson = pgTable("resultat_person", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  importId: uuid("import_id")
+    .references(() => resultatImport.id, { onDelete: "cascade" })
+    .notNull(),
+  nachname: varchar("nachname", { length: 200 }).notNull(),
+  vorname: varchar("vorname", { length: 200 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  /**
+   * Lehrpersonen stehen im Export zwischen den Lernenden und tragen die
+   * Musterlösung in ihren Zellen. Ohne diese Kennzeichnung meldet jede
+   * Duplikatsprüfung als Erstes sie.
+   */
+  istLehrperson: boolean("ist_lehrperson").default(false).notNull(),
+});
+
+export const resultatPersonRelations = relations(resultatPerson, ({ one, many }) => ({
+  import: one(resultatImport, {
+    fields: [resultatPerson.importId],
+    references: [resultatImport.id],
+  }),
+  abgaben: many(resultatAbgabe),
+}));
+
+export const resultatAufgabe = pgTable(
+  "resultat_aufgabe",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    importId: uuid("import_id")
+      .references(() => resultatImport.id, { onDelete: "cascade" })
+      .notNull(),
+    /** Spaltenbuchstabe im Export, z.B. `AG` — der Schlüssel innerhalb eines Imports. */
+    spalte: varchar("spalte", { length: 10 }).notNull(),
+    /** Verknüpft lesend mit `modul_auftrag.code`. */
+    laCode: varchar("la_code", { length: 300 }),
+    /** So, wie der Export sie nennt: `2`. Der Ablauf schreibt `Aufgabe 2 – …`. */
+    aufgabeNr: varchar("aufgabe_nr", { length: 50 }),
+    art: varchar("art", { length: 50 }).notNull(),
+    frage: text("frage"),
+    musterloesung: text("musterloesung"),
+  },
+  (t) => [unique().on(t.importId, t.spalte)]
+);
+
+export const resultatAufgabeRelations = relations(resultatAufgabe, ({ one, many }) => ({
+  import: one(resultatImport, {
+    fields: [resultatAufgabe.importId],
+    references: [resultatImport.id],
+  }),
+  abgaben: many(resultatAbgabe),
+}));
+
+export const resultatAbgabe = pgTable(
+  "resultat_abgabe",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    personId: uuid("person_id")
+      .references(() => resultatPerson.id, { onDelete: "cascade" })
+      .notNull(),
+    aufgabeId: uuid("aufgabe_id")
+      .references(() => resultatAufgabe.id, { onDelete: "cascade" })
+      .notNull(),
+    text: text("text").notNull(),
+    /** Text ohne die vorbefüllte Vorlage — Grundlage jedes Vergleichs. */
+    textBereinigt: text("text_bereinigt").notNull(),
+  },
+  (t) => [unique().on(t.personId, t.aufgabeId)]
+);
+
+export const resultatAbgabeRelations = relations(resultatAbgabe, ({ one }) => ({
+  person: one(resultatPerson, {
+    fields: [resultatAbgabe.personId],
+    references: [resultatPerson.id],
+  }),
+  aufgabe: one(resultatAufgabe, {
+    fields: [resultatAbgabe.aufgabeId],
+    references: [resultatAufgabe.id],
+  }),
+}));

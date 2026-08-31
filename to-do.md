@@ -3,14 +3,18 @@
 
 # ready
 
-smartlearn bietet die möglichkeit aus der lernumgebung die resultate der lernenden zu exportierten. ich möcht diese gerne in sensei prüfen können bzw. automatisiert auswerten lassen. nach folgenden kriterien
-* auswertung der erledigten aufgaben anhand excel export
-* prüfung auf duplikate oder sehr ähnliche abgaben
-* prüfen auf KI verdacht (wie wahrscheinlich ist es, dass jemand KI verwendet hat)
-* grundsätzlich die qualität der abgaben anhand der theorieinhalte prüfen und bewerten
-* ich bin sehr offen für vorschläge von dir!
+* KI-Bewertung der Abgaben (zweiter Schritt zu den Resultaten)
+  * Qualität gegen Musterlösung (43 von 105 Aufgaben haben eine) und gegen die Theorieinhalte im Modulbaum
+  * Beobachtungen statt KI-Wahrscheinlichkeit: Stilbruch gegen die eigenen übrigen Texte, fehlender Selbstbezug bei Fragen, die danach fragen
+  * VOR jedem KI-Aufruf pseudonymisieren — nur Frage- und Antworttext, keine Namen
+* Übertrag aus zwei Importen vorschlagen: die Differenz zeigt, was seit der letzten Lektion dazugekommen ist
 
 # done
+* \~\~**Smartlearn-Resultate einlesen und deterministisch auswerten**\~\~ (2026-08-31)
+  * Parser ohne KI (`src/lib/smartlearn-resultate.ts`): Lehrpersonen erkannt, vorbefüllte Vorlagen abgezogen, LA-Codes fortgeschrieben
+  * Vollständigkeit, Auswahlaufgaben gegen Musterlösung, Klassenbild, Verknüpfung mit dem geplanten Unterrichtstag
+  * Gleiche Texte als **Gruppen** statt Paare — am echten Export 138 Treffer auf 1 reduziert
+  * Bewusst wegwerfbar: `npx tsx src/db/drop-resultate.ts --wirklich`
 * \~\~**Cockpit-Nachschärfung nach Interview-Abgleich** (KI-Bausteine als Anker im Cockpit, Prüfungen im Kontext-Hub, Smartlearn-Parser, Übergabenotiz-Vorschlag)\~\~ (2026-08-26)
   * Smartlearn-HTML-Export wird deterministisch gelesen (`src/lib/smartlearn.ts`) — Modularbeitsplan inkl. «LB:»-Leistungsbeurteilungen, ohne KI
   * KI-Bausteine erzeugen jetzt **Anker** (Tabelle `sequenz_anker`) im Cockpit statt Phasentabellen in der Planung

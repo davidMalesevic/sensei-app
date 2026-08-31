@@ -12,6 +12,7 @@ import {
   Layers,
   Book,
   Attachment,
+  Analytics,
   Notification,
   Asleep,
   Light,
@@ -32,6 +33,7 @@ const NAVIGATION = [
   { title: "Sequenzen", url: "/sequenzen", icon: Layers },
   { title: "Bildungsplan", url: "/bildungsplan", icon: Book },
   { title: "Materialien", url: "/materialien", icon: Attachment },
+  { title: "Resultate", url: "/resultate", icon: Analytics },
 ];
 
 const DESKTOP = "(min-width: 1024px)";

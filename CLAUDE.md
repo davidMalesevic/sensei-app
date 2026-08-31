@@ -21,7 +21,7 @@ Anforderungen und Begründungen stehen in `erstellungsprozess.md`.
 - **Drizzle ORM** + eigene **PostgreSQL 17** (Docker auf Netcup VPS)
 - **@carbon/icons-react** für Icons (`<Icon size={16} />`, nicht `className="h-4 w-4"`)
 - **IBM Plex Sans / IBM Plex Mono** über `next/font/google`
-- **unpdf** für PDF-Textextraktion
+- **unpdf** für PDF-Textextraktion, **fflate** für den .xlsx-Export
 - **KI**: Ollama Cloud API (OpenAI-kompatibel)
 - **Anmeldung**: eigene Sessions (scrypt + Cookie), Daten pro Benutzer getrennt
 
@@ -607,11 +607,90 @@ npx tsx src/db/migrate-<name>.ts  # Migration ausführen (NICHT drizzle-kit push
 npx tsx src/db/migrate-benutzer.ts     # Login + Datentrennung
 npx tsx src/db/besitz-uebertragen.ts <email>  # Bestand einem Konto zuweisen
 npx tsx src/db/migrate-admin.ts        # Verwaltung, Einladungen, Zeitplan
+npx tsx src/db/migrate-resultate.ts    # Smartlearn-Resultate (Versuch)
+npx tsx src/db/drop-resultate.ts --wirklich   # ... und wieder weg
 npx tsx src/db/seed.ts            # Seed-Daten laden
 npx tsc --noEmit                  # Type-Check
 npx eslint src                    # Lint
 npm run build                     # Build (fängt "use server"-Fehler, die tsc nicht sieht)
 ```
+
+## Smartlearn-Resultate (Versuch)
+
+Auswertung der Lernenden-Abgaben aus dem Smartlearn-Resultate-Export
+(`.xlsx`). **Bewusst als Versuch angelegt**: eigene Tabellen, eigener
+Bereich `/resultate`, Verbindung zum Modulbaum und zum Ablauf nur lesend
+über den LA-Code. Taugt es nichts, genügt
+
+```bash
+npx tsx src/db/drop-resultate.ts --wirklich
+```
+
+und `src/app/resultate/`, `src/lib/resultate.ts`,
+`src/lib/smartlearn-resultate.ts` sowie die `resultat_*`-Tabellen im Schema.
+Nichts anderes hängt daran.
+
+### Was der Export enthält — und wo er täuscht
+
+Gelesen wird **ohne KI** (`src/lib/smartlearn-resultate.ts`, `fflate` plus
+etwas Textzerlegung — eine Tabellenkalkulationsdatei ist ein ZIP mit XML).
+
+Vier Kopfzeilen beschreiben jede Spalte, Zeile 5 ist die Musterlösung, ab
+Zeile 6 stehen die Personen. Drei Eigenheiten, alle am echten Export belegt:
+
+- **Lehrpersonen stehen zwischen den Lernenden** und tragen die Musterlösung
+  zellengleich in ihren Zeilen. Ohne Filter meldet jede Duplikatsprüfung
+  zuerst sie. Unterschieden wird an der Mailadresse (`@stud.` = lernend).
+- **Antwortfelder sind vorbefüllt**: die Teilfragen stehen im Feld, die
+  Lernenden schreiben dazwischen. Ohne Abzug (`ohneVorlage()`) ähnelt jede
+  Abgabe jeder anderen. Ein Feld, in dem nur die Vorlage steht, gilt als
+  **offen** — deshalb weichen die Zahlen von der rohen Zellenzahl ab.
+- **LA-Code und Aufgabennummer stehen nicht auf jeder Abgabe-Spalte**,
+  sondern einmal je Aufgabengruppe (meist auf deren Punkte-Spalte). Sie
+  werden über alle Spalten in Tabellenreihenfolge fortgeschrieben; ohne das
+  blieben 38 von 105 Spalten ohne Bezug zum Modulbaum.
+
+Ausserdem: **keine Zeitstempel pro Antwort.** `Endzeitpunkt` ist leer,
+`Startzeitpunkt` bei allen gleich. `Punkte` ist unbenotet leer.
+
+### Was ausgewertet wird — alles ohne KI
+
+| | |
+|---|---|
+| Vollständigkeit | wer hat was gelöst, nach Abzug der Vorlage |
+| Auswahlaufgaben | Multiple Choice und Matrix gegen die Musterlösung, rein rechnerisch |
+| Gleiche Texte | **Gruppen, nicht Paare** — siehe unten |
+| Klassenbild | welche Aufgabe die Klasse gemeinsam nicht trifft |
+| Geplant am | Verknüpfung über `sequenz_ablauf.refCode`/`refAufgabe` zum Unterrichtstag |
+
+**Gruppen statt Paare** ist der wichtigste Zuschnitt: der paarweise Vergleich
+lieferte am echten Export 138 Treffer, fast alle daher, dass ein Text bei 12
+oder 13 von 12 Lernenden identisch war — also vorgegeben. Als Paare gezählt
+sind das 66 Meldungen für einen Sachverhalt. Zusammengelegt und um Gruppen
+bereinigt, die mehr als 40% der Klasse umfassen, bleibt **eine** Gruppe übrig.
+Eine Gruppe ist Material für ein Gespräch, kein Urteil.
+
+### Wann wurde etwas gelöst?
+
+Aus einem Export **gar nicht** — es gibt keine Zeitstempel. Jeder Import ist
+eine **Momentaufnahme**; die Antwort kommt aus der Differenz zweier Importe
+(`getVerlauf()`), genau auf das Intervall zwischen ihnen. Wer nach jeder
+Lektion einliest, bekommt die Lektion als Auflösung.
+
+Deshalb wird beim Import nie überschrieben, sondern angehängt.
+
+### Noch offen
+
+Die KI-Bewertung (Qualität gegen Musterlösung und Theorieinhalte,
+Beobachtungen zu auffälligem Stil) ist **bewusst noch nicht gebaut**. Wenn
+sie kommt: **vor jedem KI-Aufruf pseudonymisieren** — nur Frage- und
+Antworttext, keine Namen, keine Mailadressen. Der Export enthält
+Personendaten Minderjähriger.
+
+Und: keine Wahrscheinlichkeit «X% KI». Die Verfahren dafür liegen zu oft
+daneben und treffen systematisch die Falschen. Vorgesehen sind Beobachtungen
+mit Belegstelle — Stilbruch gegen die eigenen übrigen Texte derselben Person,
+fehlender Selbstbezug bei Fragen, die ausdrücklich danach fragen.
 
 ## Zwei Instanzen: Test und Produktion
 
@@ -738,6 +817,7 @@ src/
 │   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
 │   ├── (auth)/                   # Anmelden, Einladung, Passwort-Link
 │   │                             #   (ohne UI Shell, siehe Proxy-Header)
+│   ├── resultate/                # Smartlearn-Abgaben auswerten (Versuch)
 │   ├── verwaltung/               # Konten, Einladungen — nur für Admins
 │   ├── mein-konto/               # Profil, Passwort, Vorbereitungsdurchgang
 ├── components/
@@ -749,6 +829,8 @@ src/
 │   ├── ai.ts                     # Ollama-Aufruf + JSON-Parsing
 │   ├── ics.ts                    # WebUntis-Kalenderexport
 │   ├── smartlearn.ts             # Modularbeitsplan + Aufgabenbaum
+│   ├── smartlearn-resultate.ts   # Resultate-Export (.xlsx) lesen
+│   ├── resultate.ts              # Auswertung der Abgaben
 │   ├── modulbaum.ts              # KW + Modul ⇒ Block ⇒ LA ⇒ Aufgaben
 │   ├── kontext.ts                # Aggregation für den ContextHeader
 │   ├── zeit.ts                   # Europe/Zurich statt UTC
