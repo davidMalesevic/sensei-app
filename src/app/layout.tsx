@@ -8,6 +8,7 @@ import { getOffeneUebertraege } from "@/app/sequenzen/uebertrag-actions";
 import { headers } from "next/headers";
 
 import { aktuelleSession } from "@/lib/dal";
+import { instanz } from "@/lib/instanz";
 import { OEFFENTLICH_HEADER } from "@/proxy";
 
 const plexSans = IBM_Plex_Sans({
@@ -24,10 +25,15 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Sensei – Unterrichtsplanung",
-  description: "Planungstool für Berufsfachschullehrpersonen",
-};
+// Dynamisch, weil der Titel von der Instanz abhängt: im Browser-Tab soll man
+// Test und Produktion auseinanderhalten können.
+export async function generateMetadata(): Promise<Metadata> {
+  const { name } = instanz();
+  return {
+    title: `${name} – Unterrichtsplanung`,
+    description: "Planungstool für Berufsfachschullehrpersonen",
+  };
+}
 
 // Das Layout zählt offene Überträge — der rote Punkt darf nicht aus der
 // Build-Zeit stammen.
@@ -48,11 +54,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   const angemeldet = istOeffentlich ? null : await aktuelleSession();
   const offen = angemeldet ? await getOffeneUebertraege() : [];
+  const { istTest, name: instanzName } = instanz();
 
   return (
     <html
       lang="de"
       className={`${plexSans.variable} ${plexMono.variable} h-full`}
+      // Färbt die Kopfleiste der Testinstanz rot — siehe globals.css.
+      data-instanz={istTest ? "test" : undefined}
       suppressHydrationWarning
     >
       <head>
@@ -65,6 +74,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               offeneUebertraege={offen.length}
               benutzerName={angemeldet.name}
               istAdmin={angemeldet.istAdmin}
+              instanzName={instanzName}
             >
               {children}
             </UiShell>

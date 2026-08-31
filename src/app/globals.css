@@ -280,6 +280,19 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Testinstanz: dieselbe Anwendung, aber die Kopfleiste in Carbon Red 80.
+
+   Nur die Shell-Rollen werden umdefiniert — der Rest der Oberfläche bleibt
+   identisch, damit man dort testet, was man später sieht. Die Regel schlägt
+   auch `.dark`, weil `:root[data-instanz]` spezifischer ist als `.dark`.
+   --------------------------------------------------------------------------- */
+:root[data-instanz="test"] {
+  --shell: #750e13;
+  --shell-hover: #a2191f;
+  --shell-border: #a2191f;
+}
+
+/* ---------------------------------------------------------------------------
    Carbon Type Scale
    https://carbondesignsystem.com/elements/typography/type-sets/
    --------------------------------------------------------------------------- */

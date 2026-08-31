@@ -628,6 +628,20 @@ namensraumt sie über das Projektverzeichnis (`sensei-app_*` vs `sensei-test_*`)
 Die Host-Ports kommen aus einer `.env` im jeweiligen Projektverzeichnis
 (`APP_PORT`, `DB_PORT`) — ohne Werte gelten 3000/5432.
 
+### Woran man die Testinstanz erkennt
+
+`INSTANZ=test` in `.env.production` färbt die Kopfleiste **dunkelrot**
+(Carbon Red 80) und macht aus «Sensei» überall «Sensei-Test» — auch im
+Browser-Tab, deshalb `generateMetadata()` statt eines statischen `metadata`.
+
+Umgesetzt über `data-instanz="test"` am `<html>` und eine Umdefinition der
+`--shell-*`-Tokens in `globals.css`. Nur die Shell ändert sich; alles darunter
+bleibt identisch, damit man dort testet, was man später sieht. Die Regel
+schlägt auch `.dark`, weil `:root[data-instanz]` spezifischer ist als `.dark`.
+
+Ohne die Variable ist alles wie gehabt — die Produktion braucht keinen
+Eintrag. `src/lib/instanz.ts` kapselt die Abfrage.
+
 ### Arbeitsweise
 
 **Nie direkt auf `main` committen.** Gearbeitet wird auf `test`; damit ist

@@ -57,11 +57,14 @@ export function UiShell({
   offeneUebertraege,
   benutzerName,
   istAdmin,
+  instanzName,
   children,
 }: {
   offeneUebertraege: number;
   benutzerName: string;
   istAdmin: boolean;
+  /** «Sensei» oder «Sensei-Test» — kommt aus der Umgebung. */
+  instanzName: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -101,7 +104,7 @@ export function UiShell({
           href="/"
           className="flex h-12 items-center gap-2 pr-4 pl-1 text-shell-text focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
         >
-          <span className="type-body-compact-02 font-semibold">Sensei</span>
+          <span className="type-body-compact-02 font-semibold">{instanzName}</span>
           <span className="type-body-compact-02 hidden text-shell-text-secondary sm:inline">
             Unterrichtsplanung
           </span>

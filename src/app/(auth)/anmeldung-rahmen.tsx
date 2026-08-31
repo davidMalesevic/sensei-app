@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { instanz } from "@/lib/instanz";
+
 /**
  * Rahmen für Anmelden und Registrieren.
  *
@@ -25,7 +27,9 @@ export function AnmeldungRahmen({
           href="/anmelden"
           className="flex items-center gap-2 text-shell-text focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
         >
-          <span className="type-body-compact-02 font-semibold">Sensei</span>
+          <span className="type-body-compact-02 font-semibold">
+            {instanz().name}
+          </span>
           <span className="type-body-compact-02 text-shell-text-secondary">
             Unterrichtsplanung
           </span>
