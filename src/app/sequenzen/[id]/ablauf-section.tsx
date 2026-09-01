@@ -354,6 +354,16 @@ export function AblaufSection({
                   <Icon size={16} className="mt-1.5 shrink-0 text-text-secondary" />
 
                   <div className="min-w-0 flex-1">
+                    {/* Der LA-Code steht über dem Titel — dieselbe Ordnung wie
+                        in «Stoff dieser Woche» und im Übertrag: erst woher die
+                        Aufgabe stammt, dann welche es ist. Unten in der
+                        Etikettenzeile war er weit weg von der Nummer, auf die
+                        er sich bezieht. */}
+                    {z.refCode && (
+                      <code className="type-helper-02 mb-1 block font-mono text-text-helper">
+                        {z.refCode}
+                      </code>
+                    )}
                     <AutoTextarea
                       wert={z.titel}
                       ariaLabel={`Titel von Schritt ${i + 1}`}
@@ -376,11 +386,6 @@ export function AblaufSection({
                       <Badge variant="ghost" size="sm">
                         {TYP_LABEL[z.typ] ?? z.typ}
                       </Badge>
-                      {z.refCode && (
-                        <code className="type-helper-02 font-mono text-text-helper">
-                          {z.refCode}
-                        </code>
-                      )}
                       {href && (
                         <a
                           href={href}
