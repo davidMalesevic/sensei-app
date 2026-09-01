@@ -1,9 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Copy, Unlink } from "@carbon/icons-react";
+import { ArrowLeft, ArrowRight, Unlink } from "@carbon/icons-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,36 +35,70 @@ function standText(g: {
   return teile.length > 0 ? teile.join(", ") : null;
 }
 
+/** Wohin der Ablauf wandert. Beide Richtungen gehen über dieselbe Aktion. */
+type Vorhaben = { richtung: "geben" | "holen"; ziel: Geschwister };
+
 /**
  * Dasselbe Modul, dieselbe Woche, andere Klasse.
  *
  * Von sieben Sequenzen pro Woche sind vier Dubletten — einmal planen, dann
- * übernehmen. Fortschritt und Notizen bleiben pro Klasse getrennt, damit
+ * weitergeben. Fortschritt und Notizen bleiben pro Klasse getrennt, damit
  * sichtbar wird, wenn die Klassen auseinanderlaufen.
+ *
+ * **Beide Richtungen stehen hier, und beide nennen die Klasse.** Vorher gab es
+ * nur ein Holen, und der Knopf hiess «Ablauf ersetzen» — in der Zeile der
+ * anderen Klasse gelesen also «ersetze deren Ablauf». Er ersetzte aber den
+ * hiesigen: wer eben geplant und bestätigt hatte und ihn weitergeben wollte,
+ * holte sich damit den alten Ablauf der Parallelklasse zurück und verlor die
+ * eigene Arbeit. Ein Pfeil und der Klassenname sagen jetzt, wohin es geht,
+ * und überschrieben wird nichts mehr ohne Rückfrage.
  */
 export function GeschwisterSection({
   sequenzId,
+  klasse,
   eigeneSchritte,
   uebernommenVon,
   geschwister,
 }: {
   sequenzId: string;
+  /** Die eigene Klasse — damit die Rückfrage sagen kann, wer was verliert. */
+  klasse: string;
   eigeneSchritte: number;
   uebernommenVon: string | null;
   geschwister: Geschwister[];
 }) {
   const router = useRouter();
   const [laeuft, startTransition] = useTransition();
+  const [vorhaben, setVorhaben] = useState<Vorhaben | null>(null);
 
   if (geschwister.length === 0) return null;
 
   const quelle = geschwister.find((g) => g.id === uebernommenVon);
 
-  function uebernehmen(quelleId: string) {
+  function ausfuehren(v: Vorhaben) {
+    setVorhaben(null);
     startTransition(async () => {
-      await uebernehmeAblauf(sequenzId, quelleId);
+      await (v.richtung === "geben"
+        ? uebernehmeAblauf(v.ziel.id, sequenzId)
+        : uebernehmeAblauf(sequenzId, v.ziel.id));
       router.refresh();
     });
+  }
+
+  /**
+   * Nur fragen, wenn beim Ziel auch etwas zu verlieren ist. Ein Ablauf, der
+   * ohnehin von hier stammt, ist nichts Eigenes — ihn aufzufrischen, nachdem
+   * hier nachgebessert wurde, ist der Normalfall und keine Rückfrage wert.
+   */
+  function anfragen(v: Vorhaben) {
+    const zuVerlieren =
+      v.richtung === "geben"
+        ? v.ziel.uebernommenVon === sequenzId
+          ? 0
+          : v.ziel.schritte
+        : eigeneSchritte;
+    if (zuVerlieren === 0) ausfuehren(v);
+    else setVorhaben(v);
   }
 
   function loesen() {
@@ -77,6 +111,11 @@ export function GeschwisterSection({
   const eigenerStand = geschwister.some(
     (g) => standText(g) !== null && g.uebertragSlideBis !== null
   );
+
+  const zielKlasse =
+    vorhaben?.richtung === "geben" ? vorhaben.ziel.klasse : klasse;
+  const zielSchritte =
+    vorhaben?.richtung === "geben" ? vorhaben.ziel.schritte : eigeneSchritte;
 
   return (
     <section className="mb-12">
@@ -108,6 +147,33 @@ export function GeschwisterSection({
         >
           von {quelle.klasse} ({tag(quelle.startDatum)})
         </Notification>
+      )}
+
+      {vorhaben && (
+        <div className="mb-px">
+          <Notification kind="warning" titel={`${zielKlasse} verliert den eigenen Ablauf`}>
+            Dort stehen {zielSchritte}{" "}
+            {zielSchritte === 1 ? "Schritt" : "Schritte"}; sie werden durch{" "}
+            {vorhaben.richtung === "geben" ? klasse : vorhaben.ziel.klasse}{" "}
+            ersetzt und sind danach weg.
+          </Notification>
+          <div className="mt-px flex flex-wrap gap-px">
+            <Button
+              variant="secondary"
+              onClick={() => setVorhaben(null)}
+              disabled={laeuft}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => ausfuehren(vorhaben)}
+              disabled={laeuft}
+            >
+              Trotzdem ersetzen
+            </Button>
+          </div>
+        </div>
       )}
 
       <div className="bg-layer">
@@ -143,23 +209,44 @@ export function GeschwisterSection({
                 </span>
               )}
 
-              {g.schritte > 0 && g.id !== uebernommenVon && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto shrink-0"
-                  onClick={() => uebernehmen(g.id)}
-                  disabled={laeuft}
-                  title={
-                    eigeneSchritte > 0
-                      ? "Ersetzt den hiesigen Ablauf"
-                      : "Ablauf von dieser Klasse übernehmen"
-                  }
-                >
-                  {eigeneSchritte > 0 ? "Ablauf ersetzen" : "Ablauf übernehmen"}
-                  <Copy size={16} />
-                </Button>
-              )}
+              <div className="ml-auto flex shrink-0 flex-wrap gap-px">
+                {/* Auch dann anbieten, wenn dort schon eine Kopie liegt —
+                    sonst liesse sich eine Nachbesserung nie nachreichen. */}
+                {eigeneSchritte > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => anfragen({ richtung: "geben", ziel: g })}
+                    disabled={laeuft}
+                    title={
+                      g.uebernommenVon === sequenzId
+                        ? `Frischt die Kopie bei ${g.klasse} auf`
+                        : g.schritte > 0
+                          ? `Ersetzt den Ablauf von ${g.klasse}`
+                          : `Gibt diesen Ablauf an ${g.klasse}`
+                    }
+                  >
+                    An {g.klasse} geben
+                    <ArrowRight size={16} />
+                  </Button>
+                )}
+                {g.schritte > 0 && g.id !== uebernommenVon && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => anfragen({ richtung: "holen", ziel: g })}
+                    disabled={laeuft}
+                    title={
+                      eigeneSchritte > 0
+                        ? `Ersetzt den Ablauf von ${klasse}`
+                        : `Holt den Ablauf von ${g.klasse} hierher`
+                    }
+                  >
+                    Von {g.klasse} holen
+                    <ArrowLeft size={16} />
+                  </Button>
+                )}
+              </div>
             </div>
           );
         })}

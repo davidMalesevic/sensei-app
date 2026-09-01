@@ -469,9 +469,18 @@ Dasselbe Modul läuft mit mehreren Klassen — freitags zweimal 168 und zweimal
 - **Klammer ist die Kalenderwoche, nicht der Tag**: der Modulplan ist
   wochenweise organisiert, und zwei Klassen können denselben Stoff an
   verschiedenen Tagen haben. `getGeschwister()` liefert die Parallelsequenzen.
-- `uebernehmeAblauf()` kopiert den Ablauf und setzt `sequenz.uebernommenVon`.
-  Das Ziel landet auf **Entwurf**, nicht auf bestätigt — durchsehen soll man
-  jede Klasse einzeln.
+- `uebernehmeAblauf(zielId, quelleId)` kopiert den Ablauf und setzt
+  `sequenz.uebernommenVon`. Das Ziel landet auf **Entwurf**, nicht auf
+  bestätigt — durchsehen soll man jede Klasse einzeln.
+- **Die Richtung muss aus dem Knopf hervorgehen.** In den Parallelklassen
+  stehen beide Wege: «An <Klasse> geben» und «Von <Klasse> holen», je mit
+  Pfeil. Vorher gab es nur das Holen, beschriftet mit «Ablauf ersetzen» — in
+  der Zeile der anderen Klasse gelesen also «ersetze deren Ablauf». Es
+  ersetzte aber den hiesigen: wer eben geplant, bestätigt und weitergeben
+  wollte, holte sich den alten Ablauf der Parallelklasse zurück und verlor
+  die eigene Arbeit. `uebernehmeAblauf` löscht das Ziel, also gibt es davor
+  eine Rückfrage — ausser das Ziel trägt ohnehin eine Kopie von hier
+  (`uebernommenVon`), dann ist das Auffrischen der Normalfall.
 - **Fortschritt und Notizen bleiben pro Klasse getrennt.** Genau daran wird
   sichtbar, wenn die Klassen auseinanderlaufen.
 - Der **Nachtlauf gruppiert nach Modul + KW** und plant einmal pro Gruppe.

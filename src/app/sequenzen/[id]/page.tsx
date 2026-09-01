@@ -119,6 +119,7 @@ export default async function SequenzDetailPage({
 
       <GeschwisterSection
         sequenzId={id}
+        klasse={seq.klasse.bezeichnung}
         eigeneSchritte={ablauf.length}
         uebernommenVon={seq.uebernommenVon}
         geschwister={geschwister}
