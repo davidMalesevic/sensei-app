@@ -389,6 +389,31 @@ Die Reihenfolge folgt dem Mittwoch-Durchgang:
 6. **Übertrag** — die einzige Eingabe nach der Lektion
 7. **Notizen** — freier Text
 
+### Wo Erledigtes verschwindet und wo es stehen bleibt
+
+Drei Stellen zeigen dieselben Aufgaben einer Woche. Sie behandeln
+Erledigtes bewusst verschieden:
+
+| | Erledigtes aus der Vorwoche |
+|---|---|
+| **Ablauf** (`sammleFakten`) | fällt weg — geplant wird, was noch aussteht |
+| **Übertrag**, Häkchenliste | fällt weg, mit Zeile «N Aufgaben gelten … bereits als erledigt» |
+| **Stoff dieser Woche** | bleibt, durchgestrichen mit grünem Tag, dazu «N von M erledigt» im Kopf |
+
+Der Wochenstoff ist die **Referenz** hinter dem Ablauf; ein Blick zurück auf
+eine bereits gemachte Aufgabe ist im Unterricht normal, und eine Aufgabe, die
+einfach verschwindet, lässt offen, ob sie erledigt oder nie geplant war.
+Ausgeblendet gehört Erledigtes nur dort, wo etwas zu *tun* ist.
+
+### Die drei Listen sehen gleich aus
+
+Ablauf, Übertrag und Wochenstoff zeigen dieselben Aufgaben und folgen
+deshalb derselben Ordnung: **erst der LA-Code in Mono, dann die Aufgabe**.
+«Aufgabe 1» kommt in jedem LA vor — ohne den Code davor ist eine Nummer
+allein nicht zuzuordnen. Im Ablauf stand der Code früher unten in der
+Etikettenzeile, im Übertrag rechts auf jeder Zeile; beides war weit weg von
+der Nummer, auf die es sich bezog.
+
 **Entfernt (Schritt 7 der Umsetzung):** Lektionsblöcke, Phasen, HK-Zuordnung,
 `/sequenzen/neu`, das Sequenz-Formular, die Bearbeiten-Seite, die alten
 KI-Dialoge und die Semesterverwaltung. Die zugehörigen **Tabellen bleiben

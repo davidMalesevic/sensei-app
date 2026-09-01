@@ -8,6 +8,7 @@
   * Beobachtungen statt KI-Wahrscheinlichkeit: Stilbruch gegen die eigenen übrigen Texte, fehlender Selbstbezug bei Fragen, die danach fragen
   * VOR jedem KI-Aufruf pseudonymisieren — nur Frage- und Antworttext, keine Namen
 * Übertrag aus zwei Importen vorschlagen: die Differenz zeigt, was seit der letzten Lektion dazugekommen ist
+* Aufgabentexte aus dem Material aufräumen: in den Notizen der Ablauf-Schritte landet Smartlearn-Beiwerk («0 / 0 Punkte», «exam.submission:»). Betrifft die Extraktion, nicht die Anzeige.
 
 # done
 * \~\~**Smartlearn-Resultate einlesen und deterministisch auswerten**\~\~ (2026-08-31)
