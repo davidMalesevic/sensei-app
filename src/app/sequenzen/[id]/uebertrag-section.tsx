@@ -117,22 +117,37 @@ export function UebertragSection({
   const speichern = speichereUebertrag.bind(null, sequenzId);
   const keiner = keinUebertragSetzen.bind(null, sequenzId);
 
-  const alleAufgaben = (stoff?.bloecke ?? []).flatMap((b) =>
-    b.auftraege.flatMap((a) =>
-      a.aufgaben.map((auf) => ({
-        wert: `${a.code} · ${auf.bezeichnung}`,
-        code: a.code,
-        bezeichnung: auf.bezeichnung,
-      }))
-    )
-  );
-
   // Was letzte Woche schon abgehakt wurde, steht hier nicht mehr zur Wahl —
   // sonst «will» Sensei jede Woche dieselben Aufgaben erledigt haben. Der
   // Entwurfsgenerator lässt sie aus demselben Grund weg.
   const schonErledigt = new Set(bereitsErledigt);
-  const aufgaben = alleAufgaben.filter((a) => !schonErledigt.has(a.wert));
-  const uebrig = alleAufgaben.length - aufgaben.length;
+
+  // Gegliedert wie «Stoff dieser Woche»: der LA-Code trägt die Gruppe, die
+  // Aufgaben stehen darunter. Eine flache Liste wiederholte den Code auf
+  // jeder Zeile — bei vier LAs derselben Woche liest sich das als Rauschen,
+  // und die beiden Abschnitte sahen ohne Grund verschieden aus.
+  const gruppen = (stoff?.bloecke ?? []).flatMap((b) =>
+    b.auftraege
+      .map((a) => ({
+        code: a.code,
+        aufgaben: a.aufgaben
+          .map((auf) => ({
+            wert: `${a.code} · ${auf.bezeichnung}`,
+            bezeichnung: auf.bezeichnung,
+            teilaufgaben: auf.teilaufgaben.map((t) => t.bezeichnung),
+          }))
+          .filter((auf) => !schonErledigt.has(auf.wert)),
+      }))
+      // LAs, von denen nichts mehr offen ist, fallen ganz weg.
+      .filter((g) => g.aufgaben.length > 0)
+  );
+
+  const anzahlOffen = gruppen.reduce((n, g) => n + g.aufgaben.length, 0);
+  const alleAnzahl = (stoff?.bloecke ?? []).reduce(
+    (n, b) => n + b.auftraege.reduce((m, a) => m + a.aufgaben.length, 0),
+    0
+  );
+  const uebrig = alleAnzahl - anzahlOffen;
 
   return (
     <section className="mb-12">
@@ -145,7 +160,7 @@ export function UebertragSection({
 
       <div className="bg-layer p-4">
         <form action={speichern}>
-          {aufgaben.length > 0 && (
+          {anzahlOffen > 0 && (
             <fieldset className="mb-8">
               <legend className="type-label-02 mb-3 text-text-secondary">
                 Erledigt
@@ -159,22 +174,38 @@ export function UebertragSection({
                 </HelperText>
               )}
               <div>
-                {aufgaben.map((a) => (
-                  <label
-                    key={a.wert}
-                    className="type-body-compact-02 flex cursor-pointer items-center gap-3 border-b border-border-subtle py-2 last:border-b-0"
+                {gruppen.map((g) => (
+                  <div
+                    key={g.code}
+                    className="border-b border-border-subtle py-3 first:pt-0 last:border-b-0 last:pb-0"
                   >
-                    <input
-                      type="checkbox"
-                      name="erledigt"
-                      value={a.wert}
-                      className="carbon-checkbox"
-                    />
-                    <span className="font-semibold">{a.bezeichnung}</span>
                     <code className="type-helper-02 font-mono text-text-helper">
-                      {a.code}
+                      {g.code}
                     </code>
-                  </label>
+                    <div className="mt-2">
+                      {g.aufgaben.map((auf) => (
+                        <label
+                          key={auf.wert}
+                          className="type-body-02 flex cursor-pointer items-baseline gap-3 py-1"
+                        >
+                          <input
+                            type="checkbox"
+                            name="erledigt"
+                            value={auf.wert}
+                            className="carbon-checkbox shrink-0 self-center"
+                          />
+                          <span className="type-heading-compact-02 text-foreground">
+                            {auf.bezeichnung}
+                          </span>
+                          {auf.teilaufgaben.length > 0 && (
+                            <span className="text-text-secondary">
+                              {auf.teilaufgaben.join(", ")}
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </fieldset>
