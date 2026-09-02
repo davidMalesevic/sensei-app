@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractDokumentText } from "@/lib/dokument-text";
+import { extractDokumentText, isTextExtension } from "@/lib/dokument-text";
 import { importModularPlan } from "@/app/bildungsplan/modulplan-actions";
 import { aktuelleSession } from "@/lib/dal";
 import { importModulBaum } from "@/app/bildungsplan/actions";
@@ -60,7 +60,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await importModularPlan(modulId, text);
+  // **Bei HTML geht das rohe Markup an den Import, nicht der extrahierte
+  // Text.** `parseModularbeitsplanHtml()` ordnet die Spalten über die
+  // Kopfzeile der Tabelle zu — nach `htmlToText()` gibt es keine Tabelle
+  // mehr, und der Import fällt auf die KI zurück, die keine Blockschlüssel
+  // liefert. Der Modulplan stand dann ohne `bloecke` da, die Kette
+  // KW ⇒ Block ⇒ LA ⇒ Aufgaben riss, und der Entwurf bestand nur noch aus
+  // KI-Vorschlägen. Auffällig wurde das erst bei Modul 168 und 278: bei 119
+  // fängt der Textparser den Verlust zufällig auf, weil er für dessen
+  // Schema geschrieben ist.
+  //
+  // `importModularPlan` reduziert HTML selbst zu Text, wo es das braucht —
+  // die Vorverarbeitung hier nahm ihm nur die Wahl. Für PDF bleibt sie
+  // nötig, dort ist der extrahierte Text alles, was es gibt.
+  const fuerImport = isTextExtension(file.name)
+    ? rohBytes.toString("utf-8")
+    : text;
+
+  const result = await importModularPlan(modulId, fuerImport);
 
   // Beim HTML-Export hängt am selben Dokument der ganze Aufgabenbaum
   // (Block → LA → Aufgabe). Der Modulplan bleibt auch dann gültig, wenn die

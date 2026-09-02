@@ -35,6 +35,19 @@ export type ModularPlanEintragItem = {
   lbHinweis: string | null;
 };
 
+/**
+ * Wochen ohne Blockbezug sind ein halber Import — die Ziele stehen, aber der
+ * Entwurf findet von dort aus keine Aufgabe. Ohne diesen Hinweis las sich
+ * «9 Wochenziele importiert» als voller Erfolg.
+ */
+function ohneBlockHinweis(count: number, ohneBlock?: number): string {
+  if (!ohneBlock) return "";
+  return ohneBlock === count
+    ? " Keine davon nennt einen Block — daraus entsteht kein Aufgabenentwurf." +
+        " Den Smartlearn-Export als HTML einlesen, dort steht die Blockspalte."
+    : ` ${ohneBlock} davon ohne Blockbezug — für diese Wochen entsteht kein Aufgabenentwurf.`;
+}
+
 function ImportDialog({ modulId }: { modulId: string }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,9 +72,10 @@ function ImportDialog({ modulId }: { modulId: string }) {
       setFeedback({
         ok: true,
         message:
-          result.quelle === "smartlearn"
+          (result.quelle === "smartlearn"
             ? `${result.count} Wochenziele direkt aus dem Smartlearn-Export gelesen.`
-            : `${result.count} Wochenziele importiert.`,
+            : `${result.count} Wochenziele importiert.`) +
+          ohneBlockHinweis(result.count, result.ohneBlock),
       });
       setText("");
       router.refresh();
@@ -97,7 +111,9 @@ function ImportDialog({ modulId }: { modulId: string }) {
           message:
             (data.quelle === "smartlearn"
               ? `${data.count} Wochenziele direkt aus dem Smartlearn-Export «${file.name}» gelesen.`
-              : `${data.count} Wochenziele aus «${file.name}» importiert.`) + baum,
+              : `${data.count} Wochenziele aus «${file.name}» importiert.`) +
+            baum +
+            ohneBlockHinweis(data.count, data.ohneBlock),
         });
         router.refresh();
       } else {

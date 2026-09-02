@@ -137,6 +137,8 @@ export async function importModularPlan(
   success: boolean;
   count: number;
   quelle?: "json" | "smartlearn" | "ki";
+  /** Wochen, die keinen Block nennen — aus ihnen entsteht kein Entwurf. */
+  ohneBlock?: number;
   error?: string;
 }> {
   const bId = await benutzerId();
@@ -230,7 +232,13 @@ export async function importModularPlan(
   revalidatePath("/bildungsplan");
   revalidatePath("/sequenzen");
 
-  return { success: true, count: eintraege.length, quelle };
+  // Wochen ohne Blockbezug sind ein halber Import: die Wochenziele stehen,
+  // aber der Entwurfsgenerator kommt von dort aus zu keiner Aufgabe. Das muss
+  // die Meldung sagen — «9 Wochenziele importiert» las sich als Erfolg,
+  // während die Kette KW ⇒ Block ⇒ LA ⇒ Aufgaben gar nicht stand.
+  const ohneBlock = eintraege.filter((e) => !e.bloecke?.length).length;
+
+  return { success: true, count: eintraege.length, quelle, ohneBlock };
 }
 
 export async function createModularPlanEintrag(formData: FormData) {

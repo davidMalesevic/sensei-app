@@ -259,6 +259,21 @@ export async function erzeugeEntwurf(
     };
   }
 
+  // Der Eintrag existiert, nennt aber keinen Block — dann ist der Modulplan
+  // ohne Blockbezug importiert worden und die Kette KW ⇒ Block ⇒ LA ⇒ Aufgaben
+  // reisst. Ohne diese Prüfung lief die Erzeugung stillschweigend weiter und
+  // lieferte eine Lektion, die vollständig aus KI-Vorschlägen bestand: die
+  // Lehrperson hielt eine erfundene Stunde für eine geplante.
+  if (stoff.bloecke.length === 0) {
+    return {
+      ok: false,
+      fehler:
+        `Der Modulplan-Eintrag für KW ${kw} nennt keinen Block — daraus lässt ` +
+        `sich keine Aufgabe bestimmen. Den Modulplan neu importieren (der ` +
+        `Smartlearn-Export als HTML trägt die Blockspalte).`,
+    };
+  }
+
   const stand = await holeVorherigenUebertrag(
     bId,
     seq.klasseId,
@@ -268,6 +283,20 @@ export async function erzeugeEntwurf(
   );
 
   const fakten = sammleFakten(stoff, stand?.uebertragErledigt ?? []);
+
+  // Kein einziger Fakt heisst: alles aus diesem Block ist laut Übertrag
+  // erledigt, oder der Aufgabenbaum fehlt. Beides ist eine Aussage, die die
+  // Lehrperson lesen soll — die KI würde sonst eine Lektion aus dem Nichts
+  // bauen. Die KI ordnet und formuliert, sie erfindet keine Fakten.
+  if (fakten.length === 0) {
+    return {
+      ok: false,
+      fehler:
+        `Für KW ${kw} steht in ${stoff.bloecke.map((b) => `Block ${b.schluessel}`).join(" und ")} ` +
+        `keine offene Aufgabe — entweder ist laut Übertrag alles erledigt, ` +
+        `oder zum Modul fehlt der Aufgabenbaum.`,
+    };
+  }
 
   const standText = stand
     ? [

@@ -593,6 +593,17 @@ Konsequenzen im Code:
   geglätteten Text: Spalten werden über die Kopfzeile zugeordnet. Der alte
   Textparser bleibt als Fallback. Eine Zeile kann mehrere KWs betreffen
   (`33/34` → zwei Einträge).
+- **Deshalb bekommt `importModularPlan()` bei HTML das rohe Markup**, nicht
+  `extractDokumentText()`. Die Route tat monatelang das Zweite und nahm dem
+  Import damit die Tabelle weg: `parseModularbeitsplanHtml()` fand nichts,
+  der Textparser trägt nur das 119-Schema, und alles andere fiel auf die KI
+  zurück — die liefert `kw` und `ziel`, aber **keine `bloecke`**. Der
+  Modulplan stand dann ohne Blockbezug da, `getWochenstoff()` gab leeren
+  Stoff zurück, und der Entwurf bestand vollständig aus KI-Vorschlägen.
+  Bei Modul 119 fiel das nie auf, weil der Textparser dort zufällig greift;
+  bei 168 und 278 fehlte jede Aufgabe. `importModularPlan` reduziert HTML
+  selbst zu Text, wo es das braucht — ihm die Wahl abzunehmen war der Fehler.
+  Für PDF bleibt `extractDokumentText()` richtig.
 - **LA-Codes im Plan sind abgeschnitten, im Baum vollständig.** Der Plan
   liefert `LA_278_203_Markt-`, der Aufgabenbaum
   `LA_278_203_Branchen, Markt- und Konkurrenzanalyse`. Deshalb vergleicht
