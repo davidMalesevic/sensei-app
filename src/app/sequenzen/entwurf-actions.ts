@@ -36,7 +36,7 @@ export async function getAblauf(sequenzId: string) {
 
 export async function aktualisiereAblaufZeile(
   zeilenId: string,
-  werte: { titel?: string; text?: string | null }
+  werte: { titel?: string; text?: string | null; dauerMinuten?: number | null }
 ) {
   return entwurf.aktualisiereAblaufZeile(await benutzerId(), zeilenId, werte);
 }

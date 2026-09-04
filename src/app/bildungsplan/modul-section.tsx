@@ -634,6 +634,7 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                 beschreibung="Block ⇒ Lern- und Arbeitsauftrag ⇒ Aufgabe, aus dem Smartlearn-Export gelesen."
               />
               <ModulBaumSection
+                modulId={selectedModul.id}
                 bloecke={selectedModul.bloecke}
                 praesentationen={selectedModul.materialien
                   .filter(

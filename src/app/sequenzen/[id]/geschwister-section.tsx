@@ -208,6 +208,15 @@ export function GeschwisterSection({
                   hat von hier übernommen
                 </span>
               )}
+              {/* Unterschiedlicher Rückstand heisst: dort steht anderer Stoff
+                  im Ablauf. Übernehmen bringt dann eine Planung, die zum
+                  eigenen Stand nicht passt — das gehört an die Zeile, bevor
+                  man klickt. */}
+              {g.rueckstandWeichtAb && (
+                <Badge variant="blue" size="sm" className="shrink-0">
+                  anderer Rückstand
+                </Badge>
+              )}
 
               <div className="ml-auto flex shrink-0 flex-wrap gap-px">
                 {/* Auch dann anbieten, wenn dort schon eine Kopie liegt —
@@ -237,9 +246,11 @@ export function GeschwisterSection({
                     onClick={() => anfragen({ richtung: "holen", ziel: g })}
                     disabled={laeuft}
                     title={
-                      eigeneSchritte > 0
-                        ? `Ersetzt den Ablauf von ${klasse}`
-                        : `Holt den Ablauf von ${g.klasse} hierher`
+                      g.rueckstandWeichtAb
+                        ? `${g.klasse} hat einen anderen Rückstand — der Ablauf dort plant anderen Stoff`
+                        : eigeneSchritte > 0
+                          ? `Ersetzt den Ablauf von ${klasse}`
+                          : `Holt den Ablauf von ${g.klasse} hierher`
                     }
                   >
                     Von {g.klasse} holen

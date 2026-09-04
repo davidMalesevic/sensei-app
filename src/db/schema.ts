@@ -32,6 +32,17 @@ export const ablaufTypEnum = pgEnum("ablauf_typ", [
  */
 export const ablaufQuelleEnum = pgEnum("ablauf_quelle", ["fakt", "vorschlag"]);
 
+/**
+ * Woher eine Minutenangabe stammt.
+ *
+ * Im Smartlearn-Export steht keine einzige Zeitangabe — eine Dauer kann
+ * deshalb **nie ein Fakt sein**. Sie muss als Schätzung erkennbar bleiben,
+ * sonst steht sie neben LA-Code und Slidenummer und sieht aus wie diese.
+ * `person` schützt ausserdem die Korrektur: der Schätzlauf überschreibt nur
+ * `ki` und `NULL`.
+ */
+export const dauerQuelleEnum = pgEnum("dauer_quelle", ["ki", "person"]);
+
 export const sequenzStatusEnum = pgEnum("sequenz_status", [
   "leer",
   "entwurf",
@@ -436,6 +447,9 @@ export const modulBlock = pgTable(
     }),
     slideVon: integer("slide_von"),
     slideBis: integer("slide_bis"),
+    /** Dauer des Theorieteils (Slides) dieses Blocks. Siehe `dauerQuelleEnum`. */
+    dauerMinuten: integer("dauer_minuten"),
+    dauerQuelle: dauerQuelleEnum("dauer_quelle"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [unique().on(t.modulId, t.schluessel)]
@@ -464,6 +478,12 @@ export const modulAuftrag = pgTable(
     ausgangslage: text("ausgangslage"),
     aufgabenstellung: text("aufgabenstellung"),
     guetekriterien: text("guetekriterien"),
+    /**
+     * Nur benutzt, wenn der Auftrag keine nummerierten Aufgaben hat — dann ist
+     * der LA selbst die Einheit, die geplant wird (vgl. `sammleFakten()`).
+     */
+    dauerMinuten: integer("dauer_minuten"),
+    dauerQuelle: dauerQuelleEnum("dauer_quelle"),
     sortierung: integer("sortierung").default(0).notNull(),
   },
   (t) => [unique().on(t.blockId, t.code)]
@@ -486,6 +506,13 @@ export const modulAufgabe = pgTable("modul_aufgabe", {
   parentId: uuid("parent_id"),
   bezeichnung: varchar("bezeichnung", { length: 200 }).notNull(),
   text: text("text"),
+  /**
+   * Die Vorgabe für diese Aufgabe, gültig für alle Klassen und alle künftigen
+   * Durchgänge des Moduls — «Aufgabe 3 dauert 40 Minuten» ist eine Eigenschaft
+   * der Aufgabe, nicht der Lektion. Im Ablauf einer Sequenz überschreibbar.
+   */
+  dauerMinuten: integer("dauer_minuten"),
+  dauerQuelle: dauerQuelleEnum("dauer_quelle"),
   sortierung: integer("sortierung").default(0).notNull(),
 });
 
@@ -587,6 +614,19 @@ export const sequenzAblauf = pgTable("sequenz_ablauf", {
   }),
   refSeiteVon: integer("ref_seite_von"),
   refSeiteBis: integer("ref_seite_bis"),
+  /**
+   * Die Dauer dieses Schrittes in dieser einen Lektion. Bei Fakten aus der
+   * Vorgabe am Modulbaum geerbt, bei KI-Vorschlägen von der KI geschätzt,
+   * und hier überschreibbar, ohne die Vorgabe zu ändern.
+   */
+  dauerMinuten: integer("dauer_minuten"),
+  dauerQuelle: dauerQuelleEnum("dauer_quelle"),
+  /**
+   * KW, aus der ein Fakt stammt, wenn er nicht aus der laufenden Woche kommt.
+   * Nur zur Anzeige («Rückstand aus KW 36»); gerechnet wird der Rückstand
+   * jedes Mal neu aus Modulplan und Überträgen.
+   */
+  rueckstandKw: integer("rueckstand_kw"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

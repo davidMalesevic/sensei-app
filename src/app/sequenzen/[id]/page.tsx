@@ -6,15 +6,15 @@ import { Button } from "@/components/ui/button";
 import { PageHeader, DataItem } from "@/components/ui/page-header";
 import { getSequenzById } from "../actions";
 import { getSequenzKontext } from "@/lib/kontext";
-import { getWochenstoff } from "@/lib/modulbaum";
 import { getKWFromDateString } from "@/lib/kw";
 import { getAblauf, getGeschwister } from "../entwurf-actions";
-import { getVorherigenUebertrag } from "../uebertrag-actions";
+import { getOffenenStoffFuerSequenz, getVorherigenUebertrag } from "../uebertrag-actions";
 import { SequenzDeleteButton } from "./sequenz-delete-button";
 import { ContextHeader } from "./context-header";
 import { StandSection } from "./stand-section";
 import { AblaufSection } from "./ablauf-section";
 import { GeschwisterSection } from "./geschwister-section";
+import { RueckstandSection } from "./rueckstand-section";
 import { WochenstoffSection } from "./wochenstoff-section";
 import { UebertragSection } from "./uebertrag-section";
 import { NotizenSection } from "./notizen-section";
@@ -61,12 +61,12 @@ export default async function SequenzDetailPage({
   if (!seq || !kontext) return notFound();
 
   const kw = getKWFromDateString(seq.startDatum);
-  const [ablauf, geschwister, stoff, stand] = await Promise.all([
+  const [ablauf, geschwister, offen, stand] = await Promise.all([
     getAblauf(id),
     getGeschwister(id),
-    seq.modulId && kw !== null
-      ? getWochenstoff(seq.benutzerId, seq.modulId, kw)
-      : null,
+    // Nicht mehr nur der Stoff dieser KW: was in den Vorwochen liegengeblieben
+    // ist, gehört genauso in Planung, Häkchenliste und Referenz.
+    getOffenenStoffFuerSequenz(seq.klasseId, seq.modulId, seq.startDatum),
     getVorherigenUebertrag(seq.klasseId, seq.modulId, seq.startDatum, id),
   ]);
 
@@ -110,11 +110,16 @@ export default async function SequenzDetailPage({
 
       {stand && <StandSection stand={stand} />}
 
+      {/* Vor dem Ablauf: erst wissen, dass etwas nachhängt, dann die
+          Planung lesen. Darunter stünde es hinter der Antwort. */}
+      <RueckstandSection offen={offen} />
+
       <AblaufSection
         sequenzId={id}
         status={seq.status}
         entwurfAm={seq.entwurfAm}
         zeilen={ablauf}
+        lektionen={seq.lektionen}
       />
 
       <GeschwisterSection
@@ -125,10 +130,10 @@ export default async function SequenzDetailPage({
         geschwister={geschwister}
       />
 
-      {stoff && (
+      {offen.dieseRoh && (
         <WochenstoffSection
-          stoff={stoff}
-          bereitsErledigt={stand?.uebertragErledigt ?? []}
+          stoff={offen.dieseRoh}
+          erledigtSchluessel={offen.erledigtSchluessel}
         />
       )}
 
@@ -142,8 +147,7 @@ export default async function SequenzDetailPage({
           keinUebertrag: seq.keinUebertrag,
           uebertragAm: seq.uebertragAm,
         }}
-        stoff={stoff}
-        bereitsErledigt={stand?.uebertragErledigt ?? []}
+        offen={offen}
       />
 
       <NotizenSection sequenzId={id} notiz={seq.cockpitNotiz} />

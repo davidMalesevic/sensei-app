@@ -12,8 +12,43 @@ import {
   keinUebertragSetzen,
   uebertragZuruecksetzen,
 } from "../uebertrag-actions";
-import type { Wochenstoff } from "@/lib/modulbaum";
+import { erledigtMarke, type Wochenstoff } from "@/lib/modulbaum";
+import type { OffenerStoff } from "@/lib/rueckstand";
 import { schweizerHeute } from "@/lib/zeit";
+
+/**
+ * Gegliedert wie «Stoff dieser Woche»: der LA-Code trägt die Gruppe, die
+ * Aufgaben stehen darunter. Eine flache Liste wiederholte den Code auf jeder
+ * Zeile — bei vier LAs derselben Woche liest sich das als Rauschen, und die
+ * beiden Abschnitte sähen ohne Grund verschieden aus.
+ */
+function baueGruppen(bloecke: Wochenstoff["bloecke"]) {
+  return bloecke.flatMap((b) =>
+    b.auftraege
+      .map((a) => ({
+        code: a.code,
+        aufgaben:
+          // Module ohne nummerierte Aufgaben (z.B. 168): dort ist der LA
+          // selbst die Einheit, die abgehakt wird.
+          a.aufgaben.length === 0
+            ? [
+                {
+                  wert: a.code,
+                  // Der Code steht schon als Gruppenkopf darüber — hier
+                  // nochmals wäre er nur Rauschen.
+                  bezeichnung: "ganzer Lern- und Arbeitsauftrag",
+                  teilaufgaben: [] as string[],
+                },
+              ]
+            : a.aufgaben.map((auf) => ({
+                wert: erledigtMarke(a.code, auf.bezeichnung),
+                bezeichnung: auf.bezeichnung,
+                teilaufgaben: auf.teilaufgaben.map((t) => t.bezeichnung),
+              })),
+      }))
+      .filter((g) => g.aufgaben.length > 0)
+  );
+}
 
 export type UebertragDaten = {
   uebertrag: string | null;
@@ -32,15 +67,17 @@ export function UebertragSection({
   sequenzId,
   datum,
   daten,
-  stoff,
-  bereitsErledigt = [],
+  offen,
 }: {
   sequenzId: string;
   datum: string | null;
   daten: UebertragDaten;
-  stoff: Wochenstoff | null;
-  /** Aufgaben, die der Übertrag der Vorwoche schon als erledigt führt. */
-  bereitsErledigt?: string[];
+  /**
+   * Laufende Woche **und** Rückstand. Beides muss abhakbar sein: eine
+   * nachgeholte Aufgabe aus KW 36 hatte hier bisher gar kein Kästchen, der
+   * Rückstand liess sich also nicht auflösen.
+   */
+  offen: OffenerStoff;
 }) {
   const heute = schweizerHeute();
   const gehalten = datum !== null && datum <= heute;
@@ -72,10 +109,25 @@ export function UebertragSection({
         />
 
         <div className="border-l-[3px] border-l-support-success bg-layer p-4">
-          {daten.keinUebertrag && !daten.uebertrag && !daten.uebertragErledigt?.length && daten.uebertragSlideBis === null ? (
-            <p className="type-body-02 text-text-secondary">
-              Kein Übertrag — nichts nachzutragen.
-            </p>
+          {/* «Kein Übertrag» materialisiert seit dem Rückstands-Umbau die
+              Aufgabenliste der Woche. Die Bedingung darf deshalb nicht mehr
+              verlangen, dass sie leer ist — sonst verschwände diese Aussage
+              genau dann, wenn sie zutrifft. */}
+          {daten.keinUebertrag && !daten.uebertrag ? (
+            <div className="space-y-4">
+              <p className="type-body-02 text-text-secondary">
+                Kein Übertrag — alles lief wie geplant und ist erledigt.
+              </p>
+              {daten.uebertragErledigt && daten.uebertragErledigt.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {daten.uebertragErledigt.map((e) => (
+                    <Badge key={e} variant="green" size="sm">
+                      {e}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-4">
               {daten.uebertragSlideBis !== null && (
@@ -117,37 +169,47 @@ export function UebertragSection({
   const speichern = speichereUebertrag.bind(null, sequenzId);
   const keiner = keinUebertragSetzen.bind(null, sequenzId);
 
-  // Was letzte Woche schon abgehakt wurde, steht hier nicht mehr zur Wahl —
-  // sonst «will» Sensei jede Woche dieselben Aufgaben erledigt haben. Der
-  // Entwurfsgenerator lässt sie aus demselben Grund weg.
-  const schonErledigt = new Set(bereitsErledigt);
+  // Zwei Abteilungen: erst was liegengeblieben ist, dann was diese Woche neu
+  // ansteht. Der Rückstand steht oben, weil er zuerst drankommt.
+  const abteilungen = [
+    ...offen.rueckstand.map((r) => ({
+      titel: `Rückstand aus KW ${r.kw}`,
+      rueckstand: true,
+      gruppen: baueGruppen(r.bloecke),
+    })),
+    {
+      titel: offen.diese ? `Diese Woche · KW ${offen.diese.kw}` : "Diese Woche",
+      rueckstand: false,
+      gruppen: baueGruppen(offen.diese?.bloecke ?? []),
+    },
+  ].filter((a) => a.gruppen.length > 0);
 
-  // Gegliedert wie «Stoff dieser Woche»: der LA-Code trägt die Gruppe, die
-  // Aufgaben stehen darunter. Eine flache Liste wiederholte den Code auf
-  // jeder Zeile — bei vier LAs derselben Woche liest sich das als Rauschen,
-  // und die beiden Abschnitte sahen ohne Grund verschieden aus.
-  const gruppen = (stoff?.bloecke ?? []).flatMap((b) =>
-    b.auftraege
-      .map((a) => ({
-        code: a.code,
-        aufgaben: a.aufgaben
-          .map((auf) => ({
-            wert: `${a.code} · ${auf.bezeichnung}`,
-            bezeichnung: auf.bezeichnung,
-            teilaufgaben: auf.teilaufgaben.map((t) => t.bezeichnung),
-          }))
-          .filter((auf) => !schonErledigt.has(auf.wert)),
-      }))
-      // LAs, von denen nichts mehr offen ist, fallen ganz weg.
-      .filter((g) => g.aufgaben.length > 0)
-  );
-
-  const anzahlOffen = gruppen.reduce((n, g) => n + g.aufgaben.length, 0);
-  const alleAnzahl = (stoff?.bloecke ?? []).reduce(
-    (n, b) => n + b.auftraege.reduce((m, a) => m + a.aufgaben.length, 0),
+  const anzahlOffen = abteilungen.reduce(
+    (n, a) => n + a.gruppen.reduce((m, g) => m + g.aufgaben.length, 0),
     0
   );
-  const uebrig = alleAnzahl - anzahlOffen;
+
+  // Was aus dieser Woche schon abgehakt ist, steht nicht mehr zur Wahl — sonst
+  // «will» Sensei jede Woche dieselben Aufgaben erledigt haben.
+  const alleDieseWoche = (offen.dieseRoh?.bloecke ?? []).reduce(
+    (n, b) =>
+      n +
+      b.auftraege.reduce(
+        (m, a) => m + (a.aufgaben.length === 0 ? 1 : a.aufgaben.length),
+        0
+      ),
+    0
+  );
+  const offenDieseWoche = (offen.diese?.bloecke ?? []).reduce(
+    (n, b) =>
+      n +
+      b.auftraege.reduce(
+        (m, a) => m + (a.aufgaben.length === 0 ? 1 : a.aufgaben.length),
+        0
+      ),
+    0
+  );
+  const uebrig = alleDieseWoche - offenDieseWoche;
 
   return (
     <section className="mb-12">
@@ -168,43 +230,61 @@ export function UebertragSection({
               {uebrig > 0 && (
                 <HelperText className="mb-3">
                   {uebrig}{" "}
-                  {uebrig === 1 ? "Aufgabe gilt" : "Aufgaben gelten"} aus der
-                  Vorwoche bereits als erledigt und {uebrig === 1 ? "steht" : "stehen"}{" "}
-                  hier nicht mehr.
+                  {uebrig === 1 ? "Aufgabe dieser Woche gilt" : "Aufgaben dieser Woche gelten"}{" "}
+                  bereits als erledigt und {uebrig === 1 ? "steht" : "stehen"} hier
+                  nicht mehr.
                 </HelperText>
               )}
-              <div>
-                {gruppen.map((g) => (
-                  <div
-                    key={g.code}
-                    className="border-b border-border-subtle py-3 first:pt-0 last:border-b-0 last:pb-0"
-                  >
-                    <code className="type-helper-02 font-mono text-text-helper">
-                      {g.code}
-                    </code>
-                    <div className="mt-2">
-                      {g.aufgaben.map((auf) => (
-                        <label
-                          key={auf.wert}
-                          className="type-body-02 flex cursor-pointer items-baseline gap-3 py-1"
-                        >
-                          <input
-                            type="checkbox"
-                            name="erledigt"
-                            value={auf.wert}
-                            className="carbon-checkbox shrink-0 self-center"
-                          />
-                          <span className="type-heading-compact-02 text-foreground">
-                            {auf.bezeichnung}
-                          </span>
-                          {auf.teilaufgaben.length > 0 && (
-                            <span className="text-text-secondary">
-                              {auf.teilaufgaben.join(", ")}
-                            </span>
-                          )}
-                        </label>
-                      ))}
+              <div className="space-y-6">
+                {abteilungen.map((abt) => (
+                  <div key={abt.titel}>
+                    {/* Der Rückstand trägt einen 3px-Balken links: er ist der
+                        Grund, warum diese Liste überhaupt länger sein kann als
+                        die Woche. */}
+                    <div
+                      className={
+                        abt.rueckstand
+                          ? "mb-2 border-l-[3px] border-l-border-interactive pl-3"
+                          : "mb-2"
+                      }
+                    >
+                      <span className="type-label-02 text-text-secondary">
+                        {abt.titel}
+                      </span>
                     </div>
+                    {abt.gruppen.map((g) => (
+                      <div
+                        key={g.code}
+                        className="border-b border-border-subtle py-3 last:border-b-0 last:pb-0"
+                      >
+                        <code className="type-helper-02 font-mono text-text-helper">
+                          {g.code}
+                        </code>
+                        <div className="mt-2">
+                          {g.aufgaben.map((auf) => (
+                            <label
+                              key={auf.wert}
+                              className="type-body-02 flex cursor-pointer items-baseline gap-3 py-1"
+                            >
+                              <input
+                                type="checkbox"
+                                name="erledigt"
+                                value={auf.wert}
+                                className="carbon-checkbox shrink-0 self-center"
+                              />
+                              <span className="type-heading-compact-02 text-foreground">
+                                {auf.bezeichnung}
+                              </span>
+                              {auf.teilaufgaben.length > 0 && (
+                                <span className="text-text-secondary">
+                                  {auf.teilaufgaben.join(", ")}
+                                </span>
+                              )}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -242,9 +322,15 @@ export function UebertragSection({
           </Button>
         </form>
 
+        {/* Der Knopf schliesst die Woche ab: ihre Aufgaben gelten danach als
+            erledigt und kommen nie wieder. Was er behauptet, muss deshalb
+            draufstehen — dieselbe Lektion wie beim Ablauf-Weitergeben, wo
+            «Ablauf ersetzen» eine fertige Planung gekostet hat. */}
         <form action={keiner} className="mt-4">
           <Button type="submit" variant="ghost" size="sm">
-            Kein Übertrag
+            {anzahlOffen > 0
+              ? `Kein Übertrag · alle ${anzahlOffen} ${anzahlOffen === 1 ? "Aufgabe" : "Aufgaben"} erledigt`
+              : "Kein Übertrag · alles wie geplant"}
           </Button>
         </form>
       </div>

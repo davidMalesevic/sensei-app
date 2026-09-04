@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Idea,
@@ -52,6 +52,10 @@ export type AblaufZeile = {
   refAufgabe: string | null;
   refSeiteVon: number | null;
   refSeiteBis: number | null;
+  dauerMinuten: number | null;
+  dauerQuelle: string | null;
+  /** Gesetzt, wenn dieser Fakt aus einer früheren Woche liegengeblieben ist. */
+  rueckstandKw: number | null;
   refMaterial: {
     id: string;
     titel: string;
@@ -147,11 +151,14 @@ export function AblaufSection({
   status,
   entwurfAm,
   zeilen,
+  lektionen,
 }: {
   sequenzId: string;
   status: string;
   entwurfAm: Date | null;
   zeilen: AblaufZeile[];
+  /** Für das Zeitbudget: eine Lektion sind 45 Minuten. */
+  lektionen: number | null;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(zeilen);
@@ -170,6 +177,30 @@ export function AblaufSection({
   }
 
   const bestaetigt = status === "bestaetigt";
+
+  /**
+   * Das Zeitbudget. Jeder Schritt trägt Minuten — Fakten geerbt aus dem
+   * Modulbaum, KI-Vorschläge von der KI —, also ist die Summe das Budget und
+   * die Schnittlinie fällt dort, wo die Lektion voll ist.
+   *
+   * Gerechnet wird beim Rendern, nicht gespeichert: nach dem ersten Umordnen
+   * wäre eine gespeicherte Schnittlinie falsch.
+   */
+  const budget = lektionen !== null ? lektionen * 45 : null;
+  let laufend = 0;
+  const kumuliert = items.map((z) => {
+    laufend += z.dauerMinuten ?? 0;
+    return laufend;
+  });
+  const geplant = laufend;
+  const ohneAngabe = items.filter((z) => z.dauerMinuten === null).length;
+  // Die erste Zeile, die über das Budget hinausragt. Nur aussagekräftig, wenn
+  // jede Zeile eine Dauer trägt — sonst behauptete die Linie eine Genauigkeit,
+  // die die Daten nicht hergeben.
+  const schnittBei =
+    budget !== null && ohneAngabe === 0
+      ? kumuliert.findIndex((k) => k > budget)
+      : -1;
 
   function neuErzeugen() {
     setRueckfrage(false);
@@ -201,6 +232,26 @@ export function AblaufSection({
     );
     startTransition(async () => {
       await aktualisiereAblaufZeile(id, { [feld]: neu });
+    });
+  }
+
+  /**
+   * Die Minutenzahl dieser einen Zeile. Leeres Feld heisst «keine Angabe» —
+   * das ist eine gültige Aussage, keine Null: eine Aufgabe ohne gepflegte
+   * Dauer soll das Budget nicht scheinbar füllen.
+   */
+  function dauerSichern(id: string, roh: string) {
+    const wert = roh.trim() === "" ? null : Number(roh);
+    const minuten = wert !== null && Number.isFinite(wert) ? wert : null;
+    setItems((alt) =>
+      alt.map((z) =>
+        z.id === id
+          ? { ...z, dauerMinuten: minuten, dauerQuelle: minuten === null ? null : "person" }
+          : z
+      )
+    );
+    startTransition(async () => {
+      await aktualisiereAblaufZeile(id, { dauerMinuten: minuten });
     });
   }
 
@@ -305,6 +356,36 @@ export function AblaufSection({
         </div>
       ) : (
         <>
+          {budget !== null && items.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-l-[3px] border-l-border-subtle bg-layer px-4 py-3">
+              <span className="type-body-compact-02 text-text-secondary">
+                Geplant{" "}
+                <span className="font-mono tabular-nums text-foreground">
+                  {geplant} min
+                </span>{" "}
+                · verfügbar{" "}
+                <span className="font-mono tabular-nums text-foreground">
+                  {budget} min
+                </span>
+              </span>
+              {ohneAngabe > 0 ? (
+                // Lieber schweigen als eine Summe behaupten, die nicht stimmt.
+                <span className="type-helper-02 text-text-helper">
+                  + {ohneAngabe} {ohneAngabe === 1 ? "Schritt" : "Schritte"} ohne
+                  Zeitangabe — Summe unvollständig
+                </span>
+              ) : geplant > budget ? (
+                <Badge variant="blue" size="sm">
+                  {geplant - budget} min über
+                </Badge>
+              ) : (
+                <span className="type-helper-02 text-text-helper">
+                  {budget - geplant} min Reserve
+                </span>
+              )}
+            </div>
+          )}
+
           <ol
             className="bg-layer"
             onPointerMove={ziehenBewegen}
@@ -313,6 +394,10 @@ export function AblaufSection({
           >
             {items.map((z, i) => {
               const Icon = TYP_ICON[z.typ] ?? CircleDash;
+              // Ab hier reicht die Lektion nicht mehr. Kein Fehler, sondern
+              // eine Auskunft: was darunter steht, wird voraussichtlich
+              // Rückstand — die Lehrperson entscheidet, wo sie abbricht.
+              const schnitt = i === schnittBei;
               const fakt = z.quelle === "fakt";
               const href = z.refMaterial
                 ? materialHref(
@@ -322,8 +407,20 @@ export function AblaufSection({
                 : null;
 
               return (
+                <Fragment key={z.id}>
+                {schnitt && (
+                  <li
+                    aria-hidden
+                    className="flex items-center gap-3 px-4 py-2 select-none"
+                  >
+                    <span className="h-px flex-1 bg-border-interactive" />
+                    <span className="type-helper-02 whitespace-nowrap text-text-helper">
+                      ab hier reicht die Zeit voraussichtlich nicht
+                    </span>
+                    <span className="h-px flex-1 bg-border-interactive" />
+                  </li>
+                )}
                 <li
-                  key={z.id}
                   ref={(el) => {
                     zeilenRefs.current[i] = el;
                   }}
@@ -386,6 +483,38 @@ export function AblaufSection({
                       <Badge variant="ghost" size="sm">
                         {TYP_LABEL[z.typ] ?? z.typ}
                       </Badge>
+                      {/* Liegengebliebenes muss man erkennen: es steht zwar
+                          vorn, sieht sonst aber aus wie neuer Stoff. */}
+                      {z.rueckstandKw !== null && (
+                        <Badge variant="blue" size="sm">
+                          Rückstand KW {z.rueckstandKw}
+                        </Badge>
+                      )}
+                      {/* Minuten: die einzige Zahl im Ablauf, die geschätzt
+                          ist. `~` sagt, dass sie von der KI stammt, `✎` dass
+                          jemand sie gesetzt hat — sonst stünde eine Schätzung
+                          neben LA-Code und Slidenummer und sähe aus wie die. */}
+                      <span className="inline-flex items-baseline gap-1">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          // Der Server begrenzt die Zahl (1–300). Ohne den
+                          // Schlüssel bliebe ein unkontrolliertes Feld auf dem
+                          // Getippten stehen und zeigte etwas anderes an, als
+                          // gespeichert ist.
+                          key={z.dauerMinuten ?? "leer"}
+                          defaultValue={z.dauerMinuten ?? ""}
+                          onBlur={(e) => dauerSichern(z.id, e.target.value)}
+                          aria-label={`Dauer von Schritt ${i + 1} in Minuten`}
+                          placeholder="—"
+                          className="type-helper-02 w-10 border-0 border-b border-border-strong bg-field px-1 py-0.5 text-right font-mono tabular-nums text-foreground focus:outline-2 focus:-outline-offset-2 focus:outline-border-interactive"
+                        />
+                        <span className="type-helper-02 text-text-helper">
+                          min
+                          {z.dauerQuelle === "ki" && " ~"}
+                          {z.dauerQuelle === "person" && " ✎"}
+                        </span>
+                      </span>
                       {href && (
                         <a
                           href={href}
@@ -411,6 +540,7 @@ export function AblaufSection({
                     <TrashCan size={16} />
                   </Button>
                 </li>
+                </Fragment>
               );
             })}
           </ol>

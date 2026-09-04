@@ -99,6 +99,18 @@ export default async function DruckenPage({
                   <span className="type-label-02 text-text-helper print:text-black">
                     {TYP_LABEL[z.typ] ?? z.typ}
                   </span>
+                  {z.dauerMinuten !== null && (
+                    <span className="type-label-02 font-mono tabular-nums text-text-helper print:text-black">
+                      {z.dauerMinuten} min
+                    </span>
+                  )}
+                  {/* Auf Papier ist das die wichtigste Auskunft der Zeile:
+                      das hier ist nachzuholen, nicht neu. */}
+                  {z.rueckstandKw !== null && (
+                    <span className="type-label-02 text-text-helper print:text-black">
+                      Rückstand KW {z.rueckstandKw}
+                    </span>
+                  )}
                 </div>
                 {z.text && (
                   <p className="type-body-02 mt-1 text-text-secondary print:text-black">

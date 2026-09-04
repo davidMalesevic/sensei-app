@@ -394,11 +394,15 @@ Die Reihenfolge folgt dem Mittwoch-Durchgang:
 Drei Stellen zeigen dieselben Aufgaben einer Woche. Sie behandeln
 Erledigtes bewusst verschieden:
 
-| | Erledigtes aus der Vorwoche |
+| | Erledigtes aus **allen** Vorwochen |
 |---|---|
-| **Ablauf** (`sammleFakten`) | fällt weg — geplant wird, was noch aussteht |
-| **Übertrag**, Häkchenliste | fällt weg, mit Zeile «N Aufgaben gelten … bereits als erledigt» |
+| **Ablauf** (`sammleFakten`) | fällt weg — geplant wird, was noch aussteht, Rückstand zuerst |
+| **Übertrag**, Häkchenliste | fällt weg, mit Zeile «N Aufgaben … gelten bereits als erledigt» |
+| **Rückstand** | zeigt nur Offenes, nach Herkunfts-KW gruppiert |
 | **Stoff dieser Woche** | bleibt, durchgestrichen mit grünem Tag, dazu «N von M erledigt» im Kopf |
+
+Gekürzt wird um **alles je Erledigte**, nicht mehr nur um die letzte Woche —
+siehe *Rückstand*.
 
 Der Wochenstoff ist die **Referenz** hinter dem Ablauf; ein Blick zurück auf
 eine bereits gemachte Aufgabe ist im Unterricht normal, und eine Aufgabe, die
@@ -556,13 +560,92 @@ Nicht ableitbar — die App kann nichts wissen, was nicht getippt wird
   und eine Slidezahl fällig. Wer den Text als Marker nimmt, zeigt der Person
   nach dem Speichern wieder das leere Formular, findet den Stand in der
   Folgewoche nicht und lässt den roten Punkt stehen.
-- Die Häkchen kommen aus `getWochenstoff()` — angeklickt statt getippt.
+- **«Kein Übertrag» heisst: alles lief wie geplant, alles erledigt, nichts
+  vorzumerken.** `keinUebertragSetzen()` schreibt deshalb die Aufgabenliste der
+  Woche (Rückstand eingeschlossen) in `uebertragErledigt` — materialisiert
+  statt gerechnet, sonst verschöbe ein Modulplan-Reimport nachträglich, was
+  diese Woche umfasste. Der Knopf nennt die Zahl («Kein Übertrag · alle 3
+  Aufgaben erledigt»): er schliesst die Woche ab, das muss draufstehen.
+  Zeilen aus der Zeit davor tragen eine leere Liste — die Aggregation legt das
+  Flag deshalb selbst als «alles erledigt» aus.
+- Die Häkchen kommen aus `getOffenenStoff()` — angeklickt statt getippt, und
+  **inklusive Rückstand**: eine nachgeholte Aufgabe braucht ein Kästchen.
 - **Roter Punkt**: vergangene Sequenzen ohne Übertrag zählt
   `getOffeneUebertraege()`; die Zahl steht als Badge am Stundenplan in der
   Sidebar und als Banner auf `/stundenplan`. Deshalb ist `app/layout.tsx`
   `force-dynamic` — sonst käme der Zählerstand aus der Build-Zeit.
 - Die Folgesequenz derselben Klasse im selben Modul zeigt den Übertrag als
   «Stand aus der letzten Lektion» — die Antwort auf «wo fange ich an».
+
+## Rückstand
+
+**Der Übertrag konnte Arbeit lange nur wegnehmen, nie mitnehmen.**
+`getWochenstoff()` holte genau eine Modulplan-Zeile, `holeVorherigenUebertrag()`
+genau eine Vorsequenz, und `sammleFakten()` benutzte deren Erledigt-Liste als
+Abzugsfilter. Blieb in KW 36 die Hälfte von Block 2 liegen, bestand die
+Faktenliste für KW 37 nur aus Block 3: die offenen Aufgaben waren spurlos weg,
+der Theoriestoff mit ihnen, und abhaken liessen sie sich auch nicht, weil die
+Häkchenliste aus demselben Wochenstoff kam. Dahinter stand eine nie
+ausgesprochene Annahme — *der Modulplan wird eingehalten*. Real ist der
+Modulplan eine Absicht und der Übertrag die Wirklichkeit.
+
+`src/lib/rueckstand.ts` rechnet **KW + Modul + Klasse ⇒ was noch offen ist**:
+
+| | |
+|---|---|
+| `getOffenenStoff()` | laufende Woche (gekürzt), `dieseRoh` (ungekürzt, für die Referenzansicht), Rückstand nach KW, Wochen ohne Rückmeldung |
+| `holeStandDerKlasse()` | kumulierte Erledigt-Menge über **alle** Vorwochen, nicht nur die letzte |
+| `getWochenstoffMehrere()` | löst mehrere KWs mit einem Baumladen auf |
+
+- **Eine Woche ohne Rückmeldung erzeugt keinen Rückstand.** Ihr Stand ist
+  unbekannt, und Sensei erfindet keinen Rückstand, den es nicht wissen kann;
+  gemeldet wird die Lücke trotzdem. Hat eine Klasse mehrere Lektionen in
+  derselben Woche, zählt sie nur als gerechnet, wenn **jede** zurückgemeldet
+  ist — sonst gälte der Stoff der Woche schon nach einer Rückmeldung als klar.
+- **Erledigt-Marken werden normalisiert verglichen** (`markeSchluessel()` in
+  `modulbaum.ts`). Sie werden über Wochen hinweg geprüft, und dazwischen kann
+  der Modulplan neu importiert worden sein — die LA-Codes sind je nach Export
+  anders abgeschnitten. Ein roher Stringvergleich liesse den Rückstand nach
+  jedem Import wieder auferstehen. Nie roh vergleichen.
+- Der Rückstand steht **vor** dem Ablauf, nicht darunter: sonst liest man die
+  Planung, bevor man weiss, dass etwas nachhängt.
+- Im Ablauf tragen geerbte Fakten `sequenz_ablauf.rueckstandKw` und ein
+  Etikett. Das Feld dient nur der Anzeige — gerechnet wird jedes Mal neu.
+
+## Zeitbudget
+
+Jeder Ablaufschritt trägt Minuten, also ist die Summe das Budget und die
+Schnittlinie fällt dort, wo `lektionen × 45` voll ist. Gerechnet wird **beim
+Rendern, nicht gespeichert** — nach dem ersten Umordnen wäre eine gespeicherte
+Linie falsch.
+
+**Eine Dauer ist nie ein Fakt.** Im Smartlearn-Export steht keine Zeitangabe
+(die Aufgabentexte mancher Module nennen zwar «Zeit: ca. 30min», eine Spalte
+gibt es nicht). Sie ist entweder von der KI geschätzt oder von Hand gesetzt,
+und `dauer_quelle` (`ki` | `person`) hält das fest: die Oberfläche zeigt `~`
+und `✎`. Ohne diese Trennung stünde eine Schätzung neben LA-Code und
+Slidenummer und sähe aus wie diese.
+
+- `modul_aufgabe.dauerMinuten` ist die **Vorgabe** und gilt für alle Klassen;
+  `sequenz_ablauf.dauerMinuten` überschreibt sie für eine einzelne Lektion.
+  Module ohne nummerierte Aufgaben (168) tragen sie am `modul_auftrag`,
+  Theorieteile am `modul_block`.
+- `schaetzeModulZeiten()` in `src/lib/zeitschaetzung.ts` läuft beim
+  Baum-Import (in `try/catch` — der deterministische Import darf nicht an der
+  KI scheitern) und über den Knopf «Zeiten schätzen». **Er fasst `person` nie
+  an**, weder in der Auswahl noch im `WHERE`.
+- **`importModulBaum()` löscht Aufträge und Aufgaben und legt sie neu an.**
+  Die Minutenangaben würden dabei verschwinden, deshalb merkt
+  `ladeZeitenNachSchluessel()` sie vorher über den fachlichen Schlüssel
+  (normalisierter LA-Code + Bezeichnung) statt über die UUID. Dasselbe Problem
+  hatten die Blöcke mit ihrer Slidezuordnung.
+- Schritte ohne Minuten werden als «+ N ohne Zeitangabe» ausgewiesen und es
+  wird **keine** Schnittlinie gezogen. Lieber schweigen als eine Summe
+  behaupten, die nicht stimmt.
+- Der **Nachtlauf gruppiert nach Modul + KW + Rückstandssignatur**. Zwei
+  Klassen mit verschiedenem Stand haben verschiedene Faktenlisten; ein
+  gemeinsamer Ablauf wäre für eine der beiden falsch. In den Parallelklassen
+  steht dazu das Etikett «anderer Rückstand».
 
 ## Smartlearn-Import
 
@@ -664,6 +747,7 @@ npx tsx src/db/migrate-<name>.ts  # Migration ausführen (NICHT drizzle-kit push
 npx tsx src/db/migrate-benutzer.ts     # Login + Datentrennung
 npx tsx src/db/besitz-uebertragen.ts <email>  # Bestand einem Konto zuweisen
 npx tsx src/db/migrate-admin.ts        # Verwaltung, Einladungen, Zeitplan
+npx tsx src/db/migrate-zeit-rueckstand.ts  # Minuten + Rückstands-Herkunft
 npx tsx src/db/migrate-resultate.ts    # Smartlearn-Resultate (Versuch)
 npx tsx src/db/drop-resultate.ts --wirklich   # ... und wieder weg
 npx tsx src/db/seed.ts            # Seed-Daten laden
@@ -872,6 +956,7 @@ src/
 │   │   └── [id]/                 # eine Ansicht, keine Umschaltung
 │   │       ├── context-header.tsx
 │   │       ├── stand-section.tsx        # Übertrag der Vorwoche
+│       ├── rueckstand-section.tsx   # was aus Vorwochen aussteht
 │   │       ├── ablauf-section.tsx       # das Arbeitsergebnis, bearbeitbar
 │   │       ├── geschwister-section.tsx  # Parallelklassen
 │   │       ├── wochenstoff-section.tsx  # Fakten aus dem Modulbaum

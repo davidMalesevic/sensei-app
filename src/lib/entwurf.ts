@@ -15,7 +15,8 @@ import { sequenz, sequenzAblauf, klasse } from "@/db/schema";
 import { and, asc, count, desc, eq, gte, isNotNull, lte, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
-import { getWochenstoff, type Wochenstoff } from "@/lib/modulbaum";
+import { markenAusStoff, type StoffBlock } from "@/lib/modulbaum";
+import { getOffenenStoff, type OffenerStoff } from "@/lib/rueckstand";
 import { getKWFromDateString } from "@/lib/kw";
 import { holeVorherigenUebertrag } from "@/lib/uebertrag";
 
@@ -67,6 +68,11 @@ type Fakt = {
   refAufgabe: string | null;
   refSeiteVon: number | null;
   refSeiteBis: number | null;
+  /** Vorgabe aus dem Modulbaum; `null` heisst «keine Angabe». */
+  dauerMinuten: number | null;
+  dauerQuelle: "ki" | "person" | null;
+  /** Gesetzt, wenn der Fakt aus einer früheren Woche liegengeblieben ist. */
+  rueckstandKw: number | null;
 };
 
 type KiSchritt = {
@@ -74,7 +80,22 @@ type KiSchritt = {
   faktId?: string;
   titel?: string;
   text?: string;
+  minuten?: unknown;
 };
+
+/**
+ * Eine Minutenangabe der KI auf ein sinnvolles Mass ziehen.
+ *
+ * Sie darf die Länge *ihrer eigenen* Schritte vorschlagen — die hat sie
+ * erfunden, also ist die Dauer ein Plan und keine Tatsachenbehauptung. Ein
+ * Ausrutscher («120») würde das Budget aber unbrauchbar machen, und Text
+ * statt Zahl kommt bei jedem Modell irgendwann vor.
+ */
+function plausibleMinuten(roh: unknown): number | null {
+  const n = typeof roh === "number" ? roh : Number(roh);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(45, Math.max(5, Math.round(n)));
+}
 
 const ERLAUBTE_TYPEN = [
   "einstieg",
@@ -88,14 +109,21 @@ const ERLAUBTE_TYPEN = [
 
 type AblaufTyp = (typeof ERLAUBTE_TYPEN)[number];
 
-/** Sammelt, was in dieser Woche belegbar ansteht. */
-function sammleFakten(stoff: Wochenstoff, erledigt: string[]): Fakt[] {
-  const fakten: Fakt[] = [];
-
-  for (const b of stoff.bloecke) {
+/**
+ * Die Fakten einer Woche aus einem Stoffpaket.
+ *
+ * `rueckstandKw` ist gesetzt, wenn dieses Paket aus einer früheren Woche
+ * stammt — dann ist es Liegengebliebenes und gehört im Ablauf nach vorn.
+ */
+function faktenAusBloecken(
+  bloecke: StoffBlock[],
+  rueckstandKw: number | null,
+  fakten: Fakt[]
+): void {
+  for (const b of bloecke) {
     if (b.slides) {
       fakten.push({
-        id: `theorie-${b.schluessel}`,
+        id: `theorie-${rueckstandKw ?? "jetzt"}-${b.schluessel}`,
         typ: "theorie",
         titel: b.slides.von
           ? `${b.slides.titel}, Slide ${b.slides.von}${b.slides.bis ? `–${b.slides.bis}` : ""}`
@@ -105,6 +133,9 @@ function sammleFakten(stoff: Wochenstoff, erledigt: string[]): Fakt[] {
         refAufgabe: null,
         refSeiteVon: b.slides.von,
         refSeiteBis: b.slides.bis,
+        dauerMinuten: b.slides.dauer.minuten,
+        dauerQuelle: b.slides.dauer.quelle,
+        rueckstandKw,
       });
     }
 
@@ -122,14 +153,14 @@ function sammleFakten(stoff: Wochenstoff, erledigt: string[]): Fakt[] {
           refAufgabe: null,
           refSeiteVon: null,
           refSeiteBis: null,
+          dauerMinuten: a.dauer.minuten,
+          dauerQuelle: a.dauer.quelle,
+          rueckstandKw,
         });
         continue;
       }
 
       for (const auf of a.aufgaben) {
-        const marke = `${a.code} · ${auf.bezeichnung}`;
-        if (erledigt.includes(marke)) continue; // letzte Woche erledigt
-
         const teil =
           auf.teilaufgaben.length > 0
             ? ` (${auf.teilaufgaben.map((t) => t.bezeichnung).join(", ")})`
@@ -144,11 +175,32 @@ function sammleFakten(stoff: Wochenstoff, erledigt: string[]): Fakt[] {
           refAufgabe: auf.bezeichnung,
           refSeiteVon: null,
           refSeiteBis: null,
+          dauerMinuten: auf.dauer.minuten,
+          dauerQuelle: auf.dauer.quelle,
+          rueckstandKw,
         });
       }
     }
   }
+}
 
+/**
+ * Alles, was für diese Lektion belegbar aussteht — **Rückstand zuerst**.
+ *
+ * Vorher stand hier ein reiner Abzugsfilter: der Stoff der laufenden KW, minus
+ * das, was die *eine* Vorwoche abgehakt hatte. Was in KW 36 liegenblieb, kam
+ * in KW 37 nirgends mehr vor, weil KW 37 im Modulplan nur Block 3 nennt. Der
+ * Übertrag konnte Arbeit damit nur wegnehmen, nie mitnehmen.
+ *
+ * Das Kürzen um Erledigtes ist bereits passiert — `getOffenenStoff()` liefert
+ * nur noch Offenes.
+ */
+function sammleFakten(offen: OffenerStoff): Fakt[] {
+  const fakten: Fakt[] = [];
+  // Liegengebliebenes gehört nach vorn: es kommt zuerst dran, und wenn die
+  // Zeit nicht für alles reicht, soll das Neue hinten abgeschnitten werden.
+  for (const r of offen.rueckstand) faktenAusBloecken(r.bloecke, r.kw, fakten);
+  if (offen.diese) faktenAusBloecken(offen.diese.bloecke, null, fakten);
   return fakten;
 }
 
@@ -184,18 +236,39 @@ function bauePrompt(opts: {
   const faktenListe =
     opts.fakten.length > 0
       ? opts.fakten
-          .map((f) => `  ${f.id}: [${f.typ}] ${f.titel}`)
+          .map((f) => {
+            const dauer =
+              f.dauerMinuten !== null ? `${f.dauerMinuten} min` : "Dauer unbekannt";
+            const her =
+              f.rueckstandKw !== null ? ` — RÜCKSTAND aus KW ${f.rueckstandKw}` : "";
+            return `  ${f.id}: [${f.typ}] ${f.titel} (${dauer})${her}`;
+          })
           .join("\n")
       : "  (keine)";
+
+  const budget = opts.lektionen * 45;
+  const faktenZeit = opts.fakten.reduce((n, f) => n + (f.dauerMinuten ?? 0), 0);
+  const rueckstandZahl = opts.fakten.filter((f) => f.rueckstandKw !== null).length;
 
   return `Du planst eine Unterrichtssequenz an einer Schweizer Berufsfachschule.
 
 RAHMEN
   Klasse: ${opts.klasse}
-  Umfang: ${opts.lektionen} Lektionen à 45 Minuten
+  Umfang: ${opts.lektionen} Lektionen à 45 Minuten = ${budget} Minuten
   Modul: ${opts.modul}
   Wochenziel: ${opts.ziel ?? "nicht hinterlegt"}
-${opts.lbHinweis ? `  Leistungsbeurteilung diese Woche: ${opts.lbHinweis}\n` : ""}${opts.stand ? `  Stand aus der letzten Lektion: ${opts.stand}\n` : ""}
+${opts.lbHinweis ? `  Leistungsbeurteilung diese Woche: ${opts.lbHinweis}\n` : ""}${opts.stand ? `  Stand aus der letzten Lektion: ${opts.stand}\n` : ""}${
+    rueckstandZahl > 0
+      ? `  Rückstand: ${rueckstandZahl} Aufgaben sind aus früheren Wochen liegengeblieben.\n`
+      : ""
+  }
+ZEIT
+  Verfügbar: ${budget} Minuten. Die Fakten belegen davon bereits ${faktenZeit} Minuten.
+  Plane deine eigenen Schritte so, dass die Summe ${budget} Minuten nicht
+  wesentlich übersteigt. Reicht die Zeit nicht für alle Fakten, ordne sie
+  trotzdem alle ein — die Lehrperson entscheidet selbst, wo sie abbricht, und
+  bekommt die Schnittlinie angezeigt.
+
 FAKTEN (aus dem Unterrichtsmaterial, unveränderlich)
 ${faktenListe}
 
@@ -212,19 +285,23 @@ Regeln:
 3. Fakten werden NUR referenziert, niemals umformuliert: dafür
    {"typ":"fakt","faktId":"<id>"}. Erfinde keine Aufgabennummern, keine
    LA-Codes und keine Slidezahlen.
-4. Verwende möglichst alle Fakten, in sinnvoller Reihenfolge.
-5. Nach Arbeitsphasen gehört eine Besprechung (typ "besprechung").
-6. Der letzte Schritt ist ein Abschluss (typ "abschluss").
-7. Die Dramaturgie darfst du variieren — ${opts.lektionen} Lektionen brauchen
+4. Verwende ALLE Fakten, in sinnvoller Reihenfolge.
+5. Fakten mit dem Vermerk RÜCKSTAND kommen zuerst — sie sind aus einer
+   früheren Woche liegengeblieben und stehen als Erstes an.
+6. Nach Arbeitsphasen gehört eine Besprechung (typ "besprechung").
+7. Der letzte Schritt ist ein Abschluss (typ "abschluss").
+8. Gib für JEDEN eigenen Schritt eine Dauer in Minuten an ("minuten"), 5 bis
+   45. Für Fakten gibst du KEINE Dauer an — die steht schon fest.
+9. Die Dramaturgie darfst du variieren — ${opts.lektionen} Lektionen brauchen
    einen anderen Rhythmus als eine Doppellektion.
-8. Formuliere knapp: die Lehrperson überfliegt das im Unterricht in Sekunden.
+10. Formuliere knapp: die Lehrperson überfliegt das im Unterricht in Sekunden.
    Ein bis zwei Sätze pro Schritt, kein Fliesstext.
 
 Antworte AUSSCHLIESSLICH mit JSON in dieser Form:
 {"ablauf":[
-  {"typ":"einstieg","titel":"kurzer Titel","text":"ein bis zwei Sätze"},
+  {"typ":"einstieg","titel":"kurzer Titel","text":"ein bis zwei Sätze","minuten":10},
   {"typ":"fakt","faktId":"aufgabe-0"},
-  {"typ":"besprechung","titel":"...","text":"..."}
+  {"typ":"besprechung","titel":"...","text":"...","minuten":10}
 ]}`;
 }
 
@@ -251,7 +328,17 @@ export async function erzeugeEntwurf(
   const kw = getKWFromDateString(seq.startDatum);
   if (kw === null) return { ok: false, fehler: "Der Sequenz fehlt das Datum." };
 
-  const stoff = await getWochenstoff(bId, seq.modulId, kw);
+  // Der offene Stoff, nicht der Stoff dieser Woche: Liegengebliebenes aus
+  // früheren Wochen gehört genauso geplant, sonst fällt es lautlos weg.
+  const offen = await getOffenenStoff(
+    bId,
+    seq.klasseId,
+    seq.modulId,
+    kw,
+    seq.startDatum
+  );
+  const stoff = offen.diese;
+
   if (!stoff || stoff.ohneModulplan) {
     return {
       ok: false,
@@ -264,7 +351,10 @@ export async function erzeugeEntwurf(
   // reisst. Ohne diese Prüfung lief die Erzeugung stillschweigend weiter und
   // lieferte eine Lektion, die vollständig aus KI-Vorschlägen bestand: die
   // Lehrperson hielt eine erfundene Stunde für eine geplante.
-  if (stoff.bloecke.length === 0) {
+  //
+  // Rückstand rettet die Woche allerdings: gibt es Liegengebliebenes, ist
+  // etwas zu planen, auch wenn diese KW selbst leer ausgeht.
+  if (stoff.bloecke.length === 0 && offen.rueckstand.length === 0) {
     return {
       ok: false,
       fehler:
@@ -282,19 +372,20 @@ export async function erzeugeEntwurf(
     sequenzId
   );
 
-  const fakten = sammleFakten(stoff, stand?.uebertragErledigt ?? []);
+  const fakten = sammleFakten(offen);
 
-  // Kein einziger Fakt heisst: alles aus diesem Block ist laut Übertrag
-  // erledigt, oder der Aufgabenbaum fehlt. Beides ist eine Aussage, die die
-  // Lehrperson lesen soll — die KI würde sonst eine Lektion aus dem Nichts
-  // bauen. Die KI ordnet und formuliert, sie erfindet keine Fakten.
+  // Kein einziger Fakt heisst: alles ist laut Übertrag erledigt, oder der
+  // Aufgabenbaum fehlt. Beides ist eine Aussage, die die Lehrperson lesen
+  // soll — die KI würde sonst eine Lektion aus dem Nichts bauen. Die KI
+  // ordnet und formuliert, sie erfindet keine Fakten.
   if (fakten.length === 0) {
+    const woBloecke = stoff.bloecke.map((b) => `Block ${b.schluessel}`).join(" und ");
     return {
       ok: false,
       fehler:
-        `Für KW ${kw} steht in ${stoff.bloecke.map((b) => `Block ${b.schluessel}`).join(" und ")} ` +
-        `keine offene Aufgabe — entweder ist laut Übertrag alles erledigt, ` +
-        `oder zum Modul fehlt der Aufgabenbaum.`,
+        `Für KW ${kw} steht${woBloecke ? ` in ${woBloecke}` : ""} keine offene ` +
+        `Aufgabe an — entweder ist laut Übertrag alles erledigt, oder zum ` +
+        `Modul fehlt der Aufgabenbaum.`,
     };
   }
 
@@ -336,24 +427,31 @@ export async function erzeugeEntwurf(
   const verwendet = new Set<string>();
   const zeilen: (typeof sequenzAblauf.$inferInsert)[] = [];
 
+  /** Faktzeile: jeder Wert stammt aus unseren Daten, keiner aus der Antwort. */
+  const faktZeile = (f: Fakt): typeof sequenzAblauf.$inferInsert => ({
+    sequenzId,
+    sortierung: zeilen.length,
+    typ: f.typ,
+    quelle: "fakt",
+    titel: f.titel,
+    text: f.text,
+    refCode: f.refCode,
+    refAufgabe: f.refAufgabe,
+    refSeiteVon: f.refSeiteVon,
+    refSeiteBis: f.refSeiteBis,
+    // Auch die Dauer ist geerbt, nicht geschätzt: die KI darf die Länge einer
+    // Aufgabe aus dem Material so wenig erfinden wie deren Nummer.
+    dauerMinuten: f.dauerMinuten,
+    dauerQuelle: f.dauerQuelle,
+    rueckstandKw: f.rueckstandKw,
+  });
+
   for (const s of schritte) {
-    // Faktzeile: Text kommt aus unseren Daten, nie aus der KI-Antwort.
     if (s.faktId || s.typ === "fakt") {
       const f = s.faktId ? faktVon.get(s.faktId) : undefined;
       if (!f || verwendet.has(f.id)) continue;
       verwendet.add(f.id);
-      zeilen.push({
-        sequenzId,
-        sortierung: zeilen.length,
-        typ: f.typ,
-        quelle: "fakt",
-        titel: f.titel,
-        text: f.text,
-        refCode: f.refCode,
-        refAufgabe: f.refAufgabe,
-        refSeiteVon: f.refSeiteVon,
-        refSeiteBis: f.refSeiteBis,
-      });
+      zeilen.push(faktZeile(f));
       continue;
     }
 
@@ -370,6 +468,11 @@ export async function erzeugeEntwurf(
       quelle: "vorschlag",
       titel: titel.slice(0, 300),
       text: s.text && s.text.trim() !== titel ? s.text.trim() : null,
+      // Den eigenen Schritt hat die KI erfunden, also darf sie auch seine
+      // Länge vorschlagen — das ist ein Plan, keine Tatsachenbehauptung.
+      // Plausibilisiert, damit ein Ausrutscher nicht das Budget sprengt.
+      dauerMinuten: plausibleMinuten(s.minuten),
+      dauerQuelle: plausibleMinuten(s.minuten) !== null ? "ki" : null,
     });
   }
 
@@ -377,18 +480,7 @@ export async function erzeugeEntwurf(
   // Unterricht eine Aufgabe, die eigentlich ansteht.
   for (const f of fakten) {
     if (verwendet.has(f.id)) continue;
-    zeilen.push({
-      sequenzId,
-      sortierung: zeilen.length,
-      typ: f.typ,
-      quelle: "fakt",
-      titel: f.titel,
-      text: f.text,
-      refCode: f.refCode,
-      refAufgabe: f.refAufgabe,
-      refSeiteVon: f.refSeiteVon,
-      refSeiteBis: f.refSeiteBis,
-    });
+    zeilen.push(faktZeile(f));
   }
 
   if (zeilen.length === 0) {
@@ -412,6 +504,48 @@ export async function erzeugeEntwurf(
  * Nachtlauf: Entwürfe für alle anstehenden Sequenzen ohne eigenen Ablauf.
  * Läuft bewusst seriell — die Ollama-Cloud mag keine Salven.
  */
+/**
+ * Ein kurzer Fingerabdruck des Rückstands einer Sequenz.
+ *
+ * Dient allein dem Gruppieren im Nachtlauf: gleiche Signatur heisst gleiche
+ * Ausgangslage, also darf ein Ablauf für beide Klassen gelten. Bewusst über
+ * die Marken und nicht über die Anzahl — zwei Klassen können gleich viel
+ * offen haben und trotzdem Verschiedenes.
+ */
+async function rueckstandSignatur(
+  bId: string,
+  sequenzId: string
+): Promise<string> {
+  const seq = await db.query.sequenz.findFirst({
+    where: and(eq(sequenz.id, sequenzId), eq(sequenz.benutzerId, bId)),
+    columns: { klasseId: true, modulId: true, startDatum: true },
+  });
+  if (!seq?.modulId) return "";
+
+  const offen = await getOffenenStoff(
+    bId,
+    seq.klasseId,
+    seq.modulId,
+    getKWFromDateString(seq.startDatum),
+    seq.startDatum
+  );
+
+  if (offen.rueckstand.length === 0) return "";
+
+  return offen.rueckstand
+    .map((r) => `${r.kw}:${markenAusStoff({ ...LEERE_WOCHE, kw: r.kw, bloecke: r.bloecke }).sort().join(",")}`)
+    .join("|");
+}
+
+/** Gerüst für `markenAusStoff`, das nur die Blöcke braucht. */
+const LEERE_WOCHE = {
+  kw: 0,
+  ziel: null,
+  lbHinweis: null,
+  bloecke: [],
+  ohneModulplan: false,
+} as const;
+
 export async function erzeugeEntwuerfe(
   bId: string,
   vonDatum: string,
@@ -427,6 +561,7 @@ export async function erzeugeEntwuerfe(
     .select({
       id: sequenz.id,
       modulId: sequenz.modulId,
+      klasseId: sequenz.klasseId,
       startDatum: sequenz.startDatum,
     })
     .from(sequenz)
@@ -441,13 +576,20 @@ export async function erzeugeEntwuerfe(
     )
     .orderBy(asc(sequenz.startDatum), asc(sequenz.startZeit));
 
-  // Nach Modul und Kalenderwoche gruppieren: dieselbe Woche im selben Modul
-  // wird einmal geplant und auf die übrigen Klassen übernommen. Das spart
-  // nicht nur KI-Aufrufe, es ist auch die Planung, die die Lehrperson meint.
+  // Nach Modul, Kalenderwoche **und Rückstand** gruppieren: dieselbe Woche im
+  // selben Modul wird einmal geplant und auf die übrigen Klassen übernommen.
+  //
+  // Der Rückstand gehört in den Schlüssel, seit er in die Planung einfliesst.
+  // Zwei Klassen im selben Modul und derselben Woche können unterschiedlich
+  // weit sein — dann sind ihre Faktenlisten verschieden, und ein gemeinsamer
+  // Ablauf wäre für mindestens eine der beiden falsch. Klassen mit gleichem
+  // Stand teilen sich weiter einen Plan; das kostet nur dort mehr KI-Aufrufe,
+  // wo die Klassen tatsächlich auseinandergelaufen sind.
   const gruppen = new Map<string, string[]>();
   for (const k of kandidaten) {
     const kw = getKWFromDateString(k.startDatum);
-    const schluessel = `${k.modulId ?? "ohne"}|${kw ?? "?"}`;
+    const signatur = await rueckstandSignatur(bId, k.id);
+    const schluessel = `${k.modulId ?? "ohne"}|${kw ?? "?"}|${signatur}`;
     if (!gruppen.has(schluessel)) gruppen.set(schluessel, []);
     gruppen.get(schluessel)!.push(k.id);
   }
@@ -567,18 +709,36 @@ export async function getAblauf(bId: string, sequenzId: string) {
 export async function aktualisiereAblaufZeile(
   bId: string,
   zeilenId: string,
-  werte: { titel?: string; text?: string | null }
+  werte: {
+    titel?: string;
+    text?: string | null;
+    /** `null` löscht die Angabe wieder. */
+    dauerMinuten?: number | null;
+  }
 ) {
   if (!(await eigeneAblaufZeile(bId, zeilenId))) return;
 
   const titel = werte.titel?.trim();
   const text = werte.text?.trim();
 
+  // Eine hier getippte Minutenzahl gilt nur für diese eine Lektion und trägt
+  // ab sofort `person` — der nächste Schätzlauf fasst sie nicht mehr an.
+  const dauer =
+    werte.dauerMinuten !== undefined
+      ? werte.dauerMinuten === null || !Number.isFinite(werte.dauerMinuten)
+        ? { dauerMinuten: null, dauerQuelle: null }
+        : {
+            dauerMinuten: Math.min(300, Math.max(1, Math.round(werte.dauerMinuten))),
+            dauerQuelle: "person" as const,
+          }
+      : {};
+
   const [aktualisiert] = await db
     .update(sequenzAblauf)
     .set({
       ...(titel !== undefined ? { titel: titel.slice(0, 300) } : {}),
       ...(werte.text !== undefined ? { text: text || null } : {}),
+      ...dauer,
     })
     .where(eq(sequenzAblauf.id, zeilenId))
     .returning({ sequenzId: sequenzAblauf.sequenzId });
@@ -661,6 +821,12 @@ export type Geschwister = {
   uebertragSlideBis: number | null;
   uebertragErledigt: string[] | null;
   uebernommenVon: string | null;
+  /**
+   * true, wenn diese Klasse einen anderen Rückstand hat als die eigene. Dann
+   * plant ihr Ablauf anderen Stoff, und Übernehmen bringt eine Planung, die
+   * zum eigenen Stand nicht passt.
+   */
+  rueckstandWeichtAb: boolean;
 };
 
 /**
@@ -730,8 +896,22 @@ export async function getGeschwister(
     )
     .orderBy(asc(sequenz.startDatum), asc(sequenz.startZeit));
 
-  return kandidaten.filter(
+  const inDerWoche = kandidaten.filter(
     (k) => getKWFromDateString(k.startDatum) === kw
+  );
+
+  // Seit der Rückstand in die Planung einfliesst, ist der Ablauf einer
+  // Parallelklasse nicht mehr zwingend auf die eigene übertragbar: hat die
+  // andere Klasse mehr oder weniger offen, plant ihr Ablauf anderen Stoff.
+  // Der Unterschied gehört an den Knopf, nicht in die Fussnote — sonst holt
+  // man sich eine Planung, die zum eigenen Stand nicht passt.
+  const eigene = await rueckstandSignatur(bId, sequenzId);
+
+  return Promise.all(
+    inDerWoche.map(async (k) => ({
+      ...k,
+      rueckstandWeichtAb: (await rueckstandSignatur(bId, k.id)) !== eigene,
+    }))
   );
 }
 

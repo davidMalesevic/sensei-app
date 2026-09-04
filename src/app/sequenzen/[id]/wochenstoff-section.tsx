@@ -3,7 +3,7 @@ import { Launch } from "@carbon/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Notification } from "@/components/ui/notification";
 import { SectionHeader } from "@/components/ui/page-header";
-import type { Wochenstoff } from "@/lib/modulbaum";
+import { erledigtMarke, markeSchluessel, type Wochenstoff } from "@/lib/modulbaum";
 
 /**
  * Was in dieser Woche ansteht — aus dem Modulplan und dem Smartlearn-Baum
@@ -17,11 +17,16 @@ import type { Wochenstoff } from "@/lib/modulbaum";
  */
 export function WochenstoffSection({
   stoff,
-  bereitsErledigt = [],
+  erledigtSchluessel = [],
 }: {
   stoff: Wochenstoff;
-  /** Aufgaben, die der Übertrag der Vorwoche als erledigt führt. */
-  bereitsErledigt?: string[];
+  /**
+   * Vergleichsschlüssel alles je Erledigten — nicht mehr nur der Vorwoche und
+   * nicht mehr als rohe Marke. Über Wochen hinweg kann dazwischen der
+   * Modulplan neu importiert worden sein, und die LA-Codes sind je nach Export
+   * anders abgeschnitten; ein roher Stringvergleich verlöre die Aufgabe dann.
+   */
+  erledigtSchluessel?: string[];
 }) {
   if (stoff.ohneModulplan) {
     return (
@@ -34,11 +39,14 @@ export function WochenstoffSection({
     );
   }
 
-  const erledigt = new Set(bereitsErledigt);
+  const erledigt = new Set(erledigtSchluessel);
+  const istErledigt = (code: string, bezeichnung: string) =>
+    erledigt.has(markeSchluessel(erledigtMarke(code, bezeichnung)));
+
   const alle = stoff.bloecke.flatMap((b) =>
-    b.auftraege.flatMap((a) => a.aufgaben.map((auf) => `${a.code} · ${auf.bezeichnung}`))
+    b.auftraege.flatMap((a) => a.aufgaben.map((auf) => istErledigt(a.code, auf.bezeichnung)))
   );
-  const anzahlErledigt = alle.filter((m) => erledigt.has(m)).length;
+  const anzahlErledigt = alle.filter(Boolean).length;
 
   return (
     <section className="mb-12">
@@ -110,7 +118,7 @@ export function WochenstoffSection({
                   </code>
                   <ul className="mt-2 space-y-2">
                     {a.aufgaben.map((auf) => {
-                      const fertig = erledigt.has(`${a.code} · ${auf.bezeichnung}`);
+                      const fertig = istErledigt(a.code, auf.bezeichnung);
                       return (
                         <li
                           key={auf.bezeichnung}

@@ -13,6 +13,8 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { parseSmartlearnStruktur } from "@/lib/smartlearn";
+import { normalisiereLaCode } from "@/lib/modulbaum";
+import { schaetzeModulZeiten } from "@/lib/zeitschaetzung";
 import { extractDokumentText } from "@/lib/dokument-text";
 import { importModularPlan } from "./modulplan-actions";
 import { readFile } from "fs/promises";
@@ -138,11 +140,11 @@ export async function getModuleGrouped() {
         orderBy: (b, { asc }) => [asc(b.nummer), asc(b.schluessel)],
         with: {
           auftraege: {
-            columns: { id: true, code: true },
+            columns: { id: true, code: true, dauerMinuten: true, dauerQuelle: true },
             orderBy: (a, { asc }) => [asc(a.sortierung)],
             with: {
               aufgaben: {
-                columns: { id: true, bezeichnung: true, parentId: true },
+                columns: { id: true, bezeichnung: true, parentId: true, dauerMinuten: true, dauerQuelle: true },
                 orderBy: (a, { asc }) => [asc(a.sortierung)],
               },
             },
@@ -155,6 +157,57 @@ export async function getModuleGrouped() {
 }
 
 // ─── Modulbaum aus dem Smartlearn-Export ───
+
+type GemerkteDauer = { dauerMinuten: number; dauerQuelle: "ki" | "person" };
+
+/**
+ * Die vorhandenen Minutenangaben eines Moduls, adressiert über den fachlichen
+ * Schlüssel statt über die UUID — damit sie einen Reimport überleben, bei dem
+ * Aufträge und Aufgaben gelöscht und neu angelegt werden.
+ */
+async function ladeZeitenNachSchluessel(modulId: string): Promise<{
+  auftraege: Map<string, GemerkteDauer>;
+  aufgaben: Map<string, GemerkteDauer>;
+}> {
+  const auftraege = new Map<string, GemerkteDauer>();
+  const aufgaben = new Map<string, GemerkteDauer>();
+
+  const bloecke = await db.query.modulBlock.findMany({
+    where: eq(modulBlock.modulId, modulId),
+    columns: { id: true },
+    with: {
+      auftraege: {
+        columns: { code: true, dauerMinuten: true, dauerQuelle: true },
+        with: {
+          aufgaben: {
+            columns: { bezeichnung: true, dauerMinuten: true, dauerQuelle: true },
+          },
+        },
+      },
+    },
+  });
+
+  for (const b of bloecke) {
+    for (const a of b.auftraege) {
+      const code = normalisiereLaCode(a.code);
+      if (a.dauerMinuten !== null && a.dauerQuelle !== null) {
+        auftraege.set(code, {
+          dauerMinuten: a.dauerMinuten,
+          dauerQuelle: a.dauerQuelle,
+        });
+      }
+      for (const auf of a.aufgaben) {
+        if (auf.dauerMinuten === null || auf.dauerQuelle === null) continue;
+        aufgaben.set(`${code} · ${auf.bezeichnung}`, {
+          dauerMinuten: auf.dauerMinuten,
+          dauerQuelle: auf.dauerQuelle,
+        });
+      }
+    }
+  }
+
+  return { auftraege, aufgaben };
+}
 
 /**
  * Liest Blöcke, Lern- und Arbeitsaufträge und Aufgaben aus dem Smartlearn-HTML
@@ -192,6 +245,18 @@ export async function importModulBaum(
     };
   }
 
+  // Aufträge und Aufgaben werden gleich gelöscht und neu angelegt — die neuen
+  // Zeilen tragen neue UUIDs. Gepflegte Minutenangaben gingen dabei verloren,
+  // und zwar genau die, die jemand von Hand korrigiert hat. Blöcke haben
+  // dasselbe Problem schon einmal gehabt; sie werden deshalb aktualisiert
+  // statt neu angelegt, damit die Slidezuordnung überlebt.
+  //
+  // Gemerkt wird über den fachlichen Schlüssel, nicht über die ID, und der
+  // LA-Code wird dabei normalisiert: er ist je nach Export anders
+  // abgeschnitten, ein roher Vergleich verlöre die Angabe beim nächsten
+  // Import aus einer anderen Quelle.
+  const gemerkteZeiten = await ladeZeitenNachSchluessel(modulId);
+
   let auftraegeGesamt = 0;
   let aufgabenGesamt = 0;
 
@@ -222,6 +287,7 @@ export async function importModulBaum(
           aufgabenstellung: la.aufgabenstellung,
           guetekriterien: la.guetekriterien,
           sortierung: i,
+          ...(gemerkteZeiten.auftraege.get(normalisiereLaCode(la.code)) ?? {}),
         })
         .returning({ id: modulAuftrag.id });
       auftraegeGesamt++;
@@ -234,6 +300,9 @@ export async function importModulBaum(
             bezeichnung: a.bezeichnung,
             text: a.text,
             sortierung: j,
+            ...(gemerkteZeiten.aufgaben.get(
+              `${normalisiereLaCode(la.code)} · ${a.bezeichnung}`
+            ) ?? {}),
           })
           .returning({ id: modulAufgabe.id });
         aufgabenGesamt++;
@@ -254,6 +323,17 @@ export async function importModulBaum(
     }
   }
 
+  // Zeiten schätzen, wo noch keine stehen. Bewusst in try/catch und nach dem
+  // Schreiben des Baums: der Import ist deterministisch und darf nicht
+  // scheitern, weil die KI gerade nicht antwortet. Ohne Schätzung steht der
+  // Baum eben ohne Minuten da — der Ablauf weist das dann als «ohne
+  // Zeitangabe» aus, statt eine falsche Summe zu behaupten.
+  try {
+    await schaetzeModulZeiten(bId, modulId);
+  } catch {
+    // bewusst geschluckt
+  }
+
   revalidatePath("/bildungsplan");
 
   return {
@@ -262,6 +342,82 @@ export async function importModulBaum(
     auftraege: auftraegeGesamt,
     aufgaben: aufgabenGesamt,
   };
+}
+
+/**
+ * Zeitschätzung von Hand anstossen — für Module, die schon importiert sind,
+ * und wenn beim Import die KI nicht erreichbar war. Fasst gesetzte Werte
+ * nicht an.
+ */
+export async function zeitenSchaetzen(modulId: string) {
+  const bId = await benutzerId();
+  const ergebnis = await schaetzeModulZeiten(bId, modulId);
+  revalidatePath("/bildungsplan");
+  return ergebnis;
+}
+
+/**
+ * Eine Minutenangabe von Hand setzen; `null` löscht sie wieder.
+ *
+ * Ab jetzt trägt sie `person` und überlebt damit jeden weiteren Schätzlauf —
+ * die Korrektur ist eine Aussage der Lehrperson, die Schätzung nur eine
+ * Vermutung der KI.
+ */
+export async function setzeAufgabeDauer(
+  art: "aufgabe" | "auftrag" | "block",
+  id: string,
+  minuten: number | null
+) {
+  const bId = await benutzerId();
+
+  // Kindtabellen tragen keinen Besitzer — geprüft wird über das Modul, sonst
+  // käme man mit einer geratenen UUID an fremde Aufgaben.
+  const modulIdVon = await besitzendesModul(art, id);
+  if (!modulIdVon || !(await eigenesModul(modulIdVon, bId))) return;
+
+  const wert =
+    minuten === null || !Number.isFinite(minuten)
+      ? { dauerMinuten: null, dauerQuelle: null }
+      : {
+          dauerMinuten: Math.min(300, Math.max(1, Math.round(minuten))),
+          dauerQuelle: "person" as const,
+        };
+
+  const tabelle =
+    art === "aufgabe" ? modulAufgabe : art === "auftrag" ? modulAuftrag : modulBlock;
+  await db.update(tabelle).set(wert).where(eq(tabelle.id, id));
+
+  revalidatePath("/bildungsplan");
+}
+
+/** Zu welchem Modul gehört diese Aufgabe / dieser Auftrag / dieser Block? */
+async function besitzendesModul(
+  art: "aufgabe" | "auftrag" | "block",
+  id: string
+): Promise<string | null> {
+  if (art === "block") {
+    const b = await db.query.modulBlock.findFirst({
+      where: eq(modulBlock.id, id),
+      columns: { modulId: true },
+    });
+    return b?.modulId ?? null;
+  }
+
+  if (art === "auftrag") {
+    const a = await db.query.modulAuftrag.findFirst({
+      where: eq(modulAuftrag.id, id),
+      columns: { blockId: true },
+      with: { block: { columns: { modulId: true } } },
+    });
+    return a?.block.modulId ?? null;
+  }
+
+  const auf = await db.query.modulAufgabe.findFirst({
+    where: eq(modulAufgabe.id, id),
+    columns: { auftragId: true },
+    with: { auftrag: { columns: { blockId: true }, with: { block: { columns: { modulId: true } } } } },
+  });
+  return auf?.auftrag.block.modulId ?? null;
 }
 
 /** Der Baum eines Moduls für die Anzeige. */

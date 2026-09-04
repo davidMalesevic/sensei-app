@@ -7,6 +7,9 @@ import { revalidatePath } from "next/cache";
 import { schweizerHeute } from "@/lib/zeit";
 import { aktuelleSession, benutzerId } from "@/lib/dal";
 import { holeVorherigenUebertrag } from "@/lib/uebertrag";
+import { getOffenenStoff } from "@/lib/rueckstand";
+import { markenAusStoff } from "@/lib/modulbaum";
+import { getKWFromDateString } from "@/lib/kw";
 
 /**
  * Übertrag nach der Lektion: bis wo sind wir gekommen, was fliesst in die
@@ -40,12 +43,53 @@ export async function speichereUebertrag(sequenzId: string, formData: FormData) 
   revalidatePath("/");
 }
 
-/** «Kein Übertrag» — bewusst nichts nachzutragen, zählt als erledigt. */
+/**
+ * «Kein Übertrag» — alles lief wie geplant, alles ist erledigt, nichts ist für
+ * nächste Woche vorzumerken.
+ *
+ * Das ist keine Formalie mehr, mit der man den roten Punkt loswird: die Woche
+ * wird damit **abgeschlossen**, und ihre Aufgaben kommen nie wieder. Deshalb
+ * werden sie hier auch tatsächlich hingeschrieben, statt die Bedeutung des
+ * Flags später zu rechnen — ein Modulplan-Reimport könnte sonst nachträglich
+ * verschieben, was diese Woche eigentlich umfasste.
+ *
+ * Der Rückstand gehört dazu: er stand an diesem Tag im Ablauf, «alles wie
+ * geplant» schliesst ihn also ein.
+ */
 export async function keinUebertragSetzen(sequenzId: string) {
   const bId = await benutzerId();
+
+  const seq = await db.query.sequenz.findFirst({
+    where: and(eq(sequenz.id, sequenzId), eq(sequenz.benutzerId, bId)),
+    columns: { klasseId: true, modulId: true, startDatum: true },
+  });
+  if (!seq) return;
+
+  const offen = await getOffenenStoff(
+    bId,
+    seq.klasseId,
+    seq.modulId,
+    getKWFromDateString(seq.startDatum),
+    seq.startDatum
+  );
+
+  const marken = [
+    ...offen.rueckstand.flatMap((r) =>
+      markenAusStoff({
+        kw: r.kw,
+        ziel: r.ziel,
+        lbHinweis: null,
+        bloecke: r.bloecke,
+        ohneModulplan: false,
+      })
+    ),
+    ...(offen.diese ? markenAusStoff(offen.diese) : []),
+  ];
+
   await db
     .update(sequenz)
     .set({
+      uebertragErledigt: marken.length > 0 ? [...new Set(marken)] : null,
       keinUebertrag: true,
       uebertragAm: new Date(),
       status: "gehalten",
@@ -126,4 +170,24 @@ export async function getVorherigenUebertrag(
 ) {
   const bId = await benutzerId();
   return holeVorherigenUebertrag(bId, klasseId, modulId, datum, currentSequenzId);
+}
+
+/**
+ * Was für diese Klasse in diesem Modul noch offen ist — laufende Woche plus
+ * Rückstand. Die Rechnung liegt in `src/lib/rueckstand.ts`, hier nur die
+ * Session.
+ */
+export async function getOffenenStoffFuerSequenz(
+  klasseId: string,
+  modulId: string | null,
+  datum: string | null
+) {
+  const bId = await benutzerId();
+  return getOffenenStoff(
+    bId,
+    klasseId,
+    modulId,
+    getKWFromDateString(datum),
+    datum
+  );
 }
