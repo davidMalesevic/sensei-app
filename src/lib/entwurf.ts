@@ -18,6 +18,7 @@ import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { markenAusStoff, type StoffBlock } from "@/lib/modulbaum";
 import { getOffenenStoff, type OffenerStoff } from "@/lib/rueckstand";
 import { schaetzeModulZeiten } from "@/lib/zeitschaetzung";
+import { holeVorwissen, type Vorwissen } from "@/lib/vorwissen";
 import { getKWFromDateString } from "@/lib/kw";
 import { holeVorherigenUebertrag } from "@/lib/uebertrag";
 
@@ -233,6 +234,7 @@ function bauePrompt(opts: {
   stand: string | null;
   fakten: Fakt[];
   didaktik: string;
+  vorwissen: Vorwissen;
 }): string {
   const faktenListe =
     opts.fakten.length > 0
@@ -246,6 +248,51 @@ function bauePrompt(opts: {
           })
           .join("\n")
       : "  (keine)";
+
+  const v = opts.vorwissen;
+
+  // Was die Klasse in diesem Modul schon getan hat — die Grundlage für eine
+  // Aktivierung, die etwas aktiviert. Ohne diesen Block konnte die KI nur
+  // «kurzes Gespräch zum Thema» produzieren, weil sie den Lernstand nicht kannte.
+  const vorwissenBlock =
+    v.wochen.length > 0
+      ? `VORWISSEN DIESER KLASSE (belegt aus ihren Überträgen — nicht erfinden)\n` +
+        v.wochen
+          .map((w) => {
+            const kopf = `  KW ${w.kw}${w.ziel ? ` — ${w.ziel}` : ""}`;
+            const auf = w.erledigt.length
+              ? w.erledigt.map((e) => `      ✓ ${e}`).join("\n")
+              : "      (nichts abgehakt)";
+            const no = w.notiz ? `\n      Notiz: ${w.notiz}` : "";
+            return `${kopf}\n${auf}${no}`;
+          })
+          .join("\n") +
+        "\n"
+      : "VORWISSEN DIESER KLASSE\n  (erste Lektion in diesem Modul)\n";
+
+  // Der Praxisbezug hängt an der Handlungskompetenz. Die Zuordnung steht im
+  // Bildungsplan (`module_berufsfachschule`) und ist damit ein Fakt, keine
+  // Vermutung — die frühere Zuordnung pro Sequenz musste von Hand gepflegt
+  // werden und blieb leer.
+  const kompetenzBlock =
+    v.kompetenzen.length > 0
+      ? `HANDLUNGSKOMPETENZEN, die dieses Modul bedient (Bildungsplan EDB)\n` +
+        v.kompetenzen
+          .map((k) => `  ${k.kuerzel}: ${k.bezeichnung}`)
+          .join("\n") +
+        "\n"
+      : "";
+
+  // Die KI hat kein Gedächtnis über Sitzungen hinweg. Abwechslung entsteht
+  // nur, wenn sie sieht, was zuletzt dran war.
+  const zuletztBlock =
+    v.zuletztVerwendet.length > 0
+      ? `ZULETZT VERWENDET bei dieser Klasse (NICHT wiederholen)\n` +
+        v.zuletztVerwendet
+          .map((z) => `  [${z.typ}] ${z.titel}${z.text ? ` — ${z.text.slice(0, 90)}` : ""}`)
+          .join("\n") +
+        "\n"
+      : "";
 
   const budget = opts.lektionen * 45;
   const faktenZeit = opts.fakten.reduce((n, f) => n + (f.dauerMinuten ?? 0), 0);
@@ -273,6 +320,17 @@ ZEIT
 FAKTEN (aus dem Unterrichtsmaterial, unveränderlich)
 ${faktenListe}
 
+${vorwissenBlock}
+${kompetenzBlock}
+${zuletztBlock}
+METHODENSTRAUSS für Einstieg und Praxisbezug (wähle passend, variiere)
+  Think-Pair-Share · Plenumsdiskussion · Partnerinterview (gegenseitig abfragen)
+  Zuordnungsspiel (Begriffe oder Karten zuordnen) · Wandtafelfussball (Quiz in
+  zwei Teams) · Blitzlicht (reihum ein Satz) · Fehlersuche (falsches Beispiel
+  korrigieren) · Placemat · Museumsrundgang (Ergebnisse der Vorwoche ansehen)
+  · Ranking (was war am wichtigsten) · Kartenabfrage
+  Andere Methoden sind ausdrücklich erlaubt.
+
 DIDAKTISCHE MODELLE (als Orientierung, nicht ausgeben)
 ${opts.didaktik}
 
@@ -281,8 +339,21 @@ Erstelle einen Ablauf von 6 bis 10 Schritten.
 
 Regeln:
 1. Der erste Schritt ist IMMER eine Aktivierung des Vorwissens (typ "einstieg").
-2. Danach folgt in der Regel ein Praxisbezug (typ "praxisbezug"): ein konkreter
-   Bezug zum Lehrbetrieb der Lernenden im digitalen Business.
+   Er muss sich auf das VORWISSEN DIESER KLASSE beziehen — nenne konkret, was
+   sie gemacht haben (LA-Code oder Aufgabenbezeichnung), und baue von dort eine
+   Brücke zum Stoff dieser Woche. Kein allgemeines «kurzes Gespräch zum Thema».
+   Wähle einen von vier Ankerpunkten und wechsle ihn von Woche zu Woche:
+     a) an das Produkt: was sie erstellt haben, wird hervorgeholt und benutzt
+     b) an die Begriffe: Fachbegriffe der Vorwochen abfragen und schärfen
+     c) an die Brücke: warum das Heutige auf dem Vorherigen aufbaut
+     d) an die Stolpersteine: was letzte Woche strittig oder schwierig war
+   Wähle dazu eine Methode aus dem METHODENSTRAUSS und **nenne sie am Anfang
+   des Textes** («Think-Pair-Share: …»). Nimm eine andere als unter ZULETZT
+   VERWENDET.
+2. Danach folgt in der Regel ein Praxisbezug (typ "praxisbezug"). Er hängt an
+   einer der HANDLUNGSKOMPETENZEN: nenne ihr Kürzel im Text und stelle eine
+   Frage oder Aufgabe, die den Wochenstoff mit der beruflichen Handlung im
+   Lehrbetrieb verbindet. Auch hier: nicht wiederholen, was zuletzt dran war.
 3. Fakten werden NUR referenziert, niemals umformuliert: dafür
    {"typ":"fakt","faktId":"<id>"}. Erfinde keine Aufgabennummern, keine
    LA-Codes und keine Slidezahlen.
@@ -446,6 +517,13 @@ export async function erzeugeEntwurf(
     stand: standText || null,
     fakten,
     didaktik: await phasenmodellWissen(),
+    vorwissen: await holeVorwissen(
+      bId,
+      seq.klasseId,
+      seq.modulId,
+      seq.modul?.nummer ?? null,
+      seq.startDatum
+    ),
   });
 
   const antwort = await callAI(prompt, 0.6);
