@@ -42,8 +42,25 @@ function plausibel(roh: unknown): number | null {
 
 export async function schaetzeModulZeiten(
   benutzerId: string,
-  modulId: string
+  modulId: string,
+  optionen?: {
+    /**
+     * Nur Einheiten ohne jede Angabe schätzen, vorhandene stehen lassen.
+     *
+     * Der Knopf «Zeiten schätzen» frischt bewusst alle KI-Werte auf — das ist
+     * eine Handlung. Der Entwurf dagegen ruft den Lauf bei jedem Erzeugen auf;
+     * ohne diese Einschränkung trüge dieselbe Aufgabe jede Woche eine andere
+     * Zahl, und eine Zahl, die sich unter der Hand ändert, ist keine Grundlage.
+     */
+    nurLuecken?: boolean;
+  }
 ): Promise<{ ok: boolean; geschaetzt?: number; uebersprungen?: number; fehler?: string }> {
+  const nurLuecken = optionen?.nurLuecken ?? false;
+
+  /** Lässt der Lauf diese Zeile in Ruhe? */
+  const ueberspringen = (minuten: number | null, quelle: string | null) =>
+    quelle === "person" || (nurLuecken && minuten !== null);
+
   const eigenes = await db.query.modul.findFirst({
     where: and(eq(modul.id, modulId), eq(modul.benutzerId, benutzerId)),
     columns: { id: true, nummer: true, bezeichnung: true },
@@ -77,7 +94,7 @@ export async function schaetzeModulZeiten(
   for (const b of bloecke) {
     // Der Theorieteil eines Blocks: seine Länge hängt am Slideumfang.
     if (b.slideMaterialId) {
-      if (b.dauerQuelle === "person") uebersprungen += 1;
+      if (ueberspringen(b.dauerMinuten, b.dauerQuelle)) uebersprungen += 1;
       else {
         const umfang =
           b.slideVon !== null && b.slideBis !== null
@@ -94,7 +111,7 @@ export async function schaetzeModulZeiten(
     for (const a of b.auftraege) {
       // Modul ohne nummerierte Aufgaben (z.B. 168): der LA ist die Einheit.
       if (a.aufgaben.length === 0) {
-        if (a.dauerQuelle === "person") uebersprungen += 1;
+        if (ueberspringen(a.dauerMinuten, a.dauerQuelle)) uebersprungen += 1;
         else {
           posten.push({
             id: a.id,
@@ -108,7 +125,7 @@ export async function schaetzeModulZeiten(
       }
 
       for (const auf of a.aufgaben.filter((x) => !x.parentId)) {
-        if (auf.dauerQuelle === "person") {
+        if (ueberspringen(auf.dauerMinuten, auf.dauerQuelle)) {
           uebersprungen += 1;
           continue;
         }
@@ -207,7 +224,9 @@ Antworte AUSSCHLIESSLICH mit JSON:
             // Der Schutz der Korrektur steht auch hier im WHERE, nicht nur in
             // der Auswahl oben: zwischen Lesen und Schreiben kann jemand eine
             // Zahl gesetzt haben, und die soll gewinnen.
-            or(isNull(tabelle.dauerQuelle), eq(tabelle.dauerQuelle, "ki"))
+            or(isNull(tabelle.dauerQuelle), eq(tabelle.dauerQuelle, "ki")),
+            // Beim Lückenfüllen zusätzlich: nur was noch gar nichts trägt.
+            ...(nurLuecken ? [isNull(tabelle.dauerMinuten)] : [])
           )
         )
         .returning({ id: tabelle.id });

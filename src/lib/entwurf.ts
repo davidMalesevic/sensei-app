@@ -17,6 +17,7 @@ import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
 import { markenAusStoff, type StoffBlock } from "@/lib/modulbaum";
 import { getOffenenStoff, type OffenerStoff } from "@/lib/rueckstand";
+import { schaetzeModulZeiten } from "@/lib/zeitschaetzung";
 import { getKWFromDateString } from "@/lib/kw";
 import { holeVorherigenUebertrag } from "@/lib/uebertrag";
 
@@ -372,7 +373,7 @@ export async function erzeugeEntwurf(
     sequenzId
   );
 
-  const fakten = sammleFakten(offen);
+  let fakten = sammleFakten(offen);
 
   // Kein einziger Fakt heisst: alles ist laut Übertrag erledigt, oder der
   // Aufgabenbaum fehlt. Beides ist eine Aussage, die die Lehrperson lesen
@@ -387,6 +388,39 @@ export async function erzeugeEntwurf(
         `Aufgabe an — entweder ist laut Übertrag alles erledigt, oder zum ` +
         `Modul fehlt der Aufgabenbaum.`,
     };
+  }
+
+  // Fehlende Minuten einmalig nachschätzen, damit der Ablauf ein Budget hat,
+  // ohne dass jemand pro Modul einen Knopf drücken muss. **Nur Lücken**:
+  // vorhandene Schätzungen bleiben stehen, sonst trüge dieselbe Aufgabe jede
+  // Woche eine andere Zahl — und eine Zahl, die sich unter der Hand ändert,
+  // taugt nicht als Grundlage. Korrekturen fasst der Lauf ohnehin nie an.
+  //
+  // In try/catch und ohne Rückgabe eines Fehlers: der Entwurf ist die
+  // eigentliche Aufgabe und darf nicht scheitern, weil die KI gerade keine
+  // Zeiten liefert. Ohne Schätzung weist der Ablauf «ohne Zeitangabe» aus
+  // und zieht keine Schnittlinie — das ist eine gültige Auskunft.
+  if (fakten.some((f) => f.dauerMinuten === null)) {
+    try {
+      const geschaetzt = await schaetzeModulZeiten(bId, seq.modulId, {
+        nurLuecken: true,
+      });
+      if (geschaetzt.ok && (geschaetzt.geschaetzt ?? 0) > 0) {
+        const frisch = await getOffenenStoff(
+          bId,
+          seq.klasseId,
+          seq.modulId,
+          kw,
+          seq.startDatum
+        );
+        const neueFakten = sammleFakten(frisch);
+        // Nur übernehmen, wenn dabei nichts verlorengeht — die Schätzung darf
+        // die Faktenlage nicht verändern, nur ergänzen.
+        if (neueFakten.length === fakten.length) fakten = neueFakten;
+      }
+    } catch {
+      // bewusst geschluckt
+    }
   }
 
   const standText = stand
