@@ -118,19 +118,40 @@ export async function getOffenenStoff(
     }
   }
 
+  const diese = kuerzeStoff(dieseRoh, erledigt);
+
+  /**
+   * Der Modulplan wiederholt denselben Block über mehrere Wochen — Block 2 von
+   * Modul 278 steht in KW 35, 36 **und** 37, Block C von Modul 168 in KW 36 und
+   * 37. Ohne die folgende Abgrenzung erscheint eine offene Aufgabe deshalb
+   * einmal pro Woche, in der ihr Block genannt ist: dreifach statt einmal.
+   *
+   * Zwei Regeln lösen das:
+   *
+   * 1. **Was diese Woche ohnehin ansteht, ist kein Rückstand.** Nennt der Plan
+   *    den Block weiterhin, ist die Aufgabe schlicht Stoff dieser Woche — sonst
+   *    stünde der ganze Wochenstoff als Rückstand da und die Woche selbst
+   *    schiene leer. Genau so sah es in Modul 278 aus.
+   * 2. **Die früheste Woche bekommt den Zuschlag.** Bleibt etwas übrig, gehört
+   *    es zu der Woche, in der es zuerst anstand — «Rückstand aus KW 35» ist
+   *    die Aussage, nicht «aus KW 36».
+   */
+  const schonGezeigt = new Set(markenMenge(markenAusStoff(diese)));
+
   const rueckstand: RueckstandWoche[] = [];
   for (const k of vorwochen) {
     const s = stoffe.get(k);
     if (!s) continue;
-    const offen = kuerzeStoff(s, erledigt, true);
+    const offen = kuerzeStoff(s, new Set([...erledigt, ...schonGezeigt]), true);
     const anzahl = zaehleAufgaben(offen);
     if (anzahl > 0) {
       rueckstand.push({ kw: k, ziel: s.ziel, bloecke: offen.bloecke, anzahl });
+      for (const m of markenMenge(markenAusStoff(offen))) schonGezeigt.add(m);
     }
   }
 
   return {
-    diese: kuerzeStoff(dieseRoh, erledigt),
+    diese,
     dieseRoh,
     erledigtSchluessel: [...erledigt],
     rueckstand,
