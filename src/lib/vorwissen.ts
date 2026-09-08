@@ -20,7 +20,7 @@ import "server-only";
  * Nachtlauf sie ohne Session reichen kann.
  */
 
-import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -82,7 +82,9 @@ export async function holeVorwissen(
         eq(sequenz.benutzerId, benutzerId),
         eq(sequenz.klasseId, klasseId),
         eq(sequenz.modulId, modulId),
-        lt(sequenz.startDatum, datum)
+        lt(sequenz.startDatum, datum),
+        // Alt-Sequenzen ohne Kalenderbezug sind Archiv, kein Unterricht.
+        isNotNull(sequenz.kalenderKurs)
       )
     )
     .orderBy(asc(sequenz.startDatum));
@@ -163,6 +165,7 @@ export async function holeVorwissen(
         eq(sequenz.benutzerId, benutzerId),
         eq(sequenz.klasseId, klasseId),
         lt(sequenz.startDatum, datum),
+        isNotNull(sequenz.kalenderKurs),
         inArray(sequenzAblauf.typ, ["einstieg", "praxisbezug"])
       )
     )

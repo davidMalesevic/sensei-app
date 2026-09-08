@@ -112,7 +112,14 @@ export async function holeStandDerKlasse(
         eq(sequenz.benutzerId, benutzerId),
         eq(sequenz.klasseId, klasseId),
         eq(sequenz.modulId, modulId),
-        lt(sequenz.startDatum, vorDatum)
+        lt(sequenz.startDatum, vorDatum),
+        // Alt-Sequenzen ohne Kalenderbezug sind Archiv aus dem alten Modell,
+        // kein Unterricht. Sie tragen weder Zeit noch Lektionen noch Übertrag —
+        // mitgezählt lassen sie jede Woche, in der eine von ihnen liegt, als
+        // «ohne Rückmeldung» erscheinen, obwohl die echte Lektion erfasst ist.
+        // In Modul 119 traf das KW 34 und 35. `getGeschwister` und der rote
+        // Punkt filtern sie längst heraus.
+        isNotNull(sequenz.kalenderKurs)
       )
     )
     .orderBy(asc(sequenz.startDatum));
