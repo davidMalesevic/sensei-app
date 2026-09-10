@@ -490,6 +490,33 @@ Texte sichern beim Verlassen des Felds (`onBlur`), nicht bei jedem Tastendruck.
 Fakten aus dem Material behalten ihre Referenz auf LA-Code und Material auch
 nach dem Umschreiben.
 
+### Der Ablauf gehört der Lehrperson
+
+«Neu erzeugen» warf bis dahin den **ganzen** Ablauf weg und baute ihn neu. Wer
+einen Schritt umformuliert oder umgeordnet hatte, verlor ihn; und eine
+gelöschte Aufgabe kam zurück, weil der Generator bewusst anhängt, was die KI
+übergeht. Zwei Felder lösen das:
+
+| Feld | Wirkung |
+|---|---|
+| `sequenz_ablauf.gesperrt` | Die Zeile überlebt ein «Neu erzeugen» unverändert — Text, Platz, Dauer. Nur die übrigen werden gelöscht und neu geschrieben. |
+| `sequenz.ausgeschlossene_fakten` | Marken der aus dem Ablauf entfernten Aufgaben. `sammleFakten()` lässt sie weg, sonst wäre Löschen wirkungslos. |
+
+- **Gesperrte Zeilen behalten ihren Platz.** Der Rest füllt die Lücken in
+  seiner neuen Reihenfolge auf; die Sortierung bleibt eindeutig.
+- **Ausgeschlossen ist nicht erledigt.** Die Aufgabe bleibt offen und steht in
+  Folgewochen als Rückstand — nur heute ist sie nicht dran. Was erledigt ist,
+  sagt allein der Übertrag. Deshalb stehen entfernte Aufgaben unter dem Ablauf
+  mit einem «Zurückholen», statt spurlos zu verschwinden.
+- Ist **alles** gesperrt oder entfernt, bricht die Erzeugung **nicht** ab: ein
+  fertiger Ablauf ist kein Fehler, sondern das Ergebnis.
+- Die Rückfrage vor dem Neu-Erzeugen nennt die Zahl («3 von 11 Schritten
+  werden ersetzt») — sonst behauptet sie einen Verlust, den es nicht gibt.
+- Was eine gesperrte Zeile schon abdeckt, plant der Generator nicht ein
+  zweites Mal ein.
+
+Migration: `npx tsx src/db/migrate-ablauf-sperren.ts`
+
 ### Wiederverwendung über Klassen
 
 Dasselbe Modul läuft mit mehreren Klassen — freitags zweimal 168 und zweimal
@@ -820,6 +847,7 @@ npx tsx src/db/migrate-benutzer.ts     # Login + Datentrennung
 npx tsx src/db/besitz-uebertragen.ts <email>  # Bestand einem Konto zuweisen
 npx tsx src/db/migrate-admin.ts        # Verwaltung, Einladungen, Zeitplan
 npx tsx src/db/migrate-zeit-rueckstand.ts  # Minuten + Rückstands-Herkunft
+npx tsx src/db/migrate-ablauf-sperren.ts   # Schritte festzurren, Fakten entfernen
 npx tsx src/db/migrate-resultate.ts    # Smartlearn-Resultate (Versuch)
 npx tsx src/db/drop-resultate.ts --wirklich   # ... und wieder weg
 npx tsx src/db/seed.ts            # Seed-Daten laden

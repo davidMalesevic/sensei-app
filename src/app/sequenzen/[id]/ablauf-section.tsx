@@ -12,6 +12,8 @@ import {
   CircleDash,
   Draggable,
   TrashCan,
+  Locked,
+  Unlocked,
   Add,
   Checkmark,
   Launch,
@@ -36,6 +38,8 @@ import {
   bestaetigeAblauf,
   aktualisiereAblaufZeile,
   loescheAblaufZeile,
+  sperreAblaufZeile,
+  holeFaktZurueck,
   sortiereAblauf,
   fuegeAblaufZeileHinzu,
 } from "../entwurf-actions";
@@ -54,6 +58,8 @@ export type AblaufZeile = {
   refSeiteBis: number | null;
   dauerMinuten: number | null;
   dauerQuelle: string | null;
+  /** Festgezurrt: überlebt ein «Neu erzeugen» unverändert. */
+  gesperrt: boolean;
   /** Gesetzt, wenn dieser Fakt aus einer früheren Woche liegengeblieben ist. */
   rueckstandKw: number | null;
   refMaterial: {
@@ -152,11 +158,14 @@ export function AblaufSection({
   entwurfAm,
   zeilen,
   lektionen,
+  ausgeschlossen = [],
 }: {
   sequenzId: string;
   status: string;
   entwurfAm: Date | null;
   zeilen: AblaufZeile[];
+  /** Aufgaben, die aus diesem Ablauf entfernt wurden — mit Rückweg. */
+  ausgeschlossen?: string[];
   /** Für das Zeitbudget: eine Lektion sind 45 Minuten. */
   lektionen: number | null;
 }) {
@@ -177,6 +186,7 @@ export function AblaufSection({
   }
 
   const bestaetigt = status === "bestaetigt";
+  const anzahlGesperrt = items.filter((z) => z.gesperrt).length;
 
   /**
    * Das Zeitbudget. Jeder Schritt trägt Minuten — Fakten geerbt aus dem
@@ -252,6 +262,20 @@ export function AblaufSection({
     );
     startTransition(async () => {
       await aktualisiereAblaufZeile(id, { dauerMinuten: minuten });
+    });
+  }
+
+  function sperren(id: string, gesperrt: boolean) {
+    setItems((alt) => alt.map((z) => (z.id === id ? { ...z, gesperrt } : z)));
+    startTransition(async () => {
+      await sperreAblaufZeile(id, gesperrt);
+    });
+  }
+
+  function zurueckholen(marke: string) {
+    startTransition(async () => {
+      await holeFaktZurueck(sequenzId, marke);
+      router.refresh();
     });
   }
 
@@ -529,12 +553,42 @@ export function AblaufSection({
                     </div>
                   </div>
 
+                  {/* Das Schloss bleibt sichtbar, wenn es zu ist — es ist
+                      eine Aussage über die Zeile, kein Werkzeug am Rand. */}
+                  <Button
+                    variant="ghost-neutral"
+                    size="icon-sm"
+                    className={cn(
+                      "shrink-0 transition-opacity",
+                      z.gesperrt
+                        ? "text-link"
+                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                    )}
+                    aria-label={
+                      z.gesperrt
+                        ? `Schritt ${i + 1} freigeben`
+                        : `Schritt ${i + 1} festzurren`
+                    }
+                    title={
+                      z.gesperrt
+                        ? "Festgezurrt — überlebt ein Neu-Erzeugen. Klicken zum Freigeben."
+                        : "Festzurren: überlebt ein Neu-Erzeugen"
+                    }
+                    onClick={() => sperren(z.id, !z.gesperrt)}
+                  >
+                    {z.gesperrt ? <Locked size={16} /> : <Unlocked size={16} />}
+                  </Button>
+
                   <Button
                     variant="destructive-ghost"
                     size="icon-sm"
                     className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                     aria-label={`Schritt ${i + 1} löschen`}
-                    title="Schritt löschen"
+                    title={
+                      fakt
+                        ? "Entfernen — steht in dieser Lektion nicht mehr an (bleibt offen)"
+                        : "Schritt löschen"
+                    }
                     onClick={() => loeschen(z.id)}
                   >
                     <TrashCan size={16} />
@@ -545,11 +599,64 @@ export function AblaufSection({
             })}
           </ol>
 
+          {/* Entfernte Aufgaben stehen unter dem Ablauf, nicht in ihm. Ohne
+              diese Liste wäre das Löschen eine Einbahnstrasse — und man
+              wüsste nicht mehr, warum eine Aufgabe fehlt, die der Modulplan
+              für diese Woche vorsieht. */}
+          {ausgeschlossen.length > 0 && (
+            <div className="mt-4 border-l-[3px] border-l-border-subtle bg-layer p-4">
+              <div className="type-label-02 mb-3 text-text-secondary">
+                Aus dieser Lektion entfernt — bleibt offen und steht in
+                Folgewochen als Rückstand
+              </div>
+              <div className="space-y-2">
+                {ausgeschlossen.map((m) => (
+                  <div key={m} className="flex flex-wrap items-center gap-3">
+                    <span className="type-body-compact-02 min-w-0 text-text-secondary line-through">
+                      {m}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => zurueckholen(m)}
+                      disabled={laeuft}
+                    >
+                      Zurückholen
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {rueckfrage ? (
             <div className="mt-4">
-              <Notification kind="warning" titel="Die Bearbeitung geht verloren">
-                Die {items.length} Schritte werden ersetzt. Umgeordnetes,
-                umgeschriebene Texte und eigene Schritte sind danach weg.
+              {/* Was das Neu-Erzeugen kostet, hängt jetzt davon ab, wie viel
+                  festgezurrt ist. Die Zahl gehört in die Rückfrage — sonst
+                  behauptet sie einen Verlust, den es so nicht mehr gibt. */}
+              <Notification
+                kind="warning"
+                titel={
+                  anzahlGesperrt > 0
+                    ? `${items.length - anzahlGesperrt} von ${items.length} Schritten werden ersetzt`
+                    : "Die Bearbeitung geht verloren"
+                }
+              >
+                {anzahlGesperrt > 0 ? (
+                  <>
+                    {anzahlGesperrt}{" "}
+                    {anzahlGesperrt === 1 ? "Schritt ist" : "Schritte sind"}{" "}
+                    festgezurrt und {anzahlGesperrt === 1 ? "bleibt" : "bleiben"}{" "}
+                    unverändert stehen. Bei den übrigen sind Umgeordnetes,
+                    umgeschriebene Texte und eigene Schritte danach weg.
+                  </>
+                ) : (
+                  <>
+                    Die {items.length} Schritte werden ersetzt. Umgeordnetes,
+                    umgeschriebene Texte und eigene Schritte sind danach weg.
+                    Einzelne Schritte lassen sich mit dem Schloss festzurren.
+                  </>
+                )}
               </Notification>
               <div className="mt-px flex flex-wrap gap-px">
                 <Button

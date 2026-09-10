@@ -3,12 +3,15 @@
 
 # ready
 
-* möglichkeit abschnitte zu "locken" damit sie beim neue generieren nicht überschrieben werden
-* möglichketi nur bestimmte abschnitte neu zu generieren
-* möglichkeit bei den aufgaben bestimmte aufgaben zu entfernen
+* (nichts offen)
 
 
 # done
+* \~\~**Der Ablauf gehört der Lehrperson**\~\~ (2026-09-10)
+  * Schritte festzurren (`sequenz_ablauf.gesperrt`) — überleben «Neu erzeugen» unverändert und behalten ihren Platz
+  * «Nur bestimmte neu erzeugen» ergibt sich daraus: festzurren, was bleiben soll
+  * Aufgaben aus einer Lektion entfernen (`sequenz.ausgeschlossene_fakten`) — bleiben offen, stehen in Folgewochen als Rückstand, mit «Zurückholen»
+  * Migration: `npx tsx src/db/migrate-ablauf-sperren.ts`
 * \~\~bildungsplan HKB-Karten aufklappbar mit Beschreibung, Lernzielen und Modulnamen\~\~ (2026-08-20)
 * \~\~KI-Prompt-Generierung: Button auf Sequenz-Formular und Detailseite, generiert Prompt mit Kontext\~\~ (2026-08-20)
 * \~\~KI-Output importierbar: JSON-Import für Lektionsblöcke auf der Detailseite\~\~ (2026-08-20)

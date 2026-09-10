@@ -120,6 +120,7 @@ export default async function SequenzDetailPage({
         entwurfAm={seq.entwurfAm}
         zeilen={ablauf}
         lektionen={seq.lektionen}
+        ausgeschlossen={seq.ausgeschlosseneFakten ?? []}
       />
 
       <GeschwisterSection

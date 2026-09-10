@@ -15,7 +15,13 @@ import { sequenz, sequenzAblauf, klasse } from "@/db/schema";
 import { and, asc, count, desc, eq, gte, isNotNull, lte, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
-import { markenAusStoff, type StoffBlock } from "@/lib/modulbaum";
+import {
+  erledigtMarke,
+  markenAusStoff,
+  markenMenge,
+  markeSchluessel,
+  type StoffBlock,
+} from "@/lib/modulbaum";
 import { getOffenenStoff, type OffenerStoff } from "@/lib/rueckstand";
 import { schaetzeModulZeiten } from "@/lib/zeitschaetzung";
 import { holeVorwissen, type Vorwissen } from "@/lib/vorwissen";
@@ -444,20 +450,64 @@ export async function erzeugeEntwurf(
     sequenzId
   );
 
-  let fakten = sammleFakten(offen);
+  // Was in dieser Lektion nicht geplant werden soll, weil es aus dem Ablauf
+  // entfernt wurde. Nicht erledigt — nur heute nicht dran; in Folgewochen
+  // steht es weiterhin als Rückstand.
+  const ausgeschlossen = markenMenge(seq.ausgeschlosseneFakten ?? []);
+
+  // Gesperrte Zeilen bleiben, wie sie sind. Was sie schon abdecken, muss der
+  // Generator nicht ein zweites Mal einplanen.
+  const gesperrte = await db
+    .select({
+      sortierung: sequenzAblauf.sortierung,
+      refCode: sequenzAblauf.refCode,
+      refAufgabe: sequenzAblauf.refAufgabe,
+    })
+    .from(sequenzAblauf)
+    .where(
+      and(
+        eq(sequenzAblauf.sequenzId, sequenzId),
+        eq(sequenzAblauf.gesperrt, true)
+      )
+    );
+
+  const schonGeplant = new Set(
+    gesperrte
+      .filter((g) => g.refCode)
+      .map((g) =>
+        markeSchluessel(
+          g.refAufgabe ? erledigtMarke(g.refCode!, g.refAufgabe) : g.refCode!
+        )
+      )
+  );
+
+  let fakten = sammleFakten(offen).filter((f) => {
+    if (!f.refCode) return true;
+    const marke = markeSchluessel(
+      f.refAufgabe ? erledigtMarke(f.refCode, f.refAufgabe) : f.refCode
+    );
+    return !ausgeschlossen.has(marke) && !schonGeplant.has(marke);
+  });
 
   // Kein einziger Fakt heisst: alles ist laut Übertrag erledigt, oder der
   // Aufgabenbaum fehlt. Beides ist eine Aussage, die die Lehrperson lesen
   // soll — die KI würde sonst eine Lektion aus dem Nichts bauen. Die KI
   // ordnet und formuliert, sie erfindet keine Fakten.
-  if (fakten.length === 0) {
+  // Kein Fakt übrig ist nur dann eine Aussage, wenn auch nichts gesperrt ist.
+  // Steht der Ablauf schon fest — alles festgezurrt oder bewusst entfernt —,
+  // ist das kein Fehler, sondern das Ergebnis.
+  if (fakten.length === 0 && gesperrte.length === 0) {
     const woBloecke = stoff.bloecke.map((b) => `Block ${b.schluessel}`).join(" und ");
+    const wegen =
+      ausgeschlossen.size > 0
+        ? ` (${ausgeschlossen.size} aus diesem Ablauf entfernt)`
+        : "";
     return {
       ok: false,
       fehler:
         `Für KW ${kw} steht${woBloecke ? ` in ${woBloecke}` : ""} keine offene ` +
-        `Aufgabe an — entweder ist laut Übertrag alles erledigt, oder zum ` +
-        `Modul fehlt der Aufgabenbaum.`,
+        `Aufgabe an${wegen} — entweder ist laut Übertrag alles erledigt, oder ` +
+        `zum Modul fehlt der Aufgabenbaum.`,
     };
   }
 
@@ -595,12 +645,35 @@ export async function erzeugeEntwurf(
     zeilen.push(faktZeile(f));
   }
 
-  if (zeilen.length === 0) {
+  if (zeilen.length === 0 && gesperrte.length === 0) {
     return { ok: false, fehler: "Der Entwurf wäre leer geblieben." };
   }
 
-  await db.delete(sequenzAblauf).where(eq(sequenzAblauf.sequenzId, sequenzId));
-  await db.insert(sequenzAblauf).values(zeilen);
+  // Gesperrte Zeilen überleben unverändert und behalten ihren Platz. Sie
+  // werden nicht gelöscht und nicht neu geschrieben — nur die übrigen.
+  //
+  // Eingeordnet wird nach der alten Sortierung: eine Zeile, die auf Platz 3
+  // festgezurrt war, steht wieder auf Platz 3. Der Rest füllt die Lücken in
+  // seiner neuen Reihenfolge auf.
+  await db
+    .delete(sequenzAblauf)
+    .where(
+      and(
+        eq(sequenzAblauf.sequenzId, sequenzId),
+        eq(sequenzAblauf.gesperrt, false)
+      )
+    );
+
+  if (zeilen.length > 0) {
+    const belegt = new Set(gesperrte.map((g) => g.sortierung));
+    let platz = 0;
+    for (const z of zeilen) {
+      while (belegt.has(platz)) platz += 1;
+      z.sortierung = platz;
+      platz += 1;
+    }
+    await db.insert(sequenzAblauf).values(zeilen);
+  }
   await db
     .update(sequenz)
     .set({ status: "entwurf", entwurfAm: new Date(), updatedAt: new Date() })
@@ -858,15 +931,95 @@ export async function aktualisiereAblaufZeile(
   if (aktualisiert) revalidatePath(`/sequenzen/${aktualisiert.sequenzId}`);
 }
 
+/**
+ * Eine Zeile aus dem Ablauf entfernen.
+ *
+ * Bei einem **Fakt** wird die Aufgabe zusätzlich für diese Sequenz
+ * ausgeschlossen. Sonst käme sie beim nächsten «Neu erzeugen» zurück: der
+ * Generator hängt bewusst an, was die KI übergeht, damit im Unterricht nichts
+ * fehlt — und machte damit jedes Löschen wirkungslos.
+ *
+ * **Ausgeschlossen ist nicht erledigt.** Die Aufgabe bleibt offen und steht in
+ * Folgewochen als Rückstand; nur heute ist sie nicht dran. Was erledigt ist,
+ * sagt allein der Übertrag.
+ */
 export async function loescheAblaufZeile(bId: string, zeilenId: string) {
   if (!(await eigeneAblaufZeile(bId, zeilenId))) return;
 
   const [geloescht] = await db
     .delete(sequenzAblauf)
     .where(eq(sequenzAblauf.id, zeilenId))
+    .returning({
+      sequenzId: sequenzAblauf.sequenzId,
+      quelle: sequenzAblauf.quelle,
+      refCode: sequenzAblauf.refCode,
+      refAufgabe: sequenzAblauf.refAufgabe,
+    });
+
+  if (!geloescht) return;
+
+  if (geloescht.quelle === "fakt" && geloescht.refCode) {
+    const marke = geloescht.refAufgabe
+      ? erledigtMarke(geloescht.refCode, geloescht.refAufgabe)
+      : geloescht.refCode;
+
+    const [s] = await db
+      .select({ bisher: sequenz.ausgeschlosseneFakten })
+      .from(sequenz)
+      .where(eq(sequenz.id, geloescht.sequenzId))
+      .limit(1);
+
+    const bisher = s?.bisher ?? [];
+    if (!bisher.includes(marke)) {
+      await db
+        .update(sequenz)
+        .set({ ausgeschlosseneFakten: [...bisher, marke] })
+        .where(eq(sequenz.id, geloescht.sequenzId));
+    }
+  }
+
+  revalidatePath(`/sequenzen/${geloescht.sequenzId}`);
+}
+
+/** Eine Zeile festzurren oder wieder freigeben. */
+export async function sperreAblaufZeile(
+  bId: string,
+  zeilenId: string,
+  gesperrt: boolean
+) {
+  if (!(await eigeneAblaufZeile(bId, zeilenId))) return;
+
+  const [z] = await db
+    .update(sequenzAblauf)
+    .set({ gesperrt })
+    .where(eq(sequenzAblauf.id, zeilenId))
     .returning({ sequenzId: sequenzAblauf.sequenzId });
 
-  if (geloescht) revalidatePath(`/sequenzen/${geloescht.sequenzId}`);
+  if (z) revalidatePath(`/sequenzen/${z.sequenzId}`);
+}
+
+/**
+ * Einen entfernten Fakt wieder zulassen — die Rücknahme zum Löschen.
+ *
+ * Ohne diesen Weg wäre das Entfernen endgültig, und ein Fehlgriff liesse sich
+ * nur über die Datenbank heilen.
+ */
+export async function holeFaktZurueck(bId: string, sequenzId: string, marke: string) {
+  if (!(await eigeneSequenz(bId, sequenzId))) return;
+
+  const [s] = await db
+    .select({ bisher: sequenz.ausgeschlosseneFakten })
+    .from(sequenz)
+    .where(eq(sequenz.id, sequenzId))
+    .limit(1);
+
+  const rest = (s?.bisher ?? []).filter((m) => m !== marke);
+  await db
+    .update(sequenz)
+    .set({ ausgeschlosseneFakten: rest.length > 0 ? rest : null })
+    .where(eq(sequenz.id, sequenzId));
+
+  revalidatePath(`/sequenzen/${sequenzId}`);
 }
 
 /** Neue Reihenfolge festhalten; `ids` ist die Liste in der gewünschten Folge. */

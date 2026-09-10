@@ -559,6 +559,19 @@ export const sequenz = pgTable("sequenz", {
   /** Abgehakte Aufgaben, mit ihrer Original-Bezeichnung. */
   uebertragErledigt: text("uebertrag_erledigt").array(),
   uebertragSlideBis: integer("uebertrag_slide_bis"),
+  /**
+   * Fakten, die in **dieser** Lektion nicht geplant werden sollen — die
+   * Marken der aus dem Ablauf entfernten Aufgaben.
+   *
+   * Ohne das kam eine gelöschte Aufgabe beim nächsten «Neu erzeugen» zurück:
+   * der Generator hängt bewusst an, was die KI übergeht, damit im Unterricht
+   * nichts fehlt. Genau diese Regel machte das Löschen wirkungslos.
+   *
+   * **Erledigt heisst das nicht.** Die Aufgabe bleibt offen und taucht in
+   * Folgewochen als Rückstand auf — nur heute steht sie nicht an. Was
+   * erledigt ist, sagt allein der Übertrag.
+   */
+  ausgeschlosseneFakten: text("ausgeschlossene_fakten").array(),
   keinUebertrag: boolean("kein_uebertrag").default(false).notNull(),
   uebertragAm: timestamp("uebertrag_am"),
   entwurfAm: timestamp("entwurf_am"),
@@ -627,6 +640,14 @@ export const sequenzAblauf = pgTable("sequenz_ablauf", {
    * jedes Mal neu aus Modulplan und Überträgen.
    */
   rueckstandKw: integer("rueckstand_kw"),
+  /**
+   * Gesperrte Zeilen überleben ein «Neu erzeugen» unverändert — Text,
+   * Reihenfolge, Dauer. Bisher warf der Generator den ganzen Ablauf weg und
+   * baute ihn neu; wer einen Schritt umformuliert hatte, verlor ihn. Ein
+   * Schloss pro Zeile ist die kleinste Antwort darauf: es macht aus dem
+   * Ablauf etwas, das man Stück für Stück festzurren kann.
+   */
+  gesperrt: boolean("gesperrt").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -41,6 +41,14 @@ export async function aktualisiereAblaufZeile(
   return entwurf.aktualisiereAblaufZeile(await benutzerId(), zeilenId, werte);
 }
 
+export async function sperreAblaufZeile(zeilenId: string, gesperrt: boolean) {
+  return entwurf.sperreAblaufZeile(await benutzerId(), zeilenId, gesperrt);
+}
+
+export async function holeFaktZurueck(sequenzId: string, marke: string) {
+  return entwurf.holeFaktZurueck(await benutzerId(), sequenzId, marke);
+}
+
 export async function loescheAblaufZeile(zeilenId: string) {
   return entwurf.loescheAblaufZeile(await benutzerId(), zeilenId);
 }
