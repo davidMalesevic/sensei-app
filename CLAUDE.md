@@ -607,6 +607,18 @@ Modulplan eine Absicht und der Übertrag die Wirklichkeit.
   der Modulplan neu importiert worden sein — die LA-Codes sind je nach Export
   anders abgeschnitten. Ein roher Stringvergleich liesse den Rückstand nach
   jedem Import wieder auferstehen. Nie roh vergleichen.
+- **Ein Block über mehrere Wochen ist kein Rückstand pro Woche.** Der
+  Modulplan wiederholt denselben Block regelmässig — Block 2 von Modul 278
+  steht in KW 35, 36 *und* 37, Block F von Modul 168 über fünf Wochen. Zwei
+  Regeln verhindern Dubletten: was diese Woche laut Plan ohnehin ansteht, ist
+  **kein** Rückstand, sondern Stoff dieser Woche; und was übrigbleibt, gehört
+  der **frühesten** Woche, in der es anstand. Ohne die erste Regel stand der
+  ganze Wochenstoff als Rückstand da und die Woche selbst schien leer.
+- **Alt-Sequenzen ohne `kalender_kurs` sind Archiv, kein Unterricht.** Jede
+  Abfrage, die Wochen zählt, muss sie über `isNotNull(kalenderKurs)`
+  ausschliessen. In Modul 119 liegen drei davon; mitgezählt liessen sie KW 34
+  und 35 als «ohne Rückmeldung» erscheinen, obwohl der Übertrag erfasst war —
+  und nahmen jenen Wochen gleich den Rückstand mit weg.
 - Der Rückstand steht **vor** dem Ablauf, nicht darunter: sonst liest man die
   Planung, bevor man weiss, dass etwas nachhängt.
 - Im Ablauf tragen geerbte Fakten `sequenz_ablauf.rueckstandKw` und ein
@@ -632,8 +644,14 @@ Slidenummer und sähe aus wie diese.
   Theorieteile am `modul_block`.
 - `schaetzeModulZeiten()` in `src/lib/zeitschaetzung.ts` läuft beim
   Baum-Import (in `try/catch` — der deterministische Import darf nicht an der
-  KI scheitern) und über den Knopf «Zeiten schätzen». **Er fasst `person` nie
-  an**, weder in der Auswahl noch im `WHERE`.
+  KI scheitern), über den Knopf «Zeiten schätzen» und **aus dem
+  Entwurfsgenerator heraus**, sobald ein Fakt ohne Minuten dabei ist. **Er
+  fasst `person` nie an**, weder in der Auswahl noch im `WHERE`.
+- **Der Unterschied zwischen Knopf und Automatik ist `nurLuecken`.** Der Knopf
+  frischt alle KI-Werte auf — das ist eine Handlung. Der Entwurf füllt nur,
+  was noch gar nichts trägt. Ohne diese Trennung bekäme dieselbe Aufgabe bei
+  jedem Erzeugen eine andere Zahl, und eine Zahl, die sich unter der Hand
+  ändert, taugt nicht als Grundlage.
 - **`importModulBaum()` löscht Aufträge und Aufgaben und legt sie neu an.**
   Die Minutenangaben würden dabei verschwinden, deshalb merkt
   `ladeZeitenNachSchluessel()` sie vorher über den fachlichen Schlüssel
@@ -646,6 +664,54 @@ Slidenummer und sähe aus wie diese.
   Klassen mit verschiedenem Stand haben verschiedene Faktenlisten; ein
   gemeinsamer Ablauf wäre für eine der beiden falsch. In den Parallelklassen
   steht dazu das Etikett «anderer Rückstand».
+
+## Einstieg und Praxisbezug
+
+Der Prompt verlangte von Anfang an «IMMER eine Aktivierung des Vorwissens»,
+gab der KI darüber aber **nichts an die Hand**: nur die Fakten der laufenden
+Woche und eine Standzeile. Daraus konnte nichts anderes werden als «kurzes
+Gespräch zum Thema». Sensei kennt den Stoff — es hat ihn nur nie hergezeigt.
+
+`src/lib/vorwissen.ts` sammelt drei Blöcke für den Prompt, alle belegt:
+
+| Block | Woher |
+|---|---|
+| **Vorwissen dieser Klasse** | abgehakte Aufgaben des ganzen bisherigen Moduls, nach KW, mit Wochenziel und Übertragsnotiz |
+| **Handlungskompetenzen** | `handlungskompetenz.module_berufsfachschule` — eine Liste von Modulnummern, seit dem Seed vorhanden |
+| **Zuletzt verwendet** | die letzten Einstiege und Praxisbezüge dieser Klasse aus `sequenz_ablauf` |
+
+- **Ganzes bisheriges Modul, nicht nur die Vorwoche.** Erst über mehrere
+  Wochen entsteht ein Bogen, an den sich anknüpfen lässt: Umwelt → Markt →
+  Unternehmen ist eine Brücke, «letzte Woche PESTEL» allein nicht.
+- **Die HK-Zuordnung musste nicht gepflegt werden.** Sie steckt im
+  Bildungsplan und wurde nur nie benutzt — die frühere lief über
+  `sequenz_handlungskompetenz`, war Handarbeit und ist leer. Modul 168 → b4,
+  b5, b6; Modul 278 → a1, c1, d1. Der Praxisbezug nennt das Kürzel im Text.
+- **«Zuletzt verwendet» ist die Bedingung für Abwechslung, nicht Zierat.** Die
+  KI hat kein Gedächtnis über Sitzungen hinweg; ohne diese Liste kann sie
+  Vielfalt nicht liefern, nur behaupten. Genau das war der Fall —
+  «Automatisierung im Betrieb» stand bei EDB24A zweimal hintereinander.
+  Modulübergreifend abgefragt, denn eine Methode nutzt sich über Module hinweg ab.
+
+Dazu im Prompt ein **Methodenstrauss** (Think-Pair-Share, Plenumsdiskussion,
+Partnerinterview, Zuordnungsspiel, Wandtafelfussball, Blitzlicht, Fehlersuche,
+Placemat, Museumsrundgang, Ranking, Kartenabfrage — andere ausdrücklich
+erlaubt) und **vier Ankerpunkte**, die von Woche zu Woche wechseln sollen:
+
+| Anker | Der Einstieg knüpft an … |
+|---|---|
+| Produkt | was die Klasse erstellt hat — wird hervorgeholt und weiterverwendet |
+| Begriffe | Fachbegriffe der Vorwochen abfragen und schärfen |
+| Brücke | warum das Heutige auf dem Vorherigen aufbaut |
+| Stolpersteine | was letzte Woche strittig oder schwierig war |
+
+Die KI nennt die gewählte Methode am Anfang des Textes («Think-Pair-Share:
+…»). Das ist kein Schmuck: der nächste Lauf liest sie unter «zuletzt
+verwendet» wieder und weiss, was er nicht wiederholen soll.
+
+**Der Einstieg wird so konkret, wie der Übertrag gepflegt ist.** Steht dort
+«nichts abgehakt», bleibt nur das Wochenziel als Anker; mit abgehakten
+Aufgaben nennt der Einstieg sie beim Namen.
 
 ## Smartlearn-Import
 
@@ -694,6 +760,12 @@ Konsequenzen im Code:
   Teil (`LA_278_203`). Ein exakter Vergleich liess in Modul 278 zwei von vier
   LAs still aus der Woche fallen — der Entwurf plante dann Aufgaben, die längst
   erledigt waren, und liess die anstehenden weg. Nie exakt vergleichen.
+  **Verglichen wird über Segmente, nicht über ein Ziffernmuster**: `LA` plus
+  Modulkennung immer, das dritte Segment nur, wenn es eine Kennung ist
+  (`203`, `1000`, `Block01`) und keine Bezeichnung (`Markt-`, `IT-Mittel`).
+  Die frühere Regel `LA[_-]?\d+[_-]?\d+` machte aus `LA_219_Block01` und
+  `LA_219_Block02` beide `la_219` — fünf Aufträge mit einem Schlüssel, und ein
+  Häkchen im Übertrag hätte fünf Aufgaben zugleich erledigt.
 - Manche Module **nummerieren ihre Aufgaben nicht** (dort heissen alle «Neue
   Aufgabe»). Dann ist der LA selbst die Einheit — `sammleFakten()` gibt in dem
   Fall den LA-Code als Fakt aus.
@@ -981,6 +1053,9 @@ src/
 │   ├── smartlearn-resultate.ts   # Resultate-Export (.xlsx) lesen
 │   ├── resultate.ts              # Auswertung der Abgaben
 │   ├── modulbaum.ts              # KW + Modul ⇒ Block ⇒ LA ⇒ Aufgaben
+│   ├── rueckstand.ts             # was aus Vorwochen offen ist
+│   ├── zeitschaetzung.ts         # Minuten pro Aufgabe (KI, korrigierbar)
+│   ├── vorwissen.ts              # Lernstand, HK, zuletzt verwendete Methoden
 │   ├── kontext.ts                # Aggregation für den ContextHeader
 │   ├── zeit.ts                   # Europe/Zurich statt UTC
 │   ├── kw.ts                     # ISO-Kalenderwochen
@@ -1024,7 +1099,11 @@ src/
   `semester_klasse`, `kalender_eintrag`. Dort hängen drei Alt-Sequenzen ohne
   `kalender_kurs` als Archiv. Kein Code liest sie mehr; bewusst nicht
   gelöscht.
-- Die **Coverage-Matrix** im Bildungsplan hat dadurch keine Datenbasis mehr.
+- Die **Coverage-Matrix** im Bildungsplan hat dadurch keine Datenbasis mehr —
+  sie hängt an `sequenz_handlungskompetenz`, und die ist leer. Die
+  Handlungskompetenzen selbst sind aber wieder im Spiel: der Praxisbezug
+  greift sie über `handlungskompetenz.module_berufsfachschule` ab (siehe
+  *Einstieg und Praxisbezug*), ohne dass etwas von Hand gepflegt werden muss.
 - Aus `.pptx`/`.docx` kann kein Text gelesen werden — es fehlt ein
   OOXML-Parser. Präsentationen deshalb als **PDF** ablegen.
 - `Button render={<Link/>}` erzeugt in der Dev-Overlay-Konsole eine
