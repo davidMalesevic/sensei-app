@@ -121,6 +121,7 @@ export default async function SequenzDetailPage({
         zeilen={ablauf}
         lektionen={seq.lektionen}
         ausgeschlossen={seq.ausgeschlosseneFakten ?? []}
+        hinweise={seq.ablaufHinweise ?? []}
       />
 
       <GeschwisterSection

@@ -525,6 +525,31 @@ export const modulAufgabeRelations = relations(modulAufgabe, ({ one }) => ({
 
 // ─── Sequenz ───
 
+/**
+ * Ein Kommentar der Lehrperson an einem Abschnitt des Ablaufs
+ * (`sequenz.ablauf_hinweise`).
+ *
+ * Der **Anker** sagt, woran der Kommentar hängt — bewusst nicht die
+ * Zeilen-ID, denn die überlebt kein «Neu erzeugen»:
+ *
+ * - `fakt:<markeSchluessel>` — gilt der Aufgabe aus dem Material, wo immer
+ *   sie im Ablauf landet («erst nach der Besprechung»).
+ * - `typ:<ablauf_typ>` — gilt der Stelle in der Dramaturgie («der Einstieg
+ *   dieser Lektion»). Für einen KI-Vorschlag ist das der einzige ehrliche
+ *   Anker: sein Text wird bei jedem Lauf neu geschrieben, die Stelle bleibt.
+ */
+export type AblaufHinweis = {
+  anker: string;
+  text: string;
+  /**
+   * Wie der Abschnitt heisst, an dem der Kommentar hängt («Einstieg»,
+   * «LA_119_1000 · Aufgabe 2»). Redundant zum Anker und bewusst mitgeführt:
+   * der Anker ist normalisiert und kleingeschrieben, und ein Kommentar, dessen
+   * Schritt gerade nicht im Ablauf steht, muss trotzdem lesbar bleiben.
+   */
+  label?: string;
+};
+
 export const sequenz = pgTable("sequenz", {
   id: uuid("id").defaultRandom().primaryKey(),
   benutzerId: uuid("benutzer_id")
@@ -572,6 +597,17 @@ export const sequenz = pgTable("sequenz", {
    * erledigt ist, sagt allein der Übertrag.
    */
   ausgeschlosseneFakten: text("ausgeschlossene_fakten").array(),
+  /**
+   * Kommentare der Lehrperson an einzelnen Abschnitten des Ablaufs. Sie
+   * fliessen beim Neu-Erzeugen in den Prompt ein — mehr Kontrolle über das,
+   * was die KI schreibt, ohne den Ablauf hinterher von Hand zu flicken.
+   *
+   * **Der Anker hält sie fest, nicht die Zeilen-ID.** `erzeugeEntwurf()`
+   * löscht alle nicht gesperrten Zeilen und schreibt sie neu; ein Kommentar
+   * an der Zeile stürbe also genau in dem Lauf, den er steuern soll. Siehe
+   * `AblaufHinweis`.
+   */
+  ablaufHinweise: jsonb("ablauf_hinweise").$type<AblaufHinweis[]>(),
   keinUebertrag: boolean("kein_uebertrag").default(false).notNull(),
   uebertragAm: timestamp("uebertrag_am"),
   entwurfAm: timestamp("entwurf_am"),

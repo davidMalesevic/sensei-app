@@ -41,6 +41,27 @@ export async function aktualisiereAblaufZeile(
   return entwurf.aktualisiereAblaufZeile(await benutzerId(), zeilenId, werte);
 }
 
+/**
+ * Kommentar an einem Abschnitt des Ablaufs. Leerer Text löscht ihn.
+ *
+ * Der Anker kommt aus `getAblauf()` und wird hier nicht neu gebildet — er
+ * darf beliebiger Text sein, gespeichert wird er nur an der eigenen Sequenz.
+ */
+export async function setzeAblaufHinweis(
+  sequenzId: string,
+  anker: string,
+  text: string,
+  label?: string
+) {
+  return entwurf.setzeAblaufHinweis(
+    await benutzerId(),
+    sequenzId,
+    anker,
+    text,
+    label
+  );
+}
+
 export async function sperreAblaufZeile(zeilenId: string, gesperrt: boolean) {
   return entwurf.sperreAblaufZeile(await benutzerId(), zeilenId, gesperrt);
 }

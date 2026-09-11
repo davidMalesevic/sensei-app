@@ -11,7 +11,7 @@ import "server-only";
  */
 
 import { db } from "@/db";
-import { sequenz, sequenzAblauf, klasse } from "@/db/schema";
+import { sequenz, sequenzAblauf, klasse, type AblaufHinweis } from "@/db/schema";
 import { and, asc, count, desc, eq, gte, isNotNull, lte, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
@@ -65,6 +65,56 @@ async function eigeneAblaufZeile(bId: string, zeilenId: string) {
     .where(and(eq(sequenzAblauf.id, zeilenId), eq(sequenz.benutzerId, bId)))
     .limit(1);
   return z ?? null;
+}
+
+/**
+ * Woran ein Kommentar der Lehrperson hängt.
+ *
+ * Nicht an der Zeile: `erzeugeEntwurf()` löscht alle nicht gesperrten Zeilen
+ * und schreibt sie neu, ein Kommentar an der Zeilen-ID stürbe also genau in
+ * dem Lauf, den er steuern soll.
+ *
+ * - **Fakt** → an der Aufgabe aus dem Material, über dieselbe normalisierte
+ *   Marke wie Erledigtes und Ausgeschlossenes. Damit hält der Kommentar auch
+ *   einen Neuimport des Modulplans aus, der LA-Codes anders abschneidet.
+ * - **Vorschlag** → an der Stelle in der Dramaturgie. Für einen KI-Schritt ist
+ *   das der einzige ehrliche Anker: sein Text wird bei jedem Lauf neu
+ *   geschrieben, die Stelle («der Einstieg dieser Lektion») bleibt.
+ */
+export function hinweisAnker(z: {
+  quelle: string;
+  typ: string;
+  refCode: string | null;
+  refAufgabe: string | null;
+}): string {
+  if (z.quelle === "fakt" && z.refCode) {
+    const marke = z.refAufgabe
+      ? erledigtMarke(z.refCode, z.refAufgabe)
+      : z.refCode;
+    return `fakt:${markeSchluessel(marke)}`;
+  }
+  return `typ:${z.typ}`;
+}
+
+/** Beschriftung einer Schritt-Art für den Prompt und für Meldungen. */
+const TYP_LABEL: Record<string, string> = {
+  einstieg: "Einstieg",
+  praxisbezug: "Praxisbezug",
+  theorie: "Theorie",
+  aufgabe: "Aufgabe",
+  besprechung: "Besprechung",
+  abschluss: "Abschluss",
+  frei: "Freier Schritt",
+};
+
+/** Die Hinweise einer Sequenz, leer wenn keine hinterlegt sind. */
+async function holeHinweise(sequenzId: string): Promise<AblaufHinweis[]> {
+  const [s] = await db
+    .select({ h: sequenz.ablaufHinweise })
+    .from(sequenz)
+    .where(eq(sequenz.id, sequenzId))
+    .limit(1);
+  return s?.h ?? [];
 }
 
 type Fakt = {
@@ -241,7 +291,14 @@ function bauePrompt(opts: {
   fakten: Fakt[];
   didaktik: string;
   vorwissen: Vorwissen;
+  /** Kommentare der Lehrperson an einzelnen Abschnitten dieses Ablaufs. */
+  hinweise: AblaufHinweis[];
 }): string {
+  const hinweisVon = new Map(opts.hinweise.map((h) => [h.anker, h.text]));
+
+  // Ein Kommentar zu einer Aufgabe steht bei der Aufgabe, nicht in einem
+  // Block weiter unten: die KI ordnet den Fakt ein, und dabei soll sie lesen,
+  // was dazu gesagt wurde.
   const faktenListe =
     opts.fakten.length > 0
       ? opts.fakten
@@ -250,10 +307,37 @@ function bauePrompt(opts: {
               f.dauerMinuten !== null ? `${f.dauerMinuten} min` : "Dauer unbekannt";
             const her =
               f.rueckstandKw !== null ? ` — RÜCKSTAND aus KW ${f.rueckstandKw}` : "";
-            return `  ${f.id}: [${f.typ}] ${f.titel} (${dauer})${her}`;
+            const hin = hinweisVon.get(
+              hinweisAnker({
+                quelle: "fakt",
+                typ: f.typ,
+                refCode: f.refCode,
+                refAufgabe: f.refAufgabe,
+              })
+            );
+            const zeile = `  ${f.id}: [${f.typ}] ${f.titel} (${dauer})${her}`;
+            return hin ? `${zeile}\n      ANWEISUNG DER LEHRPERSON: ${hin}` : zeile;
           })
           .join("\n")
       : "  (keine)";
+
+  // Kommentare an einer Stelle der Dramaturgie — der Einstieg dieser Lektion,
+  // der Abschluss. Sie stehen unmittelbar vor der Aufgabe und gehen den
+  // allgemeinen Regeln vor: die Lehrperson kennt die Klasse, das Modell nicht.
+  // Fakt-Kommentare sind hier ausgenommen, sie stehen schon oben.
+  const anweisungen = opts.hinweise
+    .filter((h) => h.anker.startsWith("typ:"))
+    .map((h) => {
+      const typ = h.anker.slice("typ:".length);
+      return `  ${TYP_LABEL[typ] ?? typ}: ${h.text}`;
+    });
+  const anweisungsBlock =
+    anweisungen.length > 0
+      ? `ANWEISUNGEN DER LEHRPERSON zu einzelnen Abschnitten (verbindlich)\n` +
+        anweisungen.join("\n") +
+        `\n  Sie kennt die Klasse. Diese Anweisungen gehen den Regeln unten vor —\n` +
+        `  mit einer Ausnahme: Fakten bleiben unverändert (Regel 3).\n`
+      : "";
 
   const v = opts.vorwissen;
 
@@ -340,6 +424,7 @@ METHODENSTRAUSS für Einstieg und Praxisbezug (wähle passend, variiere)
 DIDAKTISCHE MODELLE (als Orientierung, nicht ausgeben)
 ${opts.didaktik}
 
+${anweisungsBlock}
 AUFGABE
 Erstelle einen Ablauf von 6 bis 10 Schritten.
 
@@ -374,6 +459,14 @@ Regeln:
    einen anderen Rhythmus als eine Doppellektion.
 10. Formuliere knapp: die Lehrperson überfliegt das im Unterricht in Sekunden.
    Ein bis zwei Sätze pro Schritt, kein Fliesstext.
+${
+    opts.hinweise.length > 0
+      ? `11. Wo eine ANWEISUNG DER LEHRPERSON steht — oben im eigenen Block oder\n` +
+        `   bei einem einzelnen Fakt —, befolge sie. Sie geht den Regeln 1, 2, 6,\n` +
+        `   7 und 9 vor; Regel 3 bleibt unangetastet. Widerspricht eine Anweisung\n` +
+        `   einem Fakt, gilt der Fakt.\n`
+      : ""
+  }
 
 Antworte AUSSCHLIESSLICH mit JSON in dieser Form:
 {"ablauf":[
@@ -567,6 +660,10 @@ export async function erzeugeEntwurf(
     stand: standText || null,
     fakten,
     didaktik: await phasenmodellWissen(),
+    // Was die Lehrperson an einzelne Abschnitte geschrieben hat. Die Hinweise
+    // hängen an der Sequenz, nicht an den Zeilen — deshalb überleben sie
+    // genau das Löschen, das zwei Zeilen weiter unten passiert.
+    hinweise: await holeHinweise(sequenzId),
     vorwissen: await holeVorwissen(
       bId,
       seq.klasseId,
@@ -722,6 +819,22 @@ async function rueckstandSignatur(
     .join("|");
 }
 
+/**
+ * Fingerabdruck der Kommentare einer Sequenz — fürs Gruppieren im Nachtlauf.
+ *
+ * Ein Kommentar ist eine Anweisung an den Generator. Zwei Klassen, die
+ * verschiedene Anweisungen tragen, dürfen sich keinen Ablauf teilen: die eine
+ * bekäme sonst eine Planung, die nach den Vorgaben der anderen entstanden ist.
+ */
+async function hinweisSignatur(sequenzId: string): Promise<string> {
+  const h = await holeHinweise(sequenzId);
+  if (h.length === 0) return "";
+  return h
+    .map((x) => `${x.anker}=${x.text}`)
+    .sort()
+    .join(";");
+}
+
 /** Gerüst für `markenAusStoff`, das nur die Blöcke braucht. */
 const LEERE_WOCHE = {
   kw: 0,
@@ -770,13 +883,20 @@ export async function erzeugeEntwuerfe(
   // Ablauf wäre für mindestens eine der beiden falsch. Klassen mit gleichem
   // Stand teilen sich weiter einen Plan; das kostet nur dort mehr KI-Aufrufe,
   // wo die Klassen tatsächlich auseinandergelaufen sind.
+  //
+  // Kommentare der Lehrperson gehören aus demselben Grund in den Schlüssel:
+  // wer für diese eine Klasse etwas hinterlegt hat, will nicht den Ablauf der
+  // Parallelklasse, der ohne diese Anweisung entstanden ist.
   const gruppen = new Map<string, string[]>();
+  const mitHinweisen = new Set<string>();
   for (const k of kandidaten) {
     const kw = getKWFromDateString(k.startDatum);
     const signatur = await rueckstandSignatur(bId, k.id);
-    const schluessel = `${k.modulId ?? "ohne"}|${kw ?? "?"}|${signatur}`;
+    const hinweise = await hinweisSignatur(k.id);
+    const schluessel = `${k.modulId ?? "ohne"}|${kw ?? "?"}|${signatur}|${hinweise}`;
     if (!gruppen.has(schluessel)) gruppen.set(schluessel, []);
     gruppen.get(schluessel)!.push(k.id);
+    if (hinweise) mitHinweisen.add(schluessel);
   }
 
   let erzeugt = 0;
@@ -825,7 +945,11 @@ export async function erzeugeEntwuerfe(
     // Hat eine Parallelklasse derselben Woche bereits einen Ablauf, wird der
     // übernommen statt ein zweiter erzeugt — dieselbe Woche im selben Modul
     // ist dieselbe Planung.
-    const vorhandene = await vorhandenerAblaufDerWoche(schluessel, ids);
+    // Trägt die Gruppe Kommentare, wird nicht übernommen: der vorhandene
+    // Ablauf der Parallelklasse kennt sie nicht.
+    const vorhandene = mitHinweisen.has(schluessel)
+      ? null
+      : await vorhandenerAblaufDerWoche(schluessel, ids);
     if (vorhandene) {
       for (const id of ids) {
         const kopie = await uebernehmeAblauf(bId, id, vorhandene);
@@ -878,11 +1002,68 @@ export async function bestaetigeAblauf(bId: string, sequenzId: string) {
 export async function getAblauf(bId: string, sequenzId: string) {
   if (!(await eigeneSequenz(bId, sequenzId))) return [];
 
-  return db.query.sequenzAblauf.findMany({
-    where: eq(sequenzAblauf.sequenzId, sequenzId),
-    orderBy: (a, { asc: s }) => [s(a.sortierung)],
-    with: { refMaterial: { columns: { id: true, titel: true, dateiPfad: true, url: true } } },
+  const [zeilen, hinweise] = await Promise.all([
+    db.query.sequenzAblauf.findMany({
+      where: eq(sequenzAblauf.sequenzId, sequenzId),
+      orderBy: (a, { asc: s }) => [s(a.sortierung)],
+      with: { refMaterial: { columns: { id: true, titel: true, dateiPfad: true, url: true } } },
+    }),
+    holeHinweise(sequenzId),
+  ]);
+
+  // Der Kommentar liegt an der Sequenz, gezeigt wird er aber an der Zeile, zu
+  // der er gehört. Die Auflösung passiert hier einmal, damit die Oberfläche
+  // den Anker nicht selbst bilden muss — `markeSchluessel()` hängt an der
+  // Datenbankschicht und käme in einer Client-Komponente nicht mit.
+  const text = new Map(hinweise.map((h) => [h.anker, h.text]));
+
+  return zeilen.map((z) => {
+    const anker = hinweisAnker(z);
+    return { ...z, hinweisAnker: anker, hinweis: text.get(anker) ?? null };
   });
+}
+
+/** Alle Kommentare dieser Sequenz — auch die ohne Schritt im aktuellen Ablauf. */
+export async function getAblaufHinweise(
+  bId: string,
+  sequenzId: string
+): Promise<AblaufHinweis[]> {
+  if (!(await eigeneSequenz(bId, sequenzId))) return [];
+  return holeHinweise(sequenzId);
+}
+
+/**
+ * Einen Kommentar an einem Abschnitt hinterlegen, ändern oder (mit leerem
+ * Text) wieder entfernen.
+ *
+ * Er bleibt an der Sequenz stehen und wirkt bei **jedem** Neu-Erzeugen, bis
+ * ihn jemand löscht. Ein Kommentar, der nach einem Lauf verschwände, müsste
+ * vor jedem Lauf neu getippt werden — und zwei Wochen später wüsste niemand
+ * mehr, warum der Einstieg so aussieht, wie er aussieht.
+ */
+export async function setzeAblaufHinweis(
+  bId: string,
+  sequenzId: string,
+  anker: string,
+  text: string,
+  label?: string
+) {
+  if (!(await eigeneSequenz(bId, sequenzId))) return;
+
+  const sauber = text.trim().slice(0, 1000);
+  const bisher = await holeHinweise(sequenzId);
+  const ohne = bisher.filter((h) => h.anker !== anker);
+  const beschriftung = label?.trim().slice(0, 200) || undefined;
+  const neu = sauber
+    ? [...ohne, { anker, text: sauber, label: beschriftung }]
+    : ohne;
+
+  await db
+    .update(sequenz)
+    .set({ ablaufHinweise: neu.length > 0 ? neu : null })
+    .where(eq(sequenz.id, sequenzId));
+
+  revalidatePath(`/sequenzen/${sequenzId}`);
 }
 
 // ─── Schleifen: Direktmanipulation am Ablauf ──────────────────────────────

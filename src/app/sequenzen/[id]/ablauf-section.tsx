@@ -18,6 +18,7 @@ import {
   Checkmark,
   Launch,
   MachineLearningModel,
+  Comments,
 } from "@carbon/icons-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ import {
   holeFaktZurueck,
   sortiereAblauf,
   fuegeAblaufZeileHinzu,
+  setzeAblaufHinweis,
 } from "../entwurf-actions";
 import { materialHref } from "@/lib/material-link";
 
@@ -62,6 +64,14 @@ export type AblaufZeile = {
   gesperrt: boolean;
   /** Gesetzt, wenn dieser Fakt aus einer früheren Woche liegengeblieben ist. */
   rueckstandKw: number | null;
+  /**
+   * Woran ein Kommentar zu diesem Schritt hängt: bei Fakten an der Aufgabe,
+   * bei KI-Vorschlägen an der Schritt-Art. Nicht an der Zeile — die wird beim
+   * Neu-Erzeugen gelöscht und neu geschrieben.
+   */
+  hinweisAnker: string;
+  /** Der Kommentar der Lehrperson, der beim Erzeugen in den Prompt geht. */
+  hinweis: string | null;
   refMaterial: {
     id: string;
     titel: string;
@@ -90,6 +100,18 @@ const TYP_LABEL: Record<string, string> = {
   frei: "Frei",
 };
 
+/**
+ * Wie der Abschnitt heisst, an dem ein Kommentar hängt. Bei einem Fakt die
+ * Aufgabe selbst, bei einem KI-Vorschlag die Stelle in der Dramaturgie — genau
+ * das, woran der Anker ihn festmacht.
+ */
+function ankerLabel(z: AblaufZeile): string {
+  if (z.hinweisAnker.startsWith("fakt:")) {
+    return [z.refCode, z.refAufgabe].filter(Boolean).join(" · ");
+  }
+  return TYP_LABEL[z.typ] ?? z.typ;
+}
+
 /** Wächst mit dem Inhalt, damit die Zeile nicht abgeschnitten wirkt. */
 function AutoTextarea({
   wert,
@@ -97,12 +119,15 @@ function AutoTextarea({
   onSichern,
   className,
   ariaLabel,
+  autoFokus = false,
 }: {
   wert: string;
   platzhalter: string;
   onSichern: (neu: string) => void;
   className?: string;
   ariaLabel: string;
+  /** Für Felder, die erst auf Klick erscheinen — sonst müsste man zweimal klicken. */
+  autoFokus?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [lokal, setLokal] = useState(wert);
@@ -121,6 +146,10 @@ function AutoTextarea({
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [lokal]);
+
+  useEffect(() => {
+    if (autoFokus) ref.current?.focus();
+  }, [autoFokus]);
 
   return (
     <textarea
@@ -159,6 +188,7 @@ export function AblaufSection({
   zeilen,
   lektionen,
   ausgeschlossen = [],
+  hinweise = [],
 }: {
   sequenzId: string;
   status: string;
@@ -166,6 +196,12 @@ export function AblaufSection({
   zeilen: AblaufZeile[];
   /** Aufgaben, die aus diesem Ablauf entfernt wurden — mit Rückweg. */
   ausgeschlossen?: string[];
+  /**
+   * Alle Kommentare dieser Sequenz. Gebraucht wird die vollständige Liste
+   * für die, deren Schritt gerade nicht im Ablauf steht: sie wirken beim
+   * nächsten Erzeugen weiter und dürfen deshalb nicht unsichtbar sein.
+   */
+  hinweise?: { anker: string; text: string; label?: string }[];
   /** Für das Zeitbudget: eine Lektion sind 45 Minuten. */
   lektionen: number | null;
 }) {
@@ -176,6 +212,14 @@ export function AblaufSection({
   const zeilenRefs = useRef<(HTMLLIElement | null)[]>([]);
   const [neuerTyp, setNeuerTyp] = useState("frei");
   const [rueckfrage, setRueckfrage] = useState(false);
+  /** Anker der Schritte, deren Kommentarfeld offen steht, obwohl es leer ist. */
+  const [offeneFelder, setOffeneFelder] = useState<string[]>([]);
+  /**
+   * Die eine Zeile, deren Feld den Fokus bekommt. Nicht der Anker: zwei Zeilen
+   * können sich einen teilen, und dann spränge der Cursor in die untere,
+   * während man auf die obere geklickt hat.
+   */
+  const [fokusZeile, setFokusZeile] = useState<string | null>(null);
   const [laeuft, startTransition] = useTransition();
   const [zuletztGeladen, setZuletztGeladen] = useState(zeilen);
 
@@ -187,6 +231,13 @@ export function AblaufSection({
 
   const bestaetigt = status === "bestaetigt";
   const anzahlGesperrt = items.filter((z) => z.gesperrt).length;
+
+  // Kommentare, deren Schritt gerade nicht im Ablauf steht — die Aufgabe wurde
+  // entfernt oder gilt als erledigt. Sie wirken beim nächsten Erzeugen weiter,
+  // also dürfen sie nicht unsichtbar werden; sonst käme eine Anweisung zum
+  // Tragen, die niemand mehr sieht.
+  const ankerImAblauf = new Set(items.map((z) => z.hinweisAnker));
+  const verwaist = hinweise.filter((h) => !ankerImAblauf.has(h.anker));
 
   /**
    * Das Zeitbudget. Jeder Schritt trägt Minuten — Fakten geerbt aus dem
@@ -262,6 +313,26 @@ export function AblaufSection({
     );
     startTransition(async () => {
       await aktualisiereAblaufZeile(id, { dauerMinuten: minuten });
+    });
+  }
+
+  /**
+   * Ein Kommentar hängt am Anker, nicht an der Zeile — deshalb ändert er sich
+   * in **allen** Zeilen mit demselben Anker. Das ist kein Nebeneffekt, sondern
+   * die Aussage: «der Einstieg dieser Lektion» gibt es nur einmal, auch wenn
+   * zwei Zeilen darauf zeigen.
+   */
+  function hinweisSichern(anker: string, neu: string, label?: string) {
+    const text = neu.trim();
+    setItems((alt) =>
+      alt.map((z) =>
+        z.hinweisAnker === anker ? { ...z, hinweis: text || null } : z
+      )
+    );
+    if (!text) setOffeneFelder((alt) => alt.filter((a) => a !== anker));
+    startTransition(async () => {
+      await setzeAblaufHinweis(sequenzId, anker, text, label);
+      router.refresh();
     });
   }
 
@@ -551,7 +622,56 @@ export function AblaufSection({
                         </a>
                       )}
                     </div>
+
+                    {/* Der Kommentar für die Erzeugung. Er steht sichtbar im
+                        Schritt, nicht in einem Aufklapper: er erklärt, warum
+                        dieser Schritt so aussieht — und er wirkt beim nächsten
+                        Lauf wieder, also muss man ihn sehen, ohne zu suchen. */}
+                    {(z.hinweis !== null ||
+                      offeneFelder.includes(z.hinweisAnker)) && (
+                      <div className="mt-2 flex gap-2 border-l-[3px] border-l-border-strong bg-layer-hover px-3 py-2">
+                        <Comments
+                          size={16}
+                          className="mt-1 shrink-0 text-text-secondary"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <AutoTextarea
+                            wert={z.hinweis ?? ""}
+                            ariaLabel={`Kommentar für die Erzeugung zu Schritt ${i + 1}`}
+                            platzhalter="Was soll beim Erzeugen anders sein?"
+                            className="type-body-compact-02 text-foreground"
+                            autoFokus={fokusZeile === z.id}
+                            onSichern={(neu) =>
+                              hinweisSichern(z.hinweisAnker, neu, ankerLabel(z))
+                            }
+                          />
+                          <p className="type-helper-02 mt-1 text-text-helper">
+                            Fliesst beim Neu-Erzeugen in den Prompt · gilt für{" "}
+                            {ankerLabel(z)} · leeren entfernt ihn
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Nur solange es keinen Kommentar gibt: steht er da, ist
+                      das Feld selbst der Weg, ihn zu ändern. */}
+                  {z.hinweis === null &&
+                    !offeneFelder.includes(z.hinweisAnker) && (
+                      <Button
+                        variant="ghost-neutral"
+                        size="icon-sm"
+                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        aria-label={`Kommentar zu Schritt ${i + 1} hinterlegen`}
+                        title="Kommentar hinterlegen — wird beim Neu-Erzeugen berücksichtigt"
+                        onClick={() => {
+                          setOffeneFelder((alt) => [...alt, z.hinweisAnker]);
+                          setFokusZeile(z.id);
+                        }}
+                      >
+                        <Comments size={16} />
+                      </Button>
+                    )}
 
                   {/* Das Schloss bleibt sichtbar, wenn es zu ist — es ist
                       eine Aussage über die Zeile, kein Werkzeug am Rand. */}
@@ -629,6 +749,40 @@ export function AblaufSection({
             </div>
           )}
 
+          {/* Ein Kommentar überlebt auch den Schritt, zu dem er gehörte.
+              Ungesehen dürfte er das nicht: er steuert den nächsten Lauf. */}
+          {verwaist.length > 0 && (
+            <div className="mt-4 border-l-[3px] border-l-border-subtle bg-layer p-4">
+              <div className="type-label-02 mb-3 text-text-secondary">
+                Kommentare ohne Schritt in diesem Ablauf — sie wirken beim
+                nächsten Erzeugen weiter
+              </div>
+              <div className="space-y-2">
+                {verwaist.map((h) => (
+                  <div
+                    key={h.anker}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+                  >
+                    <span className="type-label-02 shrink-0 text-text-helper">
+                      {h.label ?? h.anker}
+                    </span>
+                    <span className="type-body-compact-02 min-w-0 text-text-secondary">
+                      {h.text}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => hinweisSichern(h.anker, "")}
+                      disabled={laeuft}
+                    >
+                      Entfernen
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {rueckfrage ? (
             <div className="mt-4">
               {/* Was das Neu-Erzeugen kostet, hängt jetzt davon ab, wie viel
@@ -655,6 +809,15 @@ export function AblaufSection({
                     Die {items.length} Schritte werden ersetzt. Umgeordnetes,
                     umgeschriebene Texte und eigene Schritte sind danach weg.
                     Einzelne Schritte lassen sich mit dem Schloss festzurren.
+                  </>
+                )}
+                {hinweise.length > 0 && (
+                  <>
+                    {" "}
+                    Die {hinweise.length}{" "}
+                    {hinweise.length === 1 ? "Kommentar bleibt" : "Kommentare bleiben"}{" "}
+                    stehen und {hinweise.length === 1 ? "fliesst" : "fliessen"} in
+                    diesen Lauf ein.
                   </>
                 )}
               </Notification>

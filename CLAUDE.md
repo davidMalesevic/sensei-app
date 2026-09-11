@@ -517,6 +517,44 @@ gelöschte Aufgabe kam zurück, weil der Generator bewusst anhängt, was die KI
 
 Migration: `npx tsx src/db/migrate-ablauf-sperren.ts`
 
+### Kommentare an einzelnen Abschnitten
+
+Festzurren und Entfernen sagen nur *ob* ein Schritt bleibt, nicht *wie* er
+aussehen soll. Dafür trägt jeder Abschnitt einen Kommentar
+(`sequenz.ablauf_hinweise`), der beim Erzeugen in den Prompt geht: «kein
+Gruppenpuzzle, die Klasse ist unruhig», «diese Aufgabe erst am Schluss».
+
+- **Der Kommentar hängt am Anker, nicht an der Zeile.** `erzeugeEntwurf()`
+  löscht alle nicht gesperrten Zeilen und schreibt sie neu — an der Zeilen-ID
+  stürbe er genau in dem Lauf, den er steuern soll. Zwei Anker:
+  `fakt:<markeSchluessel>` (die Aufgabe aus dem Material, über dieselbe
+  normalisierte Marke wie Erledigtes — hält also einen Modulplan-Reimport aus)
+  und `typ:<ablauf_typ>` (die Stelle in der Dramaturgie). Für einen
+  KI-Vorschlag ist die Stelle der einzige ehrliche Anker: sein Text wird jedes
+  Mal neu geschrieben, «der Einstieg dieser Lektion» bleibt.
+- **Er bleibt stehen, bis ihn jemand löscht** (leeres Feld). Ein Kommentar, der
+  nach einem Lauf verschwände, müsste vor jedem Lauf neu getippt werden — und
+  zwei Wochen später wüsste niemand mehr, warum der Einstieg so aussieht.
+- **Mehrere Zeilen mit demselben Anker zeigen denselben Kommentar.** Das ist
+  die Aussage, kein Nebeneffekt: den Einstieg gibt es einmal, auch wenn zwei
+  Zeilen darauf zeigen.
+- Kommentare zu Fakten stehen im Prompt **bei der Aufgabe**, die übrigen in
+  einem Block direkt vor der Aufgabenstellung. Sie gehen den allgemeinen Regeln
+  vor — die Lehrperson kennt die Klasse —, **nur nicht Regel 3**: Fakten bleiben
+  unverändert. Widerspricht eine Anweisung einem Fakt, gilt der Fakt.
+- Ein Kommentar, dessen Schritt gerade nicht im Ablauf steht, wird unter dem
+  Ablauf ausgewiesen. Er wirkt weiter, also darf er nicht unsichtbar sein. Dafür
+  trägt jeder Kommentar zusätzlich sein `label` — der Anker ist normalisiert und
+  kleingeschrieben und taugt nicht als Beschriftung.
+- Der **Nachtlauf gruppiert zusätzlich nach den Kommentaren** und übernimmt
+  keinen fremden Ablauf, wenn welche hinterlegt sind: wer für diese Klasse etwas
+  hinterlegt hat, will nicht die Planung der Parallelklasse, die ohne diese
+  Anweisung entstanden ist.
+- `uebernehmeAblauf()` kopiert die Kommentare **nicht** — wie Fortschritt und
+  Notizen bleiben sie pro Klasse.
+
+Migration: `npx tsx src/db/migrate-ablauf-hinweise.ts`
+
 ### Wiederverwendung über Klassen
 
 Dasselbe Modul läuft mit mehreren Klassen — freitags zweimal 168 und zweimal
@@ -848,6 +886,7 @@ npx tsx src/db/besitz-uebertragen.ts <email>  # Bestand einem Konto zuweisen
 npx tsx src/db/migrate-admin.ts        # Verwaltung, Einladungen, Zeitplan
 npx tsx src/db/migrate-zeit-rueckstand.ts  # Minuten + Rückstands-Herkunft
 npx tsx src/db/migrate-ablauf-sperren.ts   # Schritte festzurren, Fakten entfernen
+npx tsx src/db/migrate-ablauf-hinweise.ts  # Kommentare an Abschnitten
 npx tsx src/db/migrate-resultate.ts    # Smartlearn-Resultate (Versuch)
 npx tsx src/db/drop-resultate.ts --wirklich   # ... und wieder weg
 npx tsx src/db/seed.ts            # Seed-Daten laden

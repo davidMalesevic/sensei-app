@@ -7,6 +7,12 @@
 
 
 # done
+* \~\~**Kommentare an einzelnen Abschnitten**\~\~ (2026-09-11)
+  * Kommentarfeld an jedem Ablaufschritt; fliesst beim Neu-Erzeugen in den Prompt
+  * Hängt am Anker (`fakt:<marke>` / `typ:<art>`), nicht an der Zeile — überlebt das Erzeugen
+  * Bleibt stehen, bis man ihn leert; Kommentare ohne Schritt stehen unter dem Ablauf
+  * Nachtlauf gruppiert danach und übernimmt keinen fremden Ablauf, wenn Kommentare da sind
+  * Migration: `npx tsx src/db/migrate-ablauf-hinweise.ts`
 * \~\~**Der Ablauf gehört der Lehrperson**\~\~ (2026-09-10)
   * Schritte festzurren (`sequenz_ablauf.gesperrt`) — überleben «Neu erzeugen» unverändert und behalten ihren Platz
   * «Nur bestimmte neu erzeugen» ergibt sich daraus: festzurren, was bleiben soll
