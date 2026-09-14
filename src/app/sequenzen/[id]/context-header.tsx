@@ -3,34 +3,21 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Calendar,
   Idea,
   Education,
-  ArrowsHorizontal,
   ListChecked,
   ChevronDown,
-  Add,
   TrashCan,
 } from "@carbon/icons-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SectionHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import type { SequenzKontext } from "@/lib/kontext";
-import {
-  createPendenz,
-  togglePendenz,
-  deletePendenz,
-} from "@/app/klassen/actions";
-
-const KW_QUELLE_HINWEIS: Record<SequenzKontext["kwQuelle"], string> = {
-  sequenz: "aus Sequenz-Startdatum",
-  block: "aus erstem Lektionsblock",
-  heute: "aktuelle Woche (kein Datum gesetzt)",
-};
+import { togglePendenz, deletePendenz } from "@/app/klassen/actions";
+import { PendenzForm } from "./pendenz-form";
 
 /**
  * Eine Kachel der Kontextleiste. Carbon-Aufbau: kleines Label mit Icon,
@@ -109,7 +96,6 @@ function PendenzenListe({
   pendenzen: { id: string; text: string }[];
 }) {
   const router = useRouter();
-  const [neu, setNeu] = useState("");
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -148,39 +134,20 @@ function PendenzenListe({
         </div>
       ))}
 
-      <form
-        action={async (formData) => {
-          await createPendenz(formData);
-          setNeu("");
-          router.refresh();
-        }}
-        className="mt-3 flex"
-      >
-        <input type="hidden" name="klasseId" value={klasseId} />
-        <Input
-          name="text"
-          value={neu}
-          onChange={(e) => setNeu(e.target.value)}
-          placeholder="Neue Pendenz…"
-          className="h-10"
-          required
-        />
-        <Button
-          type="submit"
-          size="icon-sm"
-          aria-label="Pendenz hinzufügen"
-          className="shrink-0"
-        >
-          <Add size={16} />
-        </Button>
-      </form>
+      <PendenzForm klasseId={klasseId} className="mt-3" />
     </div>
   );
 }
 
 /**
  * Kontextleiste über der Sequenz: Wochenziel aus dem Modulplan, anstehende
- * Beurteilungen, Übergabenotiz der Vorsequenz und offene Pendenzen der Klasse.
+ * Beurteilungen und offene Pendenzen der Klasse.
+ *
+ * **Eine Kachel erscheint nur, wenn sie etwas zu sagen hat.** Vorher standen
+ * alle vier bedingungslos da und schrieben bei fehlendem Inhalt ein «—» oder
+ * «Keine offenen Pendenzen» hin — vier Kacheln, von denen zwei nichts
+ * mitteilten. Die Kalenderwoche steht aus demselben Grund in der Überschrift
+ * statt in einer eigenen Kachel: eine zweistellige Zahl braucht keine Fläche.
  *
  * Carbon setzt zusammengehörige Kacheln mit 1px Fuge auf eine dunklere
  * Fläche — dadurch lesen sie sich als ein Paneel, nicht als lose Karten.
@@ -201,110 +168,91 @@ export function ContextHeader({
       ? "Kein Modulplan hinterlegt"
       : "Kein Modul zugeordnet";
 
+  // Das Wochenziel bleibt immer stehen: fehlt es, ist das keine Leere,
+  // sondern ein Befund («Kein Modulplan hinterlegt»).
+  const kacheln = [
+    <Kachel
+      key="ziel"
+      icon={Idea}
+      label="Wochenziel"
+      wert={zielText}
+      badge={kontext.modulLabel ?? undefined}
+    >
+      <div className="space-y-2">
+        {ziel?.lbHinweis && (
+          <p className="type-heading-02 text-foreground">
+            Leistungsbeurteilung: {ziel.lbHinweis}
+          </p>
+        )}
+        {ziel?.beschreibung && (
+          <p className="type-body-02 whitespace-pre-wrap text-text-secondary">
+            {ziel.beschreibung}
+          </p>
+        )}
+      </div>
+    </Kachel>,
+  ];
+
+  if (kontext.pruefungen.length > 0) {
+    kacheln.push(
+      <Kachel
+        key="beurteilungen"
+        icon={Education}
+        label="Beurteilungen"
+        badge={String(kontext.pruefungen.length)}
+        wert={kontext.pruefungen
+          .map((p) => `${p.wann}: ${p.bezeichnung}`)
+          .join(" · ")}
+      >
+        <ul className="space-y-2">
+          {kontext.pruefungen.map((p, i) => (
+            <li
+              key={i}
+              className="type-body-02 flex items-start gap-2 text-foreground"
+            >
+              <Badge variant="purple" size="sm" className="shrink-0">
+                {p.wann}
+              </Badge>
+              <span className="min-w-0 flex-1">{p.bezeichnung}</span>
+              <span className="type-helper-02 shrink-0 text-text-helper">
+                {p.quelle === "kalender" ? "Kalender" : "Modulplan"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Kachel>
+    );
+  }
+
+  if (kontext.pendenzen.length > 0) {
+    kacheln.push(
+      <Kachel
+        key="pendenzen"
+        icon={ListChecked}
+        label="Pendenzen"
+        badge={String(kontext.pendenzen.length)}
+        wert={kontext.pendenzen.map((p) => p.text).join(" · ")}
+      >
+        <PendenzenListe klasseId={klasseId} pendenzen={kontext.pendenzen} />
+      </Kachel>
+    );
+  }
+
+  // Die Spalten richten sich nach der Zahl der Kacheln — sonst stünde eine
+  // einzelne Kachel als Fünftel-Streifen da.
+  const spalten =
+    kacheln.length >= 3
+      ? "md:grid-cols-2 xl:grid-cols-3"
+      : kacheln.length === 2
+        ? "md:grid-cols-2"
+        : "";
+
   return (
     <section className="mb-12">
-      <SectionHeader titel="Kontext" />
+      <SectionHeader titel={`Kontext: KW ${kontext.kw}`} />
 
-      <div className="grid gap-px bg-border-subtle md:grid-cols-2 xl:grid-cols-5">
-        <div className="min-w-0 bg-layer p-4">
-          <div className="type-label-02 flex items-center gap-2 text-text-helper">
-            <Calendar size={16} className="shrink-0" />
-            Woche
-          </div>
-          <p className="type-heading-04 mt-2 text-foreground">KW {kontext.kw}</p>
-          <p className="type-helper-02 mt-1 text-text-helper">
-            {KW_QUELLE_HINWEIS[kontext.kwQuelle]}
-          </p>
-        </div>
-
-        <Kachel
-          icon={Idea}
-          label="Wochenziel"
-          wert={zielText}
-          badge={kontext.modulLabel ?? undefined}
-        >
-          <div className="space-y-2">
-            {ziel?.lbHinweis && (
-              <p className="type-heading-02 text-foreground">
-                Leistungsbeurteilung: {ziel.lbHinweis}
-              </p>
-            )}
-            {ziel?.beschreibung && (
-              <p className="type-body-02 whitespace-pre-wrap text-text-secondary">
-                {ziel.beschreibung}
-              </p>
-            )}
-          </div>
-        </Kachel>
-
-        <Kachel
-          icon={Education}
-          label="Beurteilungen"
-          badge={
-            kontext.pruefungen.length > 0
-              ? String(kontext.pruefungen.length)
-              : undefined
-          }
-          wert={
-            kontext.pruefungen.length > 0
-              ? kontext.pruefungen
-                  .map((p) => `${p.wann}: ${p.bezeichnung}`)
-                  .join(" · ")
-              : "Keine anstehenden Beurteilungen"
-          }
-        >
-          {kontext.pruefungen.length > 0 && (
-            <ul className="space-y-2">
-              {kontext.pruefungen.map((p, i) => (
-                <li
-                  key={i}
-                  className="type-body-02 flex items-start gap-2 text-foreground"
-                >
-                  <Badge variant="purple" size="sm" className="shrink-0">
-                    {p.wann}
-                  </Badge>
-                  <span className="min-w-0 flex-1">{p.bezeichnung}</span>
-                  <span className="type-helper-02 shrink-0 text-text-helper">
-                    {p.quelle === "kalender" ? "Kalender" : "Modulplan"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Kachel>
-
-        <Kachel
-          icon={ArrowsHorizontal}
-          label="Übergabe"
-          wert={
-            kontext.vorherigeNotiz
-              ? `«${kontext.vorherigeNotiz.titel}»: ${kontext.vorherigeNotiz.notiz}`
-              : null
-          }
-        >
-          {kontext.vorherigeNotiz && (
-            <p className="type-body-02 whitespace-pre-wrap text-text-secondary">
-              {kontext.vorherigeNotiz.notiz}
-            </p>
-          )}
-        </Kachel>
-
-        <Kachel
-          icon={ListChecked}
-          label="Pendenzen"
-          badge={
-            kontext.pendenzen.length > 0
-              ? String(kontext.pendenzen.length)
-              : undefined
-          }
-          wert={
-            kontext.pendenzen.length > 0
-              ? kontext.pendenzen.map((p) => p.text).join(" · ")
-              : "Keine offenen Pendenzen"
-          }
-        >
-          <PendenzenListe klasseId={klasseId} pendenzen={kontext.pendenzen} />
-        </Kachel>
+      <div className={cn("grid gap-px bg-border-subtle", spalten)}>
+        {kacheln}
       </div>
     </section>
   );

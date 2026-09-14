@@ -141,6 +141,7 @@ export default async function SequenzDetailPage({
 
       <UebertragSection
         sequenzId={id}
+        klasseId={seq.klasseId}
         datum={seq.startDatum}
         daten={{
           uebertrag: seq.uebertrag,

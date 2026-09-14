@@ -23,7 +23,6 @@ export type Pruefung = {
 
 export type SequenzKontext = {
   kw: number;
-  kwQuelle: "sequenz" | "block" | "heute";
   modulLabel: string | null;
   /** Wochenziel des Modulplans für die aktuelle KW. */
   aktuellesZiel: ModulplanZiel | null;
@@ -34,14 +33,18 @@ export type SequenzKontext = {
    * «LB:»-Einträge des Modulplans ab der aktuellen KW.
    */
   pruefungen: Pruefung[];
-  vorherigeNotiz: { titel: string; notiz: string } | null;
   pendenzen: { id: string; text: string }[];
 };
 
 /**
  * Aggregiert den Planungskontext einer Sequenz: Wochenziel aus dem Modulplan,
- * Übergabenotiz der vorangehenden Sequenz und offene Pendenzen der Klasse.
- * Wird vom ContextHeader auf der Sequenz-Detailseite genutzt.
+ * anstehende Beurteilungen und offene Pendenzen der Klasse. Wird vom
+ * ContextHeader auf der Sequenz-Detailseite genutzt.
+ *
+ * Der Stand der Vorwoche steht **nicht** hier: ihn zeigt «Stand aus der
+ * letzten Lektion» aus dem Übertrag. Die frühere Übergabenotiz
+ * (`sequenz.uebergabenotiz`) wurde von keiner Oberfläche je geschrieben — die
+ * Kachel konnte deshalb nur «—» anzeigen.
  */
 export async function getSequenzKontext(
   sequenzId: string
@@ -66,21 +69,14 @@ export async function getSequenzKontext(
 
   if (!seq) return null;
 
-  // Referenz-KW: Sequenzstart, sonst erstes Blockdatum, sonst heute
   const ersterBlockDatum =
     seq.lektionsbloecke.find((lb) => lb.datum)?.datum ?? null;
 
-  let kw = getKWFromDateString(seq.startDatum);
-  let kwQuelle: SequenzKontext["kwQuelle"] = "sequenz";
-
-  if (kw === null) {
-    kw = getKWFromDateString(ersterBlockDatum);
-    kwQuelle = "block";
-  }
-  if (kw === null) {
-    kw = getKW(new Date());
-    kwQuelle = "heute";
-  }
+  // Referenz ist das Sequenzdatum, sonst das erste Blockdatum, sonst heute.
+  const kw =
+    getKWFromDateString(seq.startDatum) ??
+    getKWFromDateString(ersterBlockDatum) ??
+    getKW(new Date());
 
   // Wochenziel aus dem Modulplan
   let aktuellesZiel: SequenzKontext["aktuellesZiel"] = null;
@@ -103,7 +99,7 @@ export async function getSequenzKontext(
 
     aktuellesZiel = eintraege.find((e) => e.kw === kw) ?? null;
     if (!aktuellesZiel) {
-      naechstesZiel = eintraege.find((e) => e.kw > kw!) ?? null;
+      naechstesZiel = eintraege.find((e) => e.kw > kw) ?? null;
     }
 
     // Leistungsbeurteilungen aus dem Modulplan ab der aktuellen Woche
@@ -116,28 +112,6 @@ export async function getSequenzKontext(
           kw: e.kw,
         });
       }
-    }
-  }
-
-  // Übergabenotiz der vorherigen Sequenz (gleiche Klasse + Modul)
-  let vorherigeNotiz: SequenzKontext["vorherigeNotiz"] = null;
-  if (seq.modulId) {
-    const vorherige = await db.query.sequenz.findFirst({
-      where: (s, { and: a, eq: e, ne }) =>
-        a(
-          e(s.benutzerId, bId),
-          e(s.klasseId, seq.klasseId),
-          e(s.modulId, seq.modulId!),
-          ne(s.id, sequenzId)
-        ),
-      orderBy: (s, { desc: d }) => [d(s.createdAt)],
-      columns: { uebergabenotiz: true, titel: true },
-    });
-    if (vorherige?.uebergabenotiz) {
-      vorherigeNotiz = {
-        titel: vorherige.titel,
-        notiz: vorherige.uebergabenotiz,
-      };
     }
   }
 
@@ -190,14 +164,12 @@ export async function getSequenzKontext(
 
   return {
     kw,
-    kwQuelle,
     // Kurz halten: das Label steht als Badge in der Kontextleiste, der volle
     // Modultitel steht ohnehin in der Seitenüberschrift.
     modulLabel: seq.modul ? `Modul ${seq.modul.nummer}` : null,
     aktuellesZiel,
     naechstesZiel,
     pruefungen,
-    vorherigeNotiz,
     pendenzen,
   };
 }

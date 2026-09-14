@@ -12,6 +12,7 @@ import {
   keinUebertragSetzen,
   uebertragZuruecksetzen,
 } from "../uebertrag-actions";
+import { PendenzForm } from "./pendenz-form";
 import { erledigtMarke, type Wochenstoff } from "@/lib/modulbaum";
 import type { OffenerStoff } from "@/lib/rueckstand";
 import { schweizerHeute } from "@/lib/zeit";
@@ -50,6 +51,34 @@ function baueGruppen(bloecke: Wochenstoff["bloecke"]) {
   );
 }
 
+/**
+ * «Was muss ich nächste Woche mitbringen» — nach der Lektion, wo man es weiss.
+ * Die Pendenz gehört der Klasse und steht danach in der Kontextleiste jeder
+ * Sequenz, bis sie abgehakt ist; einen Zeitpunkt trägt sie bewusst nicht.
+ *
+ * Steht ausserhalb des Übertragsformulars: ein `<form>` im `<form>` ist
+ * ungültig, und vorgemerkt wird auch noch, wenn der Übertrag längst gesichert
+ * ist.
+ */
+function Vormerken({ klasseId }: { klasseId: string }) {
+  return (
+    <div className="mt-8 max-w-2xl border-t border-border-subtle pt-6">
+      <Label htmlFor="pendenz">Für die nächste Lektion vormerken</Label>
+      <PendenzForm
+        klasseId={klasseId}
+        inputId="pendenz"
+        placeholder="z.B. Prüfungen zurückgeben, Beamer-Kabel mitnehmen"
+        className="mt-2"
+      />
+      <HelperText className="mt-2">
+        Wird zur Pendenz dieser Klasse und steht im Kontext jeder Sequenz, bis
+        du sie abhakst. Die Notiz sagt, wo ihr steht — die Pendenz, was zu tun
+        ist.
+      </HelperText>
+    </div>
+  );
+}
+
 export type UebertragDaten = {
   uebertrag: string | null;
   uebertragErledigt: string[] | null;
@@ -65,11 +94,13 @@ export type UebertragDaten = {
  */
 export function UebertragSection({
   sequenzId,
+  klasseId,
   datum,
   daten,
   offen,
 }: {
   sequenzId: string;
+  klasseId: string;
   datum: string | null;
   daten: UebertragDaten;
   /**
@@ -161,6 +192,8 @@ export function UebertragSection({
               )}
             </div>
           )}
+
+          <Vormerken klasseId={klasseId} />
         </div>
       </section>
     );
@@ -333,6 +366,8 @@ export function UebertragSection({
               : "Kein Übertrag · alles wie geplant"}
           </Button>
         </form>
+
+        <Vormerken klasseId={klasseId} />
       </div>
     </section>
   );
