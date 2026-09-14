@@ -212,6 +212,12 @@ export function AblaufSection({
   const zeilenRefs = useRef<(HTMLLIElement | null)[]>([]);
   const [neuerTyp, setNeuerTyp] = useState("frei");
   const [rueckfrage, setRueckfrage] = useState(false);
+  /**
+   * Was der Generator gemeldet hat. `erzeugeEntwurf()` gibt seine Absage als
+   * `{ ok: false, fehler }` zurück — wurde sie hier weggeworfen, blieb nach
+   * dem Klick alles beim Alten, ohne ein Wort dazu.
+   */
+  const [fehler, setFehler] = useState<string | null>(null);
   /** Anker der Schritte, deren Kommentarfeld offen steht, obwohl es leer ist. */
   const [offeneFelder, setOffeneFelder] = useState<string[]>([]);
   /**
@@ -266,7 +272,9 @@ export function AblaufSection({
   function neuErzeugen() {
     setRueckfrage(false);
     startTransition(async () => {
-      await erzeugeEntwurf(sequenzId, { force: true });
+      const ergebnis = await erzeugeEntwurf(sequenzId, { force: true });
+      if (ergebnis.ok) setFehler(null);
+      else setFehler(ergebnis.fehler ?? "Der Entwurf konnte nicht erzeugt werden.");
       router.refresh();
     });
   }
@@ -344,8 +352,24 @@ export function AblaufSection({
   }
 
   function zurueckholen(marke: string) {
+    setFehler(null);
     startTransition(async () => {
       await holeFaktZurueck(sequenzId, marke);
+      router.refresh();
+    });
+  }
+
+  /**
+   * Wer den ganzen Ablauf löscht, schliesst damit jede Aufgabe der Woche aus —
+   * und der Generator hat nichts mehr zu planen. Einzeln zurückholen wären
+   * dann so viele Klicks, wie der Ablauf Schritte hatte.
+   */
+  function alleZurueckholen() {
+    startTransition(async () => {
+      for (const marke of ausgeschlossen) {
+        await holeFaktZurueck(sequenzId, marke);
+      }
+      setFehler(null);
       router.refresh();
     });
   }
@@ -359,6 +383,9 @@ export function AblaufSection({
   }
 
   function hinzufuegen() {
+    // Die Absage galt dem leeren Ablauf. Mit einem eigenen Schritt darin
+    // stimmt sie nicht mehr.
+    setFehler(null);
     startTransition(async () => {
       await fuegeAblaufZeileHinzu(
         sequenzId,
@@ -438,16 +465,18 @@ export function AblaufSection({
         }
       />
 
+      {/* Der leere Ablauf ist ein Zustand wie jeder andere, keine Sackgasse:
+          entfernte Aufgaben, Kommentare und die Werkzeugleiste stehen darunter
+          genauso wie sonst. Vorher lag beides im «sonst»-Zweig — wer alle
+          Schritte löschte, hatte danach weder ein «Schritt hinzufügen» noch
+          einen Weg, die dabei ausgeschlossenen Aufgaben zurückzuholen. */}
       {items.length === 0 ? (
         <div className="bg-layer p-6">
-          <p className="type-body-02 mb-6 max-w-2xl text-text-secondary">
-            Noch kein Ablauf. Der Nachtlauf erzeugt ihn für anstehende
-            Sequenzen — hier kannst du ihn sofort anstossen.
+          <p className="type-body-02 max-w-2xl text-text-secondary">
+            Noch kein Ablauf. Der Vorbereitungsdurchgang erzeugt ihn für
+            anstehende Sequenzen — hier unten stösst du ihn sofort an oder
+            setzt einen eigenen Schritt hinein.
           </p>
-          <Button onClick={neuErzeugen} disabled={laeuft}>
-            Entwurf erzeugen
-            <MachineLearningModel size={16} />
-          </Button>
         </div>
       ) : (
         <>
@@ -718,173 +747,201 @@ export function AblaufSection({
               );
             })}
           </ol>
-
-          {/* Entfernte Aufgaben stehen unter dem Ablauf, nicht in ihm. Ohne
-              diese Liste wäre das Löschen eine Einbahnstrasse — und man
-              wüsste nicht mehr, warum eine Aufgabe fehlt, die der Modulplan
-              für diese Woche vorsieht. */}
-          {ausgeschlossen.length > 0 && (
-            <div className="mt-4 border-l-[3px] border-l-border-subtle bg-layer p-4">
-              <div className="type-label-02 mb-3 text-text-secondary">
-                Aus dieser Lektion entfernt — bleibt offen und steht in
-                Folgewochen als Rückstand
-              </div>
-              <div className="space-y-2">
-                {ausgeschlossen.map((m) => (
-                  <div key={m} className="flex flex-wrap items-center gap-3">
-                    <span className="type-body-compact-02 min-w-0 text-text-secondary line-through">
-                      {m}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => zurueckholen(m)}
-                      disabled={laeuft}
-                    >
-                      Zurückholen
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Ein Kommentar überlebt auch den Schritt, zu dem er gehörte.
-              Ungesehen dürfte er das nicht: er steuert den nächsten Lauf. */}
-          {verwaist.length > 0 && (
-            <div className="mt-4 border-l-[3px] border-l-border-subtle bg-layer p-4">
-              <div className="type-label-02 mb-3 text-text-secondary">
-                Kommentare ohne Schritt in diesem Ablauf — sie wirken beim
-                nächsten Erzeugen weiter
-              </div>
-              <div className="space-y-2">
-                {verwaist.map((h) => (
-                  <div
-                    key={h.anker}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
-                  >
-                    <span className="type-label-02 shrink-0 text-text-helper">
-                      {h.label ?? h.anker}
-                    </span>
-                    <span className="type-body-compact-02 min-w-0 text-text-secondary">
-                      {h.text}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => hinweisSichern(h.anker, "")}
-                      disabled={laeuft}
-                    >
-                      Entfernen
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {rueckfrage ? (
-            <div className="mt-4">
-              {/* Was das Neu-Erzeugen kostet, hängt jetzt davon ab, wie viel
-                  festgezurrt ist. Die Zahl gehört in die Rückfrage — sonst
-                  behauptet sie einen Verlust, den es so nicht mehr gibt. */}
-              <Notification
-                kind="warning"
-                titel={
-                  anzahlGesperrt > 0
-                    ? `${items.length - anzahlGesperrt} von ${items.length} Schritten werden ersetzt`
-                    : "Die Bearbeitung geht verloren"
-                }
-              >
-                {anzahlGesperrt > 0 ? (
-                  <>
-                    {anzahlGesperrt}{" "}
-                    {anzahlGesperrt === 1 ? "Schritt ist" : "Schritte sind"}{" "}
-                    festgezurrt und {anzahlGesperrt === 1 ? "bleibt" : "bleiben"}{" "}
-                    unverändert stehen. Bei den übrigen sind Umgeordnetes,
-                    umgeschriebene Texte und eigene Schritte danach weg.
-                  </>
-                ) : (
-                  <>
-                    Die {items.length} Schritte werden ersetzt. Umgeordnetes,
-                    umgeschriebene Texte und eigene Schritte sind danach weg.
-                    Einzelne Schritte lassen sich mit dem Schloss festzurren.
-                  </>
-                )}
-                {hinweise.length > 0 && (
-                  <>
-                    {" "}
-                    Die {hinweise.length}{" "}
-                    {hinweise.length === 1 ? "Kommentar bleibt" : "Kommentare bleiben"}{" "}
-                    stehen und {hinweise.length === 1 ? "fliesst" : "fliessen"} in
-                    diesen Lauf ein.
-                  </>
-                )}
-              </Notification>
-              <div className="mt-px flex flex-wrap gap-px">
-                <Button
-                  variant="secondary"
-                  onClick={() => setRueckfrage(false)}
-                  disabled={laeuft}
-                >
-                  Abbrechen
-                </Button>
-                <Button variant="destructive" onClick={neuErzeugen} disabled={laeuft}>
-                  Trotzdem neu erzeugen
-                  <MachineLearningModel size={16} />
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-              <div className="flex items-stretch">
-                <Select
-                  value={neuerTyp}
-                  onValueChange={(v) => setNeuerTyp(String(v))}
-                  items={TYP_LABEL}
-                >
-                  <SelectTrigger className="w-40" aria-label="Art des Schritts">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(TYP_LABEL).map(([wert, label]) => (
-                      <SelectItem key={wert} value={wert}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  onClick={hinzufuegen}
-                  disabled={laeuft}
-                  className="shrink-0"
-                >
-                  Schritt hinzufügen
-                  <Add size={16} />
-                </Button>
-              </div>
-
-              <div className="ml-auto flex flex-wrap gap-px">
-                <Button
-                  variant="secondary"
-                  onClick={neuErzeugenAnfragen}
-                  disabled={laeuft}
-                  title="Verwirft die Bearbeitung und erzeugt den Ablauf neu"
-                >
-                  Neu erzeugen
-                  <MachineLearningModel size={16} />
-                </Button>
-                {!bestaetigt && (
-                  <Button onClick={bestaetigen} disabled={laeuft}>
-                    Passt
-                    <Checkmark size={16} />
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
         </>
+      )}
+
+      {/* Entfernte Aufgaben stehen unter dem Ablauf, nicht in ihm. Ohne
+          diese Liste wäre das Löschen eine Einbahnstrasse — und man
+          wüsste nicht mehr, warum eine Aufgabe fehlt, die der Modulplan
+          für diese Woche vorsieht. */}
+      {ausgeschlossen.length > 0 && (
+        <div className="mt-4 border-l-[3px] border-l-border-subtle bg-layer p-4">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="type-label-02 text-text-secondary">
+              Aus dieser Lektion entfernt — bleibt offen und steht in
+              Folgewochen als Rückstand
+            </span>
+            {ausgeschlossen.length > 1 && (
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={alleZurueckholen}
+                disabled={laeuft}
+              >
+                Alle {ausgeschlossen.length} zurückholen
+              </Button>
+            )}
+          </div>
+          <div className="space-y-2">
+            {ausgeschlossen.map((m) => (
+              <div key={m} className="flex flex-wrap items-center gap-3">
+                <span className="type-body-compact-02 min-w-0 text-text-secondary line-through">
+                  {m}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => zurueckholen(m)}
+                  disabled={laeuft}
+                >
+                  Zurückholen
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ein Kommentar überlebt auch den Schritt, zu dem er gehörte.
+          Ungesehen dürfte er das nicht: er steuert den nächsten Lauf. */}
+      {verwaist.length > 0 && (
+        <div className="mt-4 border-l-[3px] border-l-border-subtle bg-layer p-4">
+          <div className="type-label-02 mb-3 text-text-secondary">
+            Kommentare ohne Schritt in diesem Ablauf — sie wirken beim
+            nächsten Erzeugen weiter
+          </div>
+          <div className="space-y-2">
+            {verwaist.map((h) => (
+              <div
+                key={h.anker}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+              >
+                <span className="type-label-02 shrink-0 text-text-helper">
+                  {h.label ?? h.anker}
+                </span>
+                <span className="type-body-compact-02 min-w-0 text-text-secondary">
+                  {h.text}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => hinweisSichern(h.anker, "")}
+                  disabled={laeuft}
+                >
+                  Entfernen
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Die Absage des Generators gehört vor die Knöpfe — sie sagt, was zu
+      tun ist: meist eine entfernte Aufgabe zurückholen. */}
+      {fehler && (
+        <Notification kind="error" titel="Kein Entwurf erzeugt" className="mt-4">
+      {fehler}
+        </Notification>
+      )}
+
+      {rueckfrage ? (
+        <div className="mt-4">
+          {/* Was das Neu-Erzeugen kostet, hängt jetzt davon ab, wie viel
+              festgezurrt ist. Die Zahl gehört in die Rückfrage — sonst
+              behauptet sie einen Verlust, den es so nicht mehr gibt. */}
+          <Notification
+            kind="warning"
+            titel={
+              anzahlGesperrt > 0
+                ? `${items.length - anzahlGesperrt} von ${items.length} Schritten werden ersetzt`
+                : "Die Bearbeitung geht verloren"
+            }
+          >
+            {anzahlGesperrt > 0 ? (
+              <>
+                {anzahlGesperrt}{" "}
+                {anzahlGesperrt === 1 ? "Schritt ist" : "Schritte sind"}{" "}
+                festgezurrt und {anzahlGesperrt === 1 ? "bleibt" : "bleiben"}{" "}
+                unverändert stehen. Bei den übrigen sind Umgeordnetes,
+                umgeschriebene Texte und eigene Schritte danach weg.
+              </>
+            ) : (
+              <>
+                {items.length === 1
+                  ? "Der eine Schritt wird ersetzt."
+                  : `Die ${items.length} Schritte werden ersetzt.`}{" "}
+                Umgeordnetes, umgeschriebene Texte und eigene Schritte sind
+                danach weg. Einzelne Schritte lassen sich mit dem Schloss
+                festzurren.
+              </>
+            )}
+            {hinweise.length > 0 && (
+              <>
+                {" "}
+                Die {hinweise.length}{" "}
+                {hinweise.length === 1 ? "Kommentar bleibt" : "Kommentare bleiben"}{" "}
+                stehen und {hinweise.length === 1 ? "fliesst" : "fliessen"} in
+                diesen Lauf ein.
+              </>
+            )}
+          </Notification>
+          <div className="mt-px flex flex-wrap gap-px">
+            <Button
+              variant="secondary"
+              onClick={() => setRueckfrage(false)}
+              disabled={laeuft}
+            >
+              Abbrechen
+            </Button>
+            <Button variant="destructive" onClick={neuErzeugen} disabled={laeuft}>
+              Trotzdem neu erzeugen
+              <MachineLearningModel size={16} />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-stretch">
+            <Select
+              value={neuerTyp}
+              onValueChange={(v) => setNeuerTyp(String(v))}
+              items={TYP_LABEL}
+            >
+              <SelectTrigger className="w-40" aria-label="Art des Schritts">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(TYP_LABEL).map(([wert, label]) => (
+                  <SelectItem key={wert} value={wert}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              onClick={hinzufuegen}
+              disabled={laeuft}
+              className="shrink-0"
+            >
+              Schritt hinzufügen
+              <Add size={16} />
+            </Button>
+          </div>
+
+          <div className="ml-auto flex flex-wrap gap-px">
+            <Button
+              variant={items.length === 0 ? "default" : "secondary"}
+              onClick={neuErzeugenAnfragen}
+              disabled={laeuft}
+              title={
+                items.length === 0
+                  ? "Erzeugt den Ablauf aus dem Stoff dieser Woche"
+                  : "Verwirft die Bearbeitung und erzeugt den Ablauf neu"
+              }
+            >
+              {items.length === 0 ? "Entwurf erzeugen" : "Neu erzeugen"}
+              <MachineLearningModel size={16} />
+            </Button>
+            {/* Einen leeren Ablauf zu bestätigen hiesse nichts. */}
+            {!bestaetigt && items.length > 0 && (
+              <Button onClick={bestaetigen} disabled={laeuft}>
+                Passt
+                <Checkmark size={16} />
+              </Button>
+            )}
+          </div>
+        </div>
       )}
     </section>
   );
