@@ -55,11 +55,12 @@ export function Beamer({
           </Button>
           <div className="mx-auto max-w-5xl">
             <h1 className="type-heading-05 mb-8">{titel}</h1>
-            {/* 28px: aus der letzten Reihe lesbar, ohne dass ein Auftrag von
-                zehn Zeilen über den Rand läuft. */}
+            {/* Aus der letzten Reihe lesbar. Die Grössen stehen an den
+                Kindern, nicht am Rahmen: der Darsteller setzt an jedem Absatz
+                seine eigene Schriftklasse, eine am Rahmen käme nie an. */}
             <Markdown
               text={arbeitsauftrag}
-              className="type-heading-04 gap-6 leading-relaxed [&_li]:mb-2"
+              className="gap-6 leading-relaxed [&_h3]:text-[2.5rem] [&_h4]:text-[2rem] [&_li]:text-[1.75rem] [&_p]:text-[1.75rem] [&_td]:text-[1.5rem] [&_th]:text-[1.5rem]"
             />
           </div>
         </div>

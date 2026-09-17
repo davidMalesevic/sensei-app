@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 type Block =
   | { art: "ueberschrift"; stufe: number; text: string }
   | { art: "absatz"; zeilen: string[] }
-  | { art: "liste"; nummeriert: boolean; punkte: string[] }
+  | { art: "liste"; nummeriert: boolean; punkte: string[]; start: number }
   | { art: "tabelle"; kopf: string[]; zeilen: string[][] }
   | { art: "linie" };
 
@@ -86,6 +86,10 @@ function parse(text: string): Block[] {
     const punkt = roh.match(/^([-*+]|\d+[.)])\s+(.*)$/);
     if (punkt) {
       const nummeriert = /\d/.test(punkt[1]);
+      // Die eigene Nummer der ersten Zeile zählt: eine Aufzählung, die eine
+      // Trennlinie zerschneidet, würde sonst wieder bei 1 anfangen — auf dem
+      // Arbeitsblatt stand sechsmal «1.».
+      const start = nummeriert ? Number(punkt[1].replace(/\D/g, "")) || 1 : 1;
       const punkte: string[] = [];
       while (i < zeilen.length) {
         const m = zeilen[i].trim().match(/^([-*+]|\d+[.)])\s+(.*)$/);
@@ -98,7 +102,7 @@ function parse(text: string): Block[] {
           i++;
         }
       }
-      bloecke.push({ art: "liste", nummeriert, punkte });
+      bloecke.push({ art: "liste", nummeriert, punkte, start });
       continue;
     }
 
@@ -184,6 +188,7 @@ export function Markdown({
           return (
             <Tag
               key={i}
+              start={b.nummeriert && b.start !== 1 ? b.start : undefined}
               className={cn(
                 "grid gap-1 pl-6",
                 b.nummeriert ? "list-decimal" : "list-disc"
