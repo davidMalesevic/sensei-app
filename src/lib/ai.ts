@@ -11,7 +11,13 @@ export type AIResult =
  */
 export async function callAI(
   prompt: string,
-  temperature = 0.7
+  temperature = 0.7,
+  /**
+   * Eine System-Nachricht vor dem Prompt. Die Methodenbibliothek trennt
+   * bewusst: der System-Prompt gilt für alle Methoden (Rolle, Schweizer
+   * Rechtschreibung, Ausgabefelder), der Auftrag steht im User-Prompt.
+   */
+  system?: string
 ): Promise<AIResult> {
   const apiKey = process.env.OLLAMA_API_KEY;
   if (!apiKey) {
@@ -29,7 +35,12 @@ export async function callAI(
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: "user", content: prompt }],
+        messages: system
+          ? [
+              { role: "system", content: system },
+              { role: "user", content: prompt },
+            ]
+          : [{ role: "user", content: prompt }],
         temperature,
       }),
     });

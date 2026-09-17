@@ -8,6 +8,7 @@ import { getSequenzById } from "../actions";
 import { getSequenzKontext } from "@/lib/kontext";
 import { getKWFromDateString } from "@/lib/kw";
 import { getAblauf, getGeschwister } from "../entwurf-actions";
+import { holePaket } from "../einstieg-actions";
 import { getOffenenStoffFuerSequenz, getVorherigenUebertrag } from "../uebertrag-actions";
 import { SequenzDeleteButton } from "./sequenz-delete-button";
 import { ContextHeader } from "./context-header";
@@ -61,13 +62,14 @@ export default async function SequenzDetailPage({
   if (!seq || !kontext) return notFound();
 
   const kw = getKWFromDateString(seq.startDatum);
-  const [ablauf, geschwister, offen, stand] = await Promise.all([
+  const [ablauf, geschwister, offen, stand, paket] = await Promise.all([
     getAblauf(id),
     getGeschwister(id),
     // Nicht mehr nur der Stoff dieser KW: was in den Vorwochen liegengeblieben
     // ist, gehört genauso in Planung, Häkchenliste und Referenz.
     getOffenenStoffFuerSequenz(seq.klasseId, seq.modulId, seq.startDatum),
     getVorherigenUebertrag(seq.klasseId, seq.modulId, seq.startDatum, id),
+    holePaket(id),
   ]);
 
   const zeitraum =
@@ -122,6 +124,7 @@ export default async function SequenzDetailPage({
         lektionen={seq.lektionen}
         ausgeschlossen={seq.ausgeschlosseneFakten ?? []}
         hinweise={seq.ablaufHinweise ?? []}
+        paket={paket}
       />
 
       <GeschwisterSection

@@ -13,6 +13,7 @@
     * **Paket an der Einstiegszeile:** aufklappbar, mit Druck- und Beamer-Ansicht (Material für Lernende getrennt von den Lösungen). Erneutes Ausarbeiten ersetzt das Paket, eine festgezurrte Zeile behält es, «Von <Klasse> holen» kopiert es mit.
     * **Visualisierungen gleich mitbauen:** Mindmap, Begriffsnetz, Advance Organizer (Mermaid), Kreuzworträtsel, Memory, Tabu, Jeopardy, Escape-Room.
     * **Quiz:** anzeigen + Download im Kahoot-Importformat (.xlsx).
+  * Stand: Teil 1 (Bibliothek + Bereich /methoden) und Teil 2 (Methodenwahl im Generator, «Einstieg ausarbeiten», Ansicht zum Austeilen) sind auf `test`. Offen ist Teil 3: Visualisierungen aus `daten_json` (Mindmap, Begriffsnetz, Advance Organizer/Mermaid, Kreuzworträtsel, Memory, Tabu, Jeopardy, Escape-Room) und der Kahoot-Export.
 
 
 # done

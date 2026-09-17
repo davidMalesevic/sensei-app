@@ -685,6 +685,12 @@ export const sequenzAblauf = pgTable("sequenz_ablauf", {
    * Ablauf etwas, das man Stück für Stück festzurren kann.
    */
   gesperrt: boolean("gesperrt").default(false).notNull(),
+  /**
+   * Die Methode aus der Bibliothek, mit der dieser Schritt gestaltet ist —
+   * gesetzt beim Einstieg. Der Schlüssel statt der Zeilen-ID, weil die
+   * eigene Fassung einer Methode dieselbe Methode bleibt.
+   */
+  methodeSchluessel: varchar("methode_schluessel", { length: 80 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -1155,3 +1161,40 @@ export const methodeAusgeschaltet = pgTable(
   },
   (t) => [primaryKey({ columns: [t.benutzerId, t.schluessel] })]
 );
+
+/**
+ * Der ausgearbeitete Einstieg einer Sequenz: Ablauf, Arbeitsauftrag,
+ * Materialien, Erwartungshorizont — erzeugt aus der Anweisung einer Methode.
+ *
+ * Er hängt an der **Sequenz**, nicht an der Ablaufzeile. `erzeugeEntwurf()`
+ * löscht alle nicht gesperrten Zeilen und schreibt sie neu; an der Zeilen-ID
+ * stürbe das Paket genau in dem Lauf, der den Einstieg umplant. Pro Sequenz
+ * gibt es einen Einstieg, also genügt eine Zeile pro Sequenz.
+ */
+export const einstiegPaket = pgTable("einstieg_paket", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sequenzId: uuid("sequenz_id")
+    .references(() => sequenz.id, { onDelete: "cascade" })
+    .notNull()
+    .unique(),
+  /** Für welche Methode das Paket gemacht wurde — siehe `methode.schluessel`. */
+  methodeSchluessel: varchar("methode_schluessel", { length: 80 }).notNull(),
+  /** Name zum Zeitpunkt der Ausarbeitung; die Methode kann später umbenannt werden. */
+  methodeName: varchar("methode_name", { length: 200 }).notNull(),
+  dauerMinuten: integer("dauer_minuten"),
+  /** Die verwendeten Parameterwerte — sonst wäre nicht mehr nachvollziehbar, woraus das hier entstand. */
+  parameter: jsonb("parameter").$type<Record<string, number>>().notNull(),
+  /** Freitext der Lehrperson, der in den Prompt ging. */
+  zusatzwuensche: text("zusatzwuensche"),
+  /** Die geprüfte Antwort der KI, Form siehe `ausgabe_schema` der Bibliothek. */
+  inhalt: jsonb("inhalt").notNull(),
+  modell: varchar("modell", { length: 100 }),
+  erzeugtAm: timestamp("erzeugt_am").defaultNow().notNull(),
+});
+
+export const einstiegPaketRelations = relations(einstiegPaket, ({ one }) => ({
+  sequenz: one(sequenz, {
+    fields: [einstiegPaket.sequenzId],
+    references: [sequenz.id],
+  }),
+}));

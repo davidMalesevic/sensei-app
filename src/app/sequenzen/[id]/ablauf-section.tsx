@@ -46,6 +46,7 @@ import {
   setzeAblaufHinweis,
 } from "../entwurf-actions";
 import { materialHref } from "@/lib/material-link";
+import { EinstiegPaket, type PaketAnzeige } from "./einstieg-paket";
 
 export type AblaufZeile = {
   id: string;
@@ -78,6 +79,11 @@ export type AblaufZeile = {
     dateiPfad: string | null;
     url: string | null;
   } | null;
+  /** Die Methode aus der Bibliothek, mit der der Einstieg gestaltet ist. */
+  methodeSchluessel: string | null;
+  methodeId: string | null;
+  methodeName: string | null;
+  methodeAusgeschaltet: boolean;
 };
 
 const TYP_ICON: Record<string, typeof CircleDash> = {
@@ -189,11 +195,14 @@ export function AblaufSection({
   lektionen,
   ausgeschlossen = [],
   hinweise = [],
+  paket = null,
 }: {
   sequenzId: string;
   status: string;
   entwurfAm: Date | null;
   zeilen: AblaufZeile[];
+  /** Der ausgearbeitete Einstieg, falls es einen gibt. */
+  paket?: PaketAnzeige | null;
   /** Aufgaben, die aus diesem Ablauf entfernt wurden — mit Rückweg. */
   ausgeschlossen?: string[];
   /**
@@ -607,6 +616,28 @@ export function AblaufSection({
                       <Badge variant="ghost" size="sm">
                         {TYP_LABEL[z.typ] ?? z.typ}
                       </Badge>
+                      {/* Welche Methode den Einstieg trägt — anklickbar, damit
+                          man nachlesen kann, worum es dabei geht. */}
+                      {z.methodeName && (
+                        <a
+                          href={`/methoden/${z.methodeId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={
+                            z.methodeAusgeschaltet
+                              ? "Diese Methode ist inzwischen ausgeschaltet"
+                              : "Methode in der Bibliothek ansehen"
+                          }
+                        >
+                          <Badge
+                            variant={z.methodeAusgeschaltet ? "ghost" : "teal"}
+                            size="sm"
+                          >
+                            {z.methodeName}
+                            {z.methodeAusgeschaltet && " (aus)"}
+                          </Badge>
+                        </a>
+                      )}
                       {/* Liegengebliebenes muss man erkennen: es steht zwar
                           vorn, sieht sonst aber aus wie neuer Stoff. */}
                       {z.rueckstandKw !== null && (
@@ -743,6 +774,20 @@ export function AblaufSection({
                     <TrashCan size={16} />
                   </Button>
                 </li>
+                {/* Der ausgearbeitete Einstieg hängt sichtbar an seinem
+                    Schritt — dort sucht man ihn, nicht in einem eigenen
+                    Abschnitt weiter unten. */}
+                {z.typ === "einstieg" &&
+                  i === items.findIndex((x) => x.typ === "einstieg") && (
+                    <li>
+                      <EinstiegPaket
+                        sequenzId={sequenzId}
+                        methodeName={z.methodeName}
+                        methodeSchluessel={z.methodeSchluessel}
+                        paket={paket}
+                      />
+                    </li>
+                  )}
                 </Fragment>
               );
             })}

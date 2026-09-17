@@ -25,6 +25,7 @@ import {
 import { getOffenenStoff, type OffenerStoff } from "@/lib/rueckstand";
 import { schaetzeModulZeiten } from "@/lib/zeitschaetzung";
 import { holeVorwissen, type Vorwissen } from "@/lib/vorwissen";
+import { wirksameMethoden, type WirksameMethode } from "@/lib/methoden";
 import { getKWFromDateString } from "@/lib/kw";
 import { holeVorherigenUebertrag } from "@/lib/uebertrag";
 
@@ -139,6 +140,8 @@ type KiSchritt = {
   titel?: string;
   text?: string;
   minuten?: unknown;
+  /** Schlüssel der gewählten Methode aus der Bibliothek (nur beim Einstieg). */
+  methode?: string;
 };
 
 /**
@@ -293,6 +296,8 @@ function bauePrompt(opts: {
   vorwissen: Vorwissen;
   /** Kommentare der Lehrperson an einzelnen Abschnitten dieses Ablaufs. */
   hinweise: AblaufHinweis[];
+  /** Eingeschaltete Methoden aus der Bibliothek — die Auswahl für den Einstieg. */
+  methoden: WirksameMethode[];
 }): string {
   const hinweisVon = new Map(opts.hinweise.map((h) => [h.anker, h.text]));
 
@@ -379,10 +384,36 @@ function bauePrompt(opts: {
     v.zuletztVerwendet.length > 0
       ? `ZULETZT VERWENDET bei dieser Klasse (NICHT wiederholen)\n` +
         v.zuletztVerwendet
-          .map((z) => `  [${z.typ}] ${z.titel}${z.text ? ` — ${z.text.slice(0, 90)}` : ""}`)
+          .map(
+            (z) =>
+              `  [${z.typ}]${z.methodeSchluessel ? ` {${z.methodeSchluessel}}` : ""} ` +
+              `${z.titel}${z.text ? ` — ${z.text.slice(0, 90)}` : ""}`
+          )
           .join("\n") +
+        `\n  In geschweiften Klammern steht der Methodenschlüssel — genau diese\n` +
+        `  Methode nicht noch einmal.\n` +
         "\n"
       : "";
+
+  // Die Methoden kommen aus der Bibliothek, nicht mehr aus einer Liste im
+  // Code: nur so lässt sich eine Methode ausschalten oder eine eigene
+  // ergänzen, und nur so kann der Einstieg später mit demselben Prompt
+  // ausgearbeitet werden, der zur Methode gehört.
+  const methodenBlock =
+    opts.methoden.length > 0
+      ? `METHODEN für den Einstieg (Bibliothek — wähle GENAU EINE und gib ihren Schlüssel an)\n` +
+        opts.methoden
+          .map(
+            (m) =>
+              `  ${m.schluessel} — ${m.name} (${m.sozialform.join("/")}, ` +
+              `${m.dauerMin}–${m.dauerMax} min, ${m.schwerpunkt}): ${m.kurzbeschreibung}`
+          )
+          .join("\n") +
+        `\n  Nimm eine Methode, die zur Klassengrösse, zur Zeit und zum Stoff passt.\n` +
+        `  Andere als die hier genannten sind NICHT erlaubt.\n`
+      : `METHODEN für den Einstieg\n` +
+        `  Die Methodenbibliothek ist leer oder ganz ausgeschaltet — wähle selbst\n` +
+        `  eine passende aktivierende Methode und nenne sie am Anfang des Textes.\n`;
 
   const budget = opts.lektionen * 45;
   const faktenZeit = opts.fakten.reduce((n, f) => n + (f.dauerMinuten ?? 0), 0);
@@ -413,14 +444,7 @@ ${faktenListe}
 ${vorwissenBlock}
 ${kompetenzBlock}
 ${zuletztBlock}
-METHODENSTRAUSS für Einstieg und Praxisbezug (wähle passend, variiere)
-  Think-Pair-Share · Plenumsdiskussion · Partnerinterview (gegenseitig abfragen)
-  Zuordnungsspiel (Begriffe oder Karten zuordnen) · Wandtafelfussball (Quiz in
-  zwei Teams) · Blitzlicht (reihum ein Satz) · Fehlersuche (falsches Beispiel
-  korrigieren) · Placemat · Museumsrundgang (Ergebnisse der Vorwoche ansehen)
-  · Ranking (was war am wichtigsten) · Kartenabfrage
-  Andere Methoden sind ausdrücklich erlaubt.
-
+${methodenBlock}
 DIDAKTISCHE MODELLE (als Orientierung, nicht ausgeben)
 ${opts.didaktik}
 
@@ -438,8 +462,9 @@ Regeln:
      b) an die Begriffe: Fachbegriffe der Vorwochen abfragen und schärfen
      c) an die Brücke: warum das Heutige auf dem Vorherigen aufbaut
      d) an die Stolpersteine: was letzte Woche strittig oder schwierig war
-   Wähle dazu eine Methode aus dem METHODENSTRAUSS und **nenne sie am Anfang
-   des Textes** («Think-Pair-Share: …»). Nimm eine andere als unter ZULETZT
+   Wähle dazu GENAU EINE Methode aus dem Abschnitt METHODEN. Gib ihren
+   Schlüssel im Feld "methode" an und **nenne ihren Namen am Anfang des
+   Textes** («Think-Pair-Share: …»). Nimm eine andere als unter ZULETZT
    VERWENDET.
 2. Danach folgt in der Regel ein Praxisbezug (typ "praxisbezug"). Er hängt an
    einer der HANDLUNGSKOMPETENZEN: nenne ihr Kürzel im Text und stelle eine
@@ -470,7 +495,7 @@ ${
 
 Antworte AUSSCHLIESSLICH mit JSON in dieser Form:
 {"ablauf":[
-  {"typ":"einstieg","titel":"kurzer Titel","text":"ein bis zwei Sätze","minuten":10},
+  {"typ":"einstieg","titel":"kurzer Titel","text":"ein bis zwei Sätze","minuten":10,"methode":"<schluessel>"},
   {"typ":"fakt","faktId":"aufgabe-0"},
   {"typ":"besprechung","titel":"...","text":"...","minuten":10}
 ]}`;
@@ -649,6 +674,10 @@ export async function erzeugeEntwurf(
         .join(" · ")
     : null;
 
+  // Nur die eingeschalteten: wer Kahoot ohne WLAN nicht brauchen kann, hat es
+  // in /methoden ausgeschaltet, und dann darf es der Generator nicht planen.
+  const methoden = (await wirksameMethoden(bId)).filter((m) => !m.ausgeschaltet);
+
   const prompt = bauePrompt({
     klasse: seq.klasse.bezeichnung,
     lektionen: seq.lektionen ?? 2,
@@ -664,6 +693,7 @@ export async function erzeugeEntwurf(
     // hängen an der Sequenz, nicht an den Zeilen — deshalb überleben sie
     // genau das Löschen, das zwei Zeilen weiter unten passiert.
     hinweise: await holeHinweise(sequenzId),
+    methoden,
     vorwissen: await holeVorwissen(
       bId,
       seq.klasseId,
@@ -682,6 +712,9 @@ export async function erzeugeEntwurf(
     return { ok: false, fehler: "Die KI hat keinen verwertbaren Ablauf geliefert." };
   }
 
+  const methodenSchluessel = new Map(
+    methoden.map((m) => [m.schluessel.toLowerCase(), m.schluessel])
+  );
   const faktVon = new Map(fakten.map((f) => [f.id, f]));
   const verwendet = new Set<string>();
   const zeilen: (typeof sequenzAblauf.$inferInsert)[] = [];
@@ -717,6 +750,15 @@ export async function erzeugeEntwurf(
     const typ = (ERLAUBTE_TYPEN as readonly string[]).includes(s.typ ?? "")
       ? (s.typ as AblaufTyp)
       : "frei";
+
+    // Die Methode ist eine Referenz auf die Bibliothek, kein freier Text: ein
+    // Schlüssel, den es nicht gibt, wird verworfen statt gespeichert. Sonst
+    // stünde am Einstieg eine Methode, zu der es keine Anweisung gibt, und
+    // «Einstieg ausarbeiten» liefe ins Leere.
+    const methodeSchluessel =
+      typ === "einstieg" && typeof s.methode === "string"
+        ? (methodenSchluessel.get(s.methode.trim().toLowerCase()) ?? null)
+        : null;
     const titel = (s.titel ?? s.text ?? "").trim();
     if (!titel) continue;
 
@@ -732,6 +774,7 @@ export async function erzeugeEntwurf(
       // Plausibilisiert, damit ein Ausrutscher nicht das Budget sprengt.
       dauerMinuten: plausibleMinuten(s.minuten),
       dauerQuelle: plausibleMinuten(s.minuten) !== null ? "ki" : null,
+      methodeSchluessel,
     });
   }
 
@@ -1002,14 +1045,19 @@ export async function bestaetigeAblauf(bId: string, sequenzId: string) {
 export async function getAblauf(bId: string, sequenzId: string) {
   if (!(await eigeneSequenz(bId, sequenzId))) return [];
 
-  const [zeilen, hinweise] = await Promise.all([
+  const [zeilen, hinweise, methoden] = await Promise.all([
     db.query.sequenzAblauf.findMany({
       where: eq(sequenzAblauf.sequenzId, sequenzId),
       orderBy: (a, { asc: s }) => [s(a.sortierung)],
       with: { refMaterial: { columns: { id: true, titel: true, dateiPfad: true, url: true } } },
     }),
     holeHinweise(sequenzId),
+    wirksameMethoden(bId),
   ]);
+
+  // Gespeichert ist der Schlüssel, angezeigt gehört der Name — und zwar der
+  // aus der eigenen Fassung, falls es eine gibt.
+  const methodeVon = new Map(methoden.map((m) => [m.schluessel, m]));
 
   // Der Kommentar liegt an der Sequenz, gezeigt wird er aber an der Zeile, zu
   // der er gehört. Die Auflösung passiert hier einmal, damit die Oberfläche
@@ -1019,7 +1067,16 @@ export async function getAblauf(bId: string, sequenzId: string) {
 
   return zeilen.map((z) => {
     const anker = hinweisAnker(z);
-    return { ...z, hinweisAnker: anker, hinweis: text.get(anker) ?? null };
+    const m = z.methodeSchluessel ? methodeVon.get(z.methodeSchluessel) : undefined;
+    return {
+      ...z,
+      hinweisAnker: anker,
+      hinweis: text.get(anker) ?? null,
+      methodeId: m?.id ?? null,
+      methodeName: m?.name ?? null,
+      /** Die Methode steht am Schritt, ist aber inzwischen ausgeschaltet. */
+      methodeAusgeschaltet: m?.ausgeschaltet ?? false,
+    };
   });
 }
 

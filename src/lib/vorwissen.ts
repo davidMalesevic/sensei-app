@@ -51,7 +51,13 @@ export type Vorwissen = {
    * sich die Methode nicht jede Woche wiederholt. Die KI hat kein Gedächtnis;
    * ohne diese Liste kann sie Abwechslung nicht liefern, nur behaupten.
    */
-  zuletztVerwendet: { typ: string; titel: string; text: string | null }[];
+  zuletztVerwendet: {
+    typ: string;
+    titel: string;
+    text: string | null;
+    /** Die Methode aus der Bibliothek, falls der Schritt eine trägt. */
+    methodeSchluessel: string | null;
+  }[];
 };
 
 const LEER: Vorwissen = { wochen: [], kompetenzen: [], zuletztVerwendet: [] };
@@ -157,6 +163,7 @@ export async function holeVorwissen(
       typ: sequenzAblauf.typ,
       titel: sequenzAblauf.titel,
       text: sequenzAblauf.text,
+      methodeSchluessel: sequenzAblauf.methodeSchluessel,
     })
     .from(sequenzAblauf)
     .innerJoin(sequenz, eq(sequenz.id, sequenzAblauf.sequenzId))

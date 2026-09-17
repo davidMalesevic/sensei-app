@@ -836,6 +836,58 @@ eingesetzt («Erstelle  Fragen»), und die KI rät dann eine Zahl.
 `daten_json_schema` ist **nicht bearbeitbar**. Jedes Schema gehört zu einer
 Darstellung im Code — ein verändertes liesse sich nicht mehr zeichnen.
 
+### Der Einstieg kommt aus der Bibliothek
+
+Der Generator wählt die Methode für den Einstieg nicht mehr aus einer Liste im
+Code, sondern aus den **eingeschalteten Methoden** dieses Kontos. Er bekommt
+sie mit Schlüssel, Sozialform, Dauer und Kurzbeschreibung und gibt den
+gewählten Schlüssel zurück; `sequenz_ablauf.methode_schluessel` hält ihn fest.
+
+- **Ein unbekannter Schlüssel wird verworfen, nicht gespeichert.** Sonst
+  stünde am Einstieg eine Methode, zu der es keine Anweisung gibt, und das
+  Ausarbeiten liefe ins Leere.
+- **«Zuletzt verwendet» nennt jetzt den Schlüssel.** Vorher musste die KI
+  Wiederholungen am Text erkennen — jetzt steht die Methode als Marke da.
+- Der Schlüssel statt der Zeilen-ID: die eigene Fassung einer Methode ist
+  dieselbe Methode.
+
+### Einstieg ausarbeiten
+
+`src/lib/einstieg.ts`, aufgerufen über einen Knopf an der Einstiegszeile.
+Aus der Anweisung der Methode, dem System-Prompt der Bibliothek und dem, was
+Sensei über die Klasse weiss, entsteht ein vollständiges Paket: Ablauf,
+Arbeitsauftrag, Materialien, Erwartungshorizont, Differenzierung, Anschluss.
+
+| Prompt-Variable | Woher |
+|---|---|
+| `lerninhalt` | Blocktitel, Wochenziel und Aufgabentexte aus dem Modulbaum **plus** der Text der Präsentation zum Block (modulweite Präsentation: nur die Slides dieses Blocks) |
+| `vorkenntnisse` | `holeVorwissen()` — abgehakte Aufgaben, Wochenziele, Übertragsnotizen |
+| `lernziele` | die Handlungskompetenzen des Moduls |
+| `zusatzwuensche` | der Kommentar am Anker `typ:einstieg` plus Freitext |
+
+- **Ein eigener Schritt, nicht Teil des Erzeugens.** Die Antwort ist 2000–5000
+  Tokens lang; die meisten Lektionen brauchen sie nie, und der Nachtlauf würde
+  sich daran verschlucken.
+- **Das Paket hängt an der Sequenz, nicht an der Ablaufzeile**
+  (`einstieg_paket.sequenz_id` ist unique). `erzeugeEntwurf()` löscht alle
+  nicht gesperrten Zeilen — an der Zeilen-ID stürbe das Paket in genau dem
+  Lauf, der den Einstieg umplant. Wechselt dabei die Methode, bleibt das Paket
+  stehen und die Oberfläche sagt, zu welcher Methode es gehört.
+- **Zwei Anläufe, dann Schluss.** Beim zweiten bekommt die KI die Prüfmeldung
+  zu lesen (`pruefePaket()`). Wer beim zweiten Mal nicht liefert, liefert auch
+  beim fünften nicht, und jeder Anlauf kostet.
+- `callAI()` nimmt jetzt eine **System-Nachricht**: der System-Prompt gilt für
+  alle Methoden, der Auftrag steht im User-Prompt. Die Trennung stammt aus der
+  Bibliothek und wird nicht aufgeweicht.
+- **Ansicht zum Austeilen:** `/sequenzen/[id]/einstieg`. Arbeitsauftrag und
+  Material für Lernende zuerst, jedes auf einer eigenen Seite; alles für die
+  Lehrperson — Lösungen, Erwartungshorizont — am Schluss hinter einem
+  Seitenumbruch. Ein Blatt, das man austeilt, darf die Musterantworten nicht
+  auf der Rückseite tragen. «An die Wand» legt den Arbeitsauftrag gross über
+  die Seite, ohne den Pfad zu wechseln.
+
+Migration: `npx tsx src/db/migrate-einstieg.ts`
+
 ## Smartlearn-Import
 
 Die Lernumgebung Smartlearn exportiert Module als HTML (Beispiel:
@@ -947,6 +999,7 @@ npx tsx src/db/migrate-zeit-rueckstand.ts  # Minuten + Rückstands-Herkunft
 npx tsx src/db/migrate-ablauf-sperren.ts   # Schritte festzurren, Fakten entfernen
 npx tsx src/db/migrate-ablauf-hinweise.ts  # Kommentare an Abschnitten
 npx tsx src/db/migrate-methoden.ts     # Methodenbibliothek (Inhalt kommt über /methoden)
+npx tsx src/db/migrate-einstieg.ts     # Methode am Einstieg + ausgearbeitetes Paket
 npx tsx src/db/migrate-material-blockschluessel.ts  # Material-Etikett auf Block A
 npx tsx src/db/migrate-resultate.ts    # Smartlearn-Resultate (Versuch)
 npx tsx src/db/drop-resultate.ts --wirklich   # ... und wieder weg
@@ -1187,6 +1240,7 @@ src/
 │   ├── vorwissen.ts              # Lernstand, HK, zuletzt verwendete Methoden
 │   ├── methoden.ts               # Methodenbibliothek: lesen, einlesen
 │   ├── methoden-vorlage.ts       # Mustache: Anweisung rendern und prüfen
+│   ├── einstieg.ts               # Einstieg ausarbeiten (nimmt benutzerId)
 │   ├── kontext.ts                # Aggregation für den ContextHeader
 │   ├── zeit.ts                   # Europe/Zurich statt UTC
 │   ├── kw.ts                     # ISO-Kalenderwochen
