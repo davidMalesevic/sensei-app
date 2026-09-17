@@ -21,11 +21,11 @@ const GANZES_MODUL = "modul";
  */
 export function MaterialBlockEtikett({
   materialId,
-  blockNummer,
+  blockSchluessel,
   bloecke,
 }: {
   materialId: string;
-  blockNummer: number | null;
+  blockSchluessel: string | null;
   bloecke: BaumBlock[];
 }) {
   const router = useRouter();
@@ -42,13 +42,13 @@ export function MaterialBlockEtikett({
 
   return (
     <Select
-      value={blockNummer === null ? GANZES_MODUL : String(blockNummer)}
+      value={blockSchluessel ?? GANZES_MODUL}
       onValueChange={(v) => {
         const wert = String(v);
         startTransition(async () => {
           await setzeMaterialBlock(
             materialId,
-            wert === GANZES_MODUL ? null : Number(wert)
+            wert === GANZES_MODUL ? null : wert
           );
           router.refresh();
         });

@@ -127,7 +127,7 @@ export async function getModuleGrouped() {
     orderBy: (m, { asc }) => [asc(m.nummer)],
     with: {
       materialien: {
-        columns: { id: true, titel: true, typ: true, dateiPfad: true, url: true, notiz: true, createdAt: true, blockNummer: true },
+        columns: { id: true, titel: true, typ: true, dateiPfad: true, url: true, notiz: true, createdAt: true, blockSchluessel: true },
         orderBy: (m, { desc }) => [desc(m.createdAt)],
       },
       modularPlan: {
@@ -443,12 +443,31 @@ export async function getModulBaum(modulId: string) {
 /** Etikett eines Materials setzen: null = ganzes Modul, sonst ein Block. */
 export async function setzeMaterialBlock(
   materialId: string,
-  blockNummer: number | null
+  blockSchluessel: string | null
 ) {
   const bId = await benutzerId();
+  const mat = await db.query.material.findFirst({
+    where: and(eq(material.id, materialId), eq(material.benutzerId, bId)),
+    columns: { modulId: true },
+  });
+  if (!mat) throw new Error("Material nicht gefunden");
+
+  // Nur Schlüssel zulassen, die es im Modul dieses Materials gibt.
+  if (blockSchluessel !== null) {
+    if (!mat.modulId) throw new Error("Material hängt an keinem Modul");
+    const block = await db.query.modulBlock.findFirst({
+      where: and(
+        eq(modulBlock.modulId, mat.modulId),
+        eq(modulBlock.schluessel, blockSchluessel)
+      ),
+      columns: { id: true },
+    });
+    if (!block) throw new Error(`Block ${blockSchluessel} gibt es in diesem Modul nicht`);
+  }
+
   await db
     .update(material)
-    .set({ blockNummer })
+    .set({ blockSchluessel })
     .where(and(eq(material.id, materialId), eq(material.benutzerId, bId)));
   revalidatePath("/bildungsplan");
 }

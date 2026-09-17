@@ -59,7 +59,7 @@ type MaterialItem = {
   notiz: string | null;
   createdAt: Date;
   /** Etikett: null = gilt fürs ganze Modul, sonst genau dieser Block. */
-  blockNummer: number | null;
+  blockSchluessel: string | null;
 };
 
 type ModulData = {
@@ -577,7 +577,7 @@ export function ModulSection({ module }: { module: ModulData[] }) {
                           </Badge>
                           <MaterialBlockEtikett
                             materialId={mat.id}
-                            blockNummer={mat.blockNummer}
+                            blockSchluessel={mat.blockSchluessel}
                             bloecke={selectedModul.bloecke}
                           />
                           <MaterialAuswerten

@@ -867,7 +867,8 @@ Blöcke werden beim Reimport über `(modulId, nummer)` aktualisiert, nicht neu
 angelegt — sonst ginge die gepflegte Slidezuordnung verloren.
 
 **Material hängt am Modul**, nicht an der Sequenz, und trägt ein Etikett
-(`material.blockNummer`): `null` = ganzes Modul, sonst genau ein Block. Gilt
+(`material.blockSchluessel`, derselbe Text wie `modul_block.schluessel`):
+`null` = ganzes Modul, sonst genau ein Block. Gilt
 eine Präsentation fürs ganze Modul, steht der Slidebereich am Block
 (`modul_block.slideVon/slideBis`). Präsentationen als **PDF** — Seite = Slide,
 Deep-Link `#page=N`; für `.pptx` fehlt weiterhin ein OOXML-Parser.
@@ -887,6 +888,7 @@ npx tsx src/db/migrate-admin.ts        # Verwaltung, Einladungen, Zeitplan
 npx tsx src/db/migrate-zeit-rueckstand.ts  # Minuten + Rückstands-Herkunft
 npx tsx src/db/migrate-ablauf-sperren.ts   # Schritte festzurren, Fakten entfernen
 npx tsx src/db/migrate-ablauf-hinweise.ts  # Kommentare an Abschnitten
+npx tsx src/db/migrate-material-blockschluessel.ts  # Material-Etikett auf Block A
 npx tsx src/db/migrate-resultate.ts    # Smartlearn-Resultate (Versuch)
 npx tsx src/db/drop-resultate.ts --wirklich   # ... und wieder weg
 npx tsx src/db/seed.ts            # Seed-Daten laden

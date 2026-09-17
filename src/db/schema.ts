@@ -803,8 +803,12 @@ export const material = pgTable("material", {
   }),
   phaseId: uuid("phase_id").references(() => phase.id, { onDelete: "cascade" }),
   modulId: uuid("modul_id").references(() => modul.id, { onDelete: "cascade" }),
-  /** Etikett: null = gilt fürs ganze Modul, sonst genau dieser Block. */
-  blockNummer: integer("block_nummer"),
+  /**
+   * Etikett: null = gilt fürs ganze Modul, sonst der `modul_block.schluessel`
+   * dieses Blocks («1», «A»). Die frühere Ganzzahlspalte `block_nummer` kannte
+   * keine Buchstabenblöcke und wird nicht mehr gelesen.
+   */
+  blockSchluessel: varchar("block_schluessel", { length: 10 }),
   dateiPfad: text("datei_pfad"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
