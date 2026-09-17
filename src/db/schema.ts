@@ -11,6 +11,7 @@ import {
   jsonb,
   boolean,
   unique,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -1048,3 +1049,109 @@ export const resultatAbgabeRelations = relations(resultatAbgabe, ({ one }) => ({
     references: [resultatAufgabe.id],
   }),
 }));
+
+// ─── Methodenbibliothek: Aktivierung des Vorwissens ──────────────────────────
+//
+// Quelle ist `src/db/daten/vorwissen-methoden.json`. Wie der Bildungsplan ist
+// die Bibliothek geteilt (`benutzer_id IS NULL`) und gehört niemandem. Wer eine
+// geteilte Methode anpasst, bekommt eine eigene Fassung mit demselben
+// `schluessel` — sie verdeckt die geteilte nur für das eigene Konto. Eigene
+// neue Methoden tragen einen eigenen Schlüssel und keine `basis_id`.
+
+/** Einstellbare Grösse einer Methode, z. B. die Anzahl Impulsfragen. */
+export type MethodenParameter = {
+  name: string;
+  typ: "integer";
+  default: number;
+  min: number;
+  max: number;
+  beschreibung: string;
+};
+
+/**
+ * Was für alle Methoden gleich ist: System-Prompt, User-Template,
+ * Ausgabeschema und die Wertelisten. Genau eine Zeile, `id = 'standard'`.
+ * Wird nur vom Einlesen geschrieben, nicht in der Oberfläche bearbeitet —
+ * ein Fehler hier träfe jede Methode zugleich.
+ */
+export const methodenBibliothek = pgTable("methoden_bibliothek", {
+  id: varchar("id", { length: 20 }).primaryKey(),
+  schemaVersion: varchar("schema_version", { length: 20 }).notNull(),
+  titel: varchar("titel", { length: 300 }).notNull(),
+  beschreibung: text("beschreibung"),
+  systemPrompt: text("system_prompt").notNull(),
+  userPromptTemplate: text("user_prompt_template").notNull(),
+  ausgabeSchema: jsonb("ausgabe_schema").notNull(),
+  /** Kürzel → Klartext, z. B. `{ EA: "Einzelarbeit" }`. */
+  sozialformen: jsonb("sozialformen").$type<Record<string, string>>().notNull(),
+  schwerpunkte: jsonb("schwerpunkte").$type<Record<string, string>>().notNull(),
+  kategorien: jsonb("kategorien").$type<{ id: string; name: string }[]>().notNull(),
+  variablen: jsonb("variablen").notNull(),
+  eingelesenAm: timestamp("eingelesen_am").defaultNow().notNull(),
+});
+
+export const methode = pgTable(
+  "methode",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** NULL = geteilt. */
+    benutzerId: uuid("benutzer_id").references(() => benutzer.id, {
+      onDelete: "cascade",
+    }),
+    /** `id` aus der JSON-Datei; bei einer eigenen Fassung derselbe Wert. */
+    schluessel: varchar("schluessel", { length: 80 }).notNull(),
+    /** Die geteilte Methode, von der diese eigene Fassung abstammt. */
+    basisId: uuid("basis_id").references((): AnyPgColumn => methode.id, {
+      onDelete: "set null",
+    }),
+    name: varchar("name", { length: 200 }).notNull(),
+    kategorie: varchar("kategorie", { length: 60 }).notNull(),
+    /** Kürzel aus `methoden_bibliothek.sozialformen`. */
+    sozialform: text("sozialform").array().notNull(),
+    dauerMin: integer("dauer_min").notNull(),
+    dauerMax: integer("dauer_max").notNull(),
+    dauerStandard: integer("dauer_standard").notNull(),
+    /** `aktivieren` | `erheben` | `beides` */
+    schwerpunkt: varchar("schwerpunkt", { length: 20 }).notNull(),
+    kurzbeschreibung: text("kurzbeschreibung").notNull(),
+    material: text("material").array().notNull(),
+    parameter: jsonb("parameter").$type<MethodenParameter[]>().notNull(),
+    /** Mustache-Vorlage; `{{parameter}}` wird vor dem Aufruf eingesetzt. */
+    anweisung: text("anweisung").notNull(),
+    /**
+     * Schema für strukturierte Daten (Kreuzworträtsel, Mindmap …). Nicht in
+     * der Oberfläche bearbeitbar: jedes Schema gehört zu einer Darstellung im
+     * Code, ein verändertes liesse sich nicht mehr zeichnen.
+     */
+    datenJsonSchema: jsonb("daten_json_schema"),
+    sortierung: integer("sortierung").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  // Ein Schlüssel einmal geteilt und höchstens einmal pro Konto. Ohne
+  // NULLS NOT DISTINCT dürfte es beliebig viele geteilte Zeilen geben.
+  (t) => [unique().on(t.benutzerId, t.schluessel).nullsNotDistinct()]
+);
+
+export const methodeRelations = relations(methode, ({ one }) => ({
+  basis: one(methode, {
+    fields: [methode.basisId],
+    references: [methode.id],
+  }),
+}));
+
+/**
+ * Methoden, die ein Konto für die eigene Planung ausgeschaltet hat (etwa kein
+ * Kahoot ohne WLAN). Am Schlüssel, nicht an der Zeile: das Ausschalten soll
+ * überleben, wenn jemand eine eigene Fassung anlegt oder wieder verwirft.
+ */
+export const methodeAusgeschaltet = pgTable(
+  "methode_ausgeschaltet",
+  {
+    benutzerId: uuid("benutzer_id")
+      .references(() => benutzer.id, { onDelete: "cascade" })
+      .notNull(),
+    schluessel: varchar("schluessel", { length: 80 }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.benutzerId, t.schluessel] })]
+);

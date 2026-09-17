@@ -13,6 +13,7 @@ import {
   Book,
   Attachment,
   Analytics,
+  Idea,
   Notification,
   Asleep,
   Light,
@@ -33,6 +34,7 @@ const NAVIGATION = [
   { title: "Sequenzen", url: "/sequenzen", icon: Layers },
   { title: "Bildungsplan", url: "/bildungsplan", icon: Book },
   { title: "Materialien", url: "/materialien", icon: Attachment },
+  { title: "Methoden", url: "/methoden", icon: Idea },
   { title: "Resultate", url: "/resultate", icon: Analytics },
 ];
 

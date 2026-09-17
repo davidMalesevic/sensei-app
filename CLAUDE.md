@@ -778,6 +778,64 @@ verwendet» wieder und weiss, was er nicht wiederholen soll.
 «nichts abgehakt», bleibt nur das Wochenziel als Anker; mit abgehakten
 Aufgaben nennt der Einstieg sie beim Namen.
 
+## Methodenbibliothek
+
+62 Methoden zur **Aktivierung des Vorwissens**, je mit einer eigenen Anweisung
+an die KI. Quelle ist `src/db/daten/vorwissen-methoden.json` (Kopie der Datei
+aus `assets/`, das nicht im Repo liegt und im Docker-Image fehlt). Bereich
+`/methoden`.
+
+Die Datei bringt zweierlei mit: pro Methode den **methodenspezifischen
+Auftrag**, und einmal für alle den **System-Prompt**, die **Anfrage-Vorlage**
+(Mustache) und das **Ausgabeschema**. Das Gemeinsame steht in
+`methoden_bibliothek` (eine Zeile, `id = 'standard'`) und ist in der
+Oberfläche **nicht bearbeitbar** — ein Fehler dort träfe jede Methode zugleich.
+
+### Geteilt, mit eigener Fassung
+
+Wie der Bildungsplan gehört die Bibliothek niemandem: `methode.benutzer_id IS
+NULL` heisst geteilt.
+
+| | |
+|---|---|
+| **geteilt** | `benutzer_id IS NULL`; ein Admin pflegt sie |
+| **eigene Fassung** | `benutzer_id` gesetzt, `basis_id` zeigt auf die geteilte, **gleicher `schluessel`** — sie verdeckt die geteilte nur für dieses Konto |
+| **eigene** | `benutzer_id` gesetzt, keine `basis_id`, eigener Schlüssel `eigen_…` |
+
+- **Speichern an einer geteilten Methode erzeugt die eigene Fassung.** Nur ein
+  Admin kann ausdrücklich «für alle» wählen. Die Server Action prüft das
+  selbst — sie ist vom Browser aufrufbar.
+- Die Eindeutigkeit ist `(benutzer_id, schluessel)` mit **NULLS NOT
+  DISTINCT**; ohne das dürfte es beliebig viele geteilte Zeilen mit demselben
+  Schlüssel geben.
+- **`methode_ausgeschaltet` hängt am Schlüssel, nicht an der Zeile.** Wer eine
+  Methode ausschaltet und später eine eigene Fassung anlegt oder wieder
+  verwirft, will sie nicht plötzlich zurück in der Planung haben.
+
+### Einlesen
+
+In `/methoden` unter «Bibliothek neu einlesen», **nur für Admins**. Ohne Datei
+gilt die mitgelieferte; eine hochgeladene JSON-Datei geht denselben Weg. Kein
+Script und kein Tunnel — beide Instanzen lesen dieselbe Datei aus ihrem Image.
+
+- Das Gemeinsame wird **immer** übernommen, geteilte Methoden **nicht**: die
+  könnte ein Admin bearbeitet haben. Dafür gibt es das Häkchen
+  «überschreiben». Eigene Fassungen fasst das Einlesen nie an.
+- Geteilte Methoden, die in der Datei fehlen, werden **gemeldet, nicht
+  gelöscht**.
+- `pruefeMethodenDatei()` weist eine falsche Datei mit klarer Meldung ab,
+  bevor die Hälfte geschrieben ist.
+
+### Anweisung und Parameter
+
+Die Anweisung ist eine Mustache-Vorlage, die Parameter sind ganze Zahlen mit
+`min`, `default`, `max` (`{{anzahl_impulsfragen}}`). `pruefeAnweisung()`
+lehnt Platzhalter ohne Parameter ab: sie würden still als leerer Text
+eingesetzt («Erstelle  Fragen»), und die KI rät dann eine Zahl.
+
+`daten_json_schema` ist **nicht bearbeitbar**. Jedes Schema gehört zu einer
+Darstellung im Code — ein verändertes liesse sich nicht mehr zeichnen.
+
 ## Smartlearn-Import
 
 Die Lernumgebung Smartlearn exportiert Module als HTML (Beispiel:
@@ -888,6 +946,7 @@ npx tsx src/db/migrate-admin.ts        # Verwaltung, Einladungen, Zeitplan
 npx tsx src/db/migrate-zeit-rueckstand.ts  # Minuten + Rückstands-Herkunft
 npx tsx src/db/migrate-ablauf-sperren.ts   # Schritte festzurren, Fakten entfernen
 npx tsx src/db/migrate-ablauf-hinweise.ts  # Kommentare an Abschnitten
+npx tsx src/db/migrate-methoden.ts     # Methodenbibliothek (Inhalt kommt über /methoden)
 npx tsx src/db/migrate-material-blockschluessel.ts  # Material-Etikett auf Block A
 npx tsx src/db/migrate-resultate.ts    # Smartlearn-Resultate (Versuch)
 npx tsx src/db/drop-resultate.ts --wirklich   # ... und wieder weg
@@ -1105,6 +1164,7 @@ src/
 │   │       └── notizen-section.tsx
 │   ├── bildungsplan/             # HKB/HK, Module, Modulplan, Aufgabenbaum
 │   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
+│   ├── methoden/                 # Methoden zur Vorwissensaktivierung
 │   ├── (auth)/                   # Anmelden, Einladung, Passwort-Link
 │   │                             #   (ohne UI Shell, siehe Proxy-Header)
 │   ├── resultate/                # Smartlearn-Abgaben auswerten (Versuch)
@@ -1125,6 +1185,8 @@ src/
 │   ├── rueckstand.ts             # was aus Vorwochen offen ist
 │   ├── zeitschaetzung.ts         # Minuten pro Aufgabe (KI, korrigierbar)
 │   ├── vorwissen.ts              # Lernstand, HK, zuletzt verwendete Methoden
+│   ├── methoden.ts               # Methodenbibliothek: lesen, einlesen
+│   ├── methoden-vorlage.ts       # Mustache: Anweisung rendern und prüfen
 │   ├── kontext.ts                # Aggregation für den ContextHeader
 │   ├── zeit.ts                   # Europe/Zurich statt UTC
 │   ├── kw.ts                     # ISO-Kalenderwochen
@@ -1139,6 +1201,7 @@ src/
 └── db/
     ├── index.ts                  # DB-Verbindung (postgres-js + Drizzle)
     ├── schema.ts                 # Drizzle Schema
+    ├── daten/                    # mitgelieferte Datensätze (Methodenbibliothek)
     ├── seed.ts                   # Bildungsplan EDB + AVIVA/PADUA
     ├── seed-modulplan-219.ts     # Plan aus einer Bildgrafik, von Hand
     └── migrate-*.ts              # Idempotente Migrations-Scripts

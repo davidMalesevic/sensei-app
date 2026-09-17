@@ -28,11 +28,14 @@ export function DeleteButton({
   titel,
   beschreibung,
   label = "Löschen",
+  mitText = false,
 }: {
   onDelete: () => Promise<void>;
   titel: string;
   beschreibung: string;
   label?: string;
+  /** Beschrifteter Knopf statt Icon — für Kopfzeilen, nicht für Tabellen. */
+  mitText?: boolean;
 }) {
   const [offen, setOffen] = useState(false);
 
@@ -40,14 +43,19 @@ export function DeleteButton({
     <Dialog open={offen} onOpenChange={setOffen}>
       <DialogTrigger
         render={
-          <Button
-            variant="destructive-ghost"
-            size="icon-sm"
-            aria-label={label}
-            title={label}
-          />
+          mitText ? (
+            <Button variant="destructive-ghost" />
+          ) : (
+            <Button
+              variant="destructive-ghost"
+              size="icon-sm"
+              aria-label={label}
+              title={label}
+            />
+          )
         }
       >
+        {mitText && label}
         <TrashCan size={16} />
       </DialogTrigger>
 

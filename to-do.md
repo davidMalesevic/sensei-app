@@ -3,7 +3,16 @@
 
 # ready
 
-* (nichts offen)
+* grosses update zur erstellung von aktivierenden unterrichtssequenzen. im assets ordner liegt ein json file mit diveresen methoden und dazugehörigen prompts welche verwendet werden können um aktivierende unterrichtssequenzen zu erstellen. einerseis sollen diese in einem neuen bereich der app eingesehen, verwaltet und bearbeitet werdet können, andererseits sollen sie bei der unterrichtsplanung (allen voran bei der erstellung von aktivierenden unterrichtssequenzen) angewendet werden.
+  * Entscheide (2026-09-17), Quelle `assets/vorwissen_methoden_prompts.json` (62 Methoden, 12 mit `daten_json`):
+    * **Zweistufig:** Der Generator wählt die Methode aus der Bibliothek statt aus dem fest eingebauten Methodenstrauss (`entwurf.ts`). «Einstieg ausarbeiten» an der Einstiegszeile erzeugt das volle Paket nur auf Wunsch.
+    * **Besitz:** Geteilte Bibliothek, die ein Admin pflegt. Wer eine Methode anpasst, bekommt eine eigene Fassung, die nur fürs eigene Konto gilt. Neue Methoden sind privat.
+    * **Bearbeitbar:** Stammdaten, Anweisung + Parameter, an/aus fürs eigene Konto, neue Methoden. System-Prompt, User-Template und Ausgabeschema sind nicht in der Oberfläche bearbeitbar.
+    * **Grundsatz 1 im System-Prompt anpassen:** Einstieg mitten im Modul, anknüpfen an Abgehaktes, Überträge und Wochenziele (`vorwissen.ts` → `vorkenntnisse`).
+    * **Lerninhalt:** Blocktitel, Wochenziel, Aufgabentexte aus dem Modulbaum + Text der Block-Präsentation (bei modulweiter Präsentation nur der Slidebereich).
+    * **Paket an der Einstiegszeile:** aufklappbar, mit Druck- und Beamer-Ansicht (Material für Lernende getrennt von den Lösungen). Erneutes Ausarbeiten ersetzt das Paket, eine festgezurrte Zeile behält es, «Von <Klasse> holen» kopiert es mit.
+    * **Visualisierungen gleich mitbauen:** Mindmap, Begriffsnetz, Advance Organizer (Mermaid), Kreuzworträtsel, Memory, Tabu, Jeopardy, Escape-Room.
+    * **Quiz:** anzeigen + Download im Kahoot-Importformat (.xlsx).
 
 
 # done
