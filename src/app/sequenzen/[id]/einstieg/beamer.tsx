@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Close, PresentationFile } from "@carbon/icons-react";
 
 import { Button } from "@/components/ui/button";
+import { Markdown } from "@/components/markdown";
 
 /**
  * Der Arbeitsauftrag gross an der Wand.
@@ -56,9 +57,10 @@ export function Beamer({
             <h1 className="type-heading-05 mb-8">{titel}</h1>
             {/* 28px: aus der letzten Reihe lesbar, ohne dass ein Auftrag von
                 zehn Zeilen über den Rand läuft. */}
-            <pre className="type-heading-04 whitespace-pre-wrap font-sans leading-relaxed">
-              {arbeitsauftrag}
-            </pre>
+            <Markdown
+              text={arbeitsauftrag}
+              className="type-heading-04 gap-6 leading-relaxed [&_li]:mb-2"
+            />
           </div>
         </div>
       )}

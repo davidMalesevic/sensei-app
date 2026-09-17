@@ -4,6 +4,7 @@ import { ArrowLeft } from "@carbon/icons-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Markdown } from "@/components/markdown";
 import { getSequenzById } from "../../actions";
 import { holePaket } from "../../einstieg-actions";
 import { PrintButton } from "../drucken/print-button";
@@ -108,9 +109,10 @@ export default async function EinstiegPage({
 
       <section className="mb-8 break-before-page">
         <h2 className="type-heading-03 mb-2">Arbeitsauftrag</h2>
-        <pre className="type-body-02 whitespace-pre-wrap bg-layer p-4 font-sans print:bg-transparent print:p-0">
-          {i.arbeitsauftrag}
-        </pre>
+        <Markdown
+          text={i.arbeitsauftrag}
+          className="bg-layer p-4 print:bg-transparent print:p-0"
+        />
       </section>
 
       {fuerLernende.map((m) => (
@@ -121,9 +123,10 @@ export default async function EinstiegPage({
               {m.verwendung}
             </p>
           )}
-          <pre className="type-body-02 overflow-x-auto whitespace-pre-wrap bg-layer p-4 font-sans print:bg-transparent print:p-0">
-            {m.inhalt}
-          </pre>
+          <Markdown
+            text={m.inhalt}
+            className="bg-layer p-4 print:bg-transparent print:p-0"
+          />
         </section>
       ))}
 
@@ -151,9 +154,10 @@ export default async function EinstiegPage({
                 {m.verwendung}
               </p>
             )}
-            <pre className="type-body-02 mt-1 overflow-x-auto whitespace-pre-wrap bg-layer p-4 font-sans print:bg-transparent print:p-0">
-              {m.inhalt}
-            </pre>
+            <Markdown
+              text={m.inhalt}
+              className="mt-1 bg-layer p-4 print:bg-transparent print:p-0"
+            />
           </div>
         ))}
 

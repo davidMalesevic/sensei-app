@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineLoading } from "@/components/ui/loading";
 import { Notification } from "@/components/ui/notification";
+import { Markdown } from "@/components/markdown";
 import type { PaketInhalt } from "@/lib/einstieg";
 import { arbeiteEinstiegAus, loeschePaket } from "../einstieg-actions";
 
@@ -215,9 +216,7 @@ export function EinstiegPaket({
           </Feld>
 
           <Feld titel="Arbeitsauftrag an die Klasse">
-            <pre className="type-body-02 whitespace-pre-wrap bg-layer p-3 font-sans">
-              {i.arbeitsauftrag}
-            </pre>
+            <Markdown text={i.arbeitsauftrag} className="bg-layer p-3" />
           </Feld>
 
           {fuerLernende.length > 0 && (
@@ -279,9 +278,7 @@ function MaterialListe({ materialien }: { materialien: PaketInhalt["materialien"
           {m.verwendung && (
             <p className="type-helper-02 mt-1 text-text-helper">{m.verwendung}</p>
           )}
-          <pre className="type-body-compact-02 mt-2 overflow-x-auto whitespace-pre-wrap bg-background p-3 font-sans">
-            {m.inhalt}
-          </pre>
+          <Markdown text={m.inhalt} className="mt-2 bg-background p-3" />
         </li>
       ))}
     </ul>
