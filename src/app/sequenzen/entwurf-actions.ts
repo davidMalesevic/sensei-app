@@ -26,6 +26,22 @@ export async function erzeugeEntwuerfe(vonDatum: string, bisDatum: string) {
   return entwurf.erzeugeEntwuerfe(await benutzerId(), vonDatum, bisDatum);
 }
 
+/** Einen einzelnen Schritt neu erzeugen — Fakten bleiben aussen vor. */
+export async function erzeugeSchritt(
+  zeilenId: string,
+  optionen?: { methodeSchluessel?: string }
+) {
+  return entwurf.erzeugeSchritt(await benutzerId(), zeilenId, optionen);
+}
+
+/** Die Methode am Einstieg von Hand wählen. */
+export async function setzeAblaufMethode(
+  zeilenId: string,
+  methodeSchluessel: string | null
+) {
+  return entwurf.setzeAblaufMethode(await benutzerId(), zeilenId, methodeSchluessel);
+}
+
 export async function bestaetigeAblauf(sequenzId: string) {
   return entwurf.bestaetigeAblauf(await benutzerId(), sequenzId);
 }
@@ -96,4 +112,13 @@ export async function uebernehmeAblauf(zielId: string, quelleId: string) {
 
 export async function loeseUebernahme(sequenzId: string) {
   return entwurf.loeseUebernahme(await benutzerId(), sequenzId);
+}
+
+/** Die eingeschalteten Methoden, für die Wahl am Einstieg. */
+export async function getMethodenAuswahl() {
+  const { wirksameMethoden } = await import("@/lib/methoden");
+  const alle = await wirksameMethoden(await benutzerId());
+  return alle
+    .filter((m) => !m.ausgeschaltet)
+    .map((m) => ({ schluessel: m.schluessel, name: m.name }));
 }

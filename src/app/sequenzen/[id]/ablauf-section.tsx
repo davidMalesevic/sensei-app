@@ -19,6 +19,7 @@ import {
   Launch,
   MachineLearningModel,
   Comments,
+  Renew,
 } from "@carbon/icons-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,8 @@ import {
   sortiereAblauf,
   fuegeAblaufZeileHinzu,
   setzeAblaufHinweis,
+  erzeugeSchritt,
+  setzeAblaufMethode,
 } from "../entwurf-actions";
 import { materialHref } from "@/lib/material-link";
 import { EinstiegPaket, type PaketAnzeige } from "./einstieg-paket";
@@ -95,6 +98,9 @@ const TYP_ICON: Record<string, typeof CircleDash> = {
   abschluss: Flag,
   frei: CircleDash,
 };
+
+/** Sentinel: leere Werte taugen in base-ui nicht als Select-Wert. */
+const KEINE_METHODE = "keine";
 
 const TYP_LABEL: Record<string, string> = {
   einstieg: "Einstieg",
@@ -196,6 +202,7 @@ export function AblaufSection({
   ausgeschlossen = [],
   hinweise = [],
   paket = null,
+  methoden = [],
 }: {
   sequenzId: string;
   status: string;
@@ -203,6 +210,8 @@ export function AblaufSection({
   zeilen: AblaufZeile[];
   /** Der ausgearbeitete Einstieg, falls es einen gibt. */
   paket?: PaketAnzeige | null;
+  /** Eingeschaltete Methoden — für die Wahl am Einstieg. */
+  methoden?: { schluessel: string; name: string }[];
   /** Aufgaben, die aus diesem Ablauf entfernt wurden — mit Rückweg. */
   ausgeschlossen?: string[];
   /**
@@ -220,6 +229,7 @@ export function AblaufSection({
   const [ueber, setUeber] = useState<number | null>(null);
   const zeilenRefs = useRef<(HTMLLIElement | null)[]>([]);
   const [neuerTyp, setNeuerTyp] = useState("frei");
+  const [laeuftZeile, setLaeuftZeile] = useState<string | null>(null);
   const [rueckfrage, setRueckfrage] = useState(false);
   /**
    * Was der Generator gemeldet hat. `erzeugeEntwurf()` gibt seine Absage als
@@ -357,6 +367,28 @@ export function AblaufSection({
     setItems((alt) => alt.map((z) => (z.id === id ? { ...z, gesperrt } : z)));
     startTransition(async () => {
       await sperreAblaufZeile(id, gesperrt);
+    });
+  }
+
+  /**
+   * Einen einzelnen Schritt neu erzeugen. Das Festzurren beantwortet «alles
+   * ausser diesem», nicht «nur diesen» — dafür ist dieser Knopf da.
+   */
+  function schrittNeu(id: string) {
+    setFehler(null);
+    setLaeuftZeile(id);
+    startTransition(async () => {
+      const r = await erzeugeSchritt(id);
+      setLaeuftZeile(null);
+      if (!r.ok) setFehler(r.fehler ?? "Unbekannter Fehler.");
+      else router.refresh();
+    });
+  }
+
+  function methodeWaehlen(id: string, schluessel: string) {
+    startTransition(async () => {
+      await setzeAblaufMethode(id, schluessel === KEINE_METHODE ? null : schluessel);
+      router.refresh();
     });
   }
 
@@ -616,27 +648,57 @@ export function AblaufSection({
                       <Badge variant="ghost" size="sm">
                         {TYP_LABEL[z.typ] ?? z.typ}
                       </Badge>
-                      {/* Welche Methode den Einstieg trägt — anklickbar, damit
-                          man nachlesen kann, worum es dabei geht. */}
-                      {z.methodeName && (
-                        <a
-                          href={`/methoden/${z.methodeId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={
-                            z.methodeAusgeschaltet
-                              ? "Diese Methode ist inzwischen ausgeschaltet"
-                              : "Methode in der Bibliothek ansehen"
-                          }
-                        >
-                          <Badge
-                            variant={z.methodeAusgeschaltet ? "ghost" : "teal"}
-                            size="sm"
+                      {/* Die Methode ist wählbar, nicht nur Anzeige: wer eine
+                          bestimmte im Kopf hat, soll sie nicht erwürfeln
+                          müssen. Der Text bleibt dabei stehen — dafür gibt es
+                          den Knopf «Schritt neu erzeugen» daneben. */}
+                      {z.typ === "einstieg" && methoden.length > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Select
+                            value={z.methodeSchluessel ?? KEINE_METHODE}
+                            onValueChange={(v) => methodeWaehlen(z.id, String(v))}
+                            items={{
+                              [KEINE_METHODE]: "Methode wählen",
+                              ...Object.fromEntries(
+                                methoden.map((m) => [m.schluessel, m.name])
+                              ),
+                            }}
                           >
-                            {z.methodeName}
-                            {z.methodeAusgeschaltet && " (aus)"}
-                          </Badge>
-                        </a>
+                            <SelectTrigger
+                              size="sm"
+                              className="h-8 w-56"
+                              aria-label="Methode für den Einstieg"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={KEINE_METHODE}>
+                                Methode wählen
+                              </SelectItem>
+                              {methoden.map((m) => (
+                                <SelectItem key={m.schluessel} value={m.schluessel}>
+                                  {m.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {z.methodeId && (
+                            <a
+                              href={`/methoden/${z.methodeId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="type-helper-02 text-link underline-offset-2 hover:underline"
+                              title="Methode in der Bibliothek ansehen"
+                            >
+                              <Launch size={16} />
+                            </a>
+                          )}
+                          {z.methodeAusgeschaltet && (
+                            <Badge variant="ghost" size="sm">
+                              ausgeschaltet
+                            </Badge>
+                          )}
+                        </span>
                       )}
                       {/* Liegengebliebenes muss man erkennen: es steht zwar
                           vorn, sieht sonst aber aus wie neuer Stoff. */}
@@ -732,6 +794,27 @@ export function AblaufSection({
                         <Comments size={16} />
                       </Button>
                     )}
+
+                  {/* Nur eigene Schritte: eine Aufgabe aus dem Material ist
+                      eine Tatsache, keine Formulierung — die wird nicht
+                      gewürfelt. */}
+                  {!fakt && (
+                    <Button
+                      variant="ghost-neutral"
+                      size="icon-sm"
+                      className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                      aria-label={`Schritt ${i + 1} neu erzeugen`}
+                      title="Nur diesen Schritt neu erzeugen"
+                      disabled={laeuftZeile !== null}
+                      onClick={() => schrittNeu(z.id)}
+                    >
+                      {laeuftZeile === z.id ? (
+                        <InlineLoading text="" />
+                      ) : (
+                        <Renew size={16} />
+                      )}
+                    </Button>
+                  )}
 
                   {/* Das Schloss bleibt sichtbar, wenn es zu ist — es ist
                       eine Aussage über die Zeile, kein Werkzeug am Rand. */}

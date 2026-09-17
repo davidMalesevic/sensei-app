@@ -284,6 +284,23 @@ async function phasenmodellWissen(): Promise<string> {
     .join("\n");
 }
 
+/**
+ * Die Methodenliste in zufälliger Reihenfolge.
+ *
+ * In fester Reihenfolge greift das Modell zuverlässig zur ersten passenden —
+ * bei derselben Sequenz zweimal erzeugt kam zweimal dieselbe Methode heraus,
+ * auch bei höherer Temperatur. Die Reihenfolge ist keine Aussage, also darf
+ * sie wechseln.
+ */
+function gemischt<T>(liste: T[]): T[] {
+  const kopie = [...liste];
+  for (let i = kopie.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [kopie[i], kopie[j]] = [kopie[j], kopie[i]];
+  }
+  return kopie;
+}
+
 function bauePrompt(opts: {
   klasse: string;
   lektionen: number;
@@ -298,6 +315,8 @@ function bauePrompt(opts: {
   hinweise: AblaufHinweis[];
   /** Eingeschaltete Methoden aus der Bibliothek — die Auswahl für den Einstieg. */
   methoden: WirksameMethode[];
+  /** Die Methode, die gerade am Einstieg steht — beim Neu-Erzeugen tabu. */
+  bisherigeMethode?: string | null;
 }): string {
   const hinweisVon = new Map(opts.hinweise.map((h) => [h.anker, h.text]));
 
@@ -402,7 +421,7 @@ function bauePrompt(opts: {
   const methodenBlock =
     opts.methoden.length > 0
       ? `METHODEN für den Einstieg (Bibliothek — wähle GENAU EINE und gib ihren Schlüssel an)\n` +
-        opts.methoden
+        gemischt(opts.methoden)
           .map(
             (m) =>
               `  ${m.schluessel} — ${m.name} (${m.sozialform.join("/")}, ` +
@@ -410,7 +429,10 @@ function bauePrompt(opts: {
           )
           .join("\n") +
         `\n  Nimm eine Methode, die zur Klassengrösse, zur Zeit und zum Stoff passt.\n` +
-        `  Andere als die hier genannten sind NICHT erlaubt.\n`
+        `  Andere als die hier genannten sind NICHT erlaubt.\n` +
+        (opts.bisherigeMethode
+          ? `  Bisher stand hier «${opts.bisherigeMethode}» — wähle diesmal eine ANDERE.\n`
+          : "")
       : `METHODEN für den Einstieg\n` +
         `  Die Methodenbibliothek ist leer oder ganz ausgeschaltet — wähle selbst\n` +
         `  eine passende aktivierende Methode und nenne sie am Anfang des Textes.\n`;
@@ -678,6 +700,17 @@ export async function erzeugeEntwurf(
   // in /methoden ausgeschaltet, und dann darf es der Generator nicht planen.
   const methoden = (await wirksameMethoden(bId)).filter((m) => !m.ausgeschaltet);
 
+  // Was beim letzten Lauf am Einstieg stand. Wird nur gemieden, wenn die
+  // Zeile nicht gesperrt ist — eine festgezurrte Methode ist eine Entscheidung.
+  const bisheriger = await db.query.sequenzAblauf.findFirst({
+    where: and(
+      eq(sequenzAblauf.sequenzId, sequenzId),
+      eq(sequenzAblauf.typ, "einstieg"),
+      eq(sequenzAblauf.gesperrt, false)
+    ),
+    columns: { methodeSchluessel: true },
+  });
+
   const prompt = bauePrompt({
     klasse: seq.klasse.bezeichnung,
     lektionen: seq.lektionen ?? 2,
@@ -694,6 +727,7 @@ export async function erzeugeEntwurf(
     // genau das Löschen, das zwei Zeilen weiter unten passiert.
     hinweise: await holeHinweise(sequenzId),
     methoden,
+    bisherigeMethode: bisheriger?.methodeSchluessel ?? null,
     vorwissen: await holeVorwissen(
       bId,
       seq.klasseId,
@@ -1489,4 +1523,228 @@ export async function loeseUebernahme(bId: string, sequenzId: string) {
     .set({ uebernommenVon: null, updatedAt: new Date() })
     .where(and(eq(sequenz.id, sequenzId), eq(sequenz.benutzerId, bId)));
   revalidatePath(`/sequenzen/${sequenzId}`);
+}
+
+/**
+ * Einen einzelnen Schritt neu erzeugen.
+ *
+ * Das Festzurren beantwortet «alles ausser diesem hier neu», nicht «nur
+ * diesen einen». Wer am Einstieg feilt, musste bisher zehn Zeilen sperren und
+ * hinterher wieder lösen — und bekam dabei den Rest der Planung neu
+ * geschrieben, obwohl er nur eine Zeile meinte.
+ *
+ * **Fakten werden nie neu erzeugt.** Eine Aufgabe aus dem Material ist keine
+ * Formulierung, sondern eine Tatsache; sie lässt sich entfernen oder
+ * umschreiben, aber nicht würfeln.
+ */
+export async function erzeugeSchritt(
+  bId: string,
+  zeilenId: string,
+  optionen?: { methodeSchluessel?: string }
+): Promise<{ ok: boolean; fehler?: string }> {
+  if (!(await eigeneAblaufZeile(bId, zeilenId))) {
+    return { ok: false, fehler: "Schritt nicht gefunden." };
+  }
+
+  const zeile = await db.query.sequenzAblauf.findFirst({
+    where: eq(sequenzAblauf.id, zeilenId),
+  });
+  if (!zeile) return { ok: false, fehler: "Schritt nicht gefunden." };
+  if (zeile.quelle === "fakt") {
+    return {
+      ok: false,
+      fehler:
+        "Dieser Schritt ist eine Aufgabe aus dem Material — die wird nicht erfunden.",
+    };
+  }
+
+  const seq = await db.query.sequenz.findFirst({
+    where: and(eq(sequenz.id, zeile.sequenzId), eq(sequenz.benutzerId, bId)),
+    with: { klasse: true, modul: true },
+  });
+  if (!seq?.modulId) return { ok: false, fehler: "Sequenz nicht gefunden." };
+
+  const kw = getKWFromDateString(seq.startDatum);
+  const stoff =
+    kw !== null
+      ? (
+          await getOffenenStoff(bId, seq.klasseId, seq.modulId, kw, seq.startDatum)
+        ).diese
+      : null;
+
+  const [alle, vorwissen, hinweise, methodenAlle] = await Promise.all([
+    db.query.sequenzAblauf.findMany({
+      where: eq(sequenzAblauf.sequenzId, zeile.sequenzId),
+      orderBy: (a, { asc }) => [asc(a.sortierung)],
+      columns: { id: true, typ: true, titel: true, sortierung: true },
+    }),
+    holeVorwissen(
+      bId,
+      seq.klasseId,
+      seq.modulId,
+      seq.modul?.nummer ?? null,
+      seq.startDatum
+    ),
+    holeHinweise(zeile.sequenzId),
+    zeile.typ === "einstieg"
+      ? wirksameMethoden(bId)
+      : Promise.resolve([] as WirksameMethode[]),
+  ]);
+
+  const methoden = methodenAlle.filter((m) => !m.ausgeschaltet);
+  const gewaehlt = optionen?.methodeSchluessel
+    ? methoden.find((m) => m.schluessel === optionen.methodeSchluessel)
+    : undefined;
+
+  const umgebung = alle
+    .map(
+      (a) =>
+        `  ${a.id === zeilenId ? "→" : " "} ${TYP_LABEL[a.typ] ?? a.typ}: ${a.titel}`
+    )
+    .join("\n");
+
+  const hinweis = hinweise.find((h) => h.anker === hinweisAnker(zeile))?.text;
+
+  const methodenTeil =
+    zeile.typ !== "einstieg"
+      ? ""
+      : gewaehlt
+        ? `\nMETHODE (von der Lehrperson gewählt, verbindlich)\n` +
+          `  ${gewaehlt.schluessel} — ${gewaehlt.name}: ${gewaehlt.kurzbeschreibung}\n` +
+          `  Gib diesen Schlüssel im Feld "methode" zurück.\n`
+        : methoden.length > 0
+          ? `\nMETHODEN (wähle GENAU EINE, gib den Schlüssel im Feld "methode" zurück)\n` +
+            gemischt(methoden)
+              .map(
+                (m) =>
+                  `  ${m.schluessel} — ${m.name} (${m.sozialform.join("/")}, ` +
+                  `${m.dauerMin}–${m.dauerMax} min): ${m.kurzbeschreibung}`
+              )
+              .join("\n") +
+            (zeile.methodeSchluessel
+              ? `\n  Bisher stand hier «${zeile.methodeSchluessel}» — wähle eine ANDERE.\n`
+              : "\n")
+          : "";
+
+  const vorwissenTeil =
+    vorwissen.wochen.length > 0
+      ? `\nVORWISSEN DIESER KLASSE (belegt, nicht erfinden)\n` +
+        vorwissen.wochen
+          .map(
+            (w) =>
+              `  KW ${w.kw}${w.ziel ? ` — ${w.ziel}` : ""}: ` +
+              (w.erledigt.length ? w.erledigt.join(", ") : "nichts abgehakt")
+          )
+          .join("\n") +
+        "\n"
+      : "";
+
+  const kompetenzTeil =
+    zeile.typ === "praxisbezug" && vorwissen.kompetenzen.length > 0
+      ? `\nHANDLUNGSKOMPETENZEN dieses Moduls (Kürzel im Text nennen)\n` +
+        vorwissen.kompetenzen
+          .map((k) => `  ${k.kuerzel}: ${k.bezeichnung}`)
+          .join("\n") +
+        "\n"
+      : "";
+
+  const prompt = `Du planst eine Unterrichtssequenz an einer Schweizer Berufsfachschule.
+Es geht um **einen einzigen Schritt** einer bestehenden Lektion, nicht um die ganze Planung.
+
+RAHMEN
+  Klasse: ${seq.klasse.bezeichnung}
+  Modul: ${seq.modul ? `${seq.modul.nummer} – ${seq.modul.bezeichnung ?? ""}` : "unbekannt"}
+  Wochenziel: ${stoff?.ziel ?? "nicht hinterlegt"}
+
+DER BESTEHENDE ABLAUF (→ markiert den Schritt, den du ersetzt)
+${umgebung}
+
+ZU ERSETZEN
+  Art: ${TYP_LABEL[zeile.typ] ?? zeile.typ}
+  Bisher: ${zeile.titel}${zeile.text ? ` — ${zeile.text}` : ""}
+  Mach etwas anderes daraus. Der neue Schritt muss an dieselbe Stelle passen.
+${hinweis ? `\nANWEISUNG DER LEHRPERSON (verbindlich)\n  ${hinweis}\n` : ""}${vorwissenTeil}${kompetenzTeil}${methodenTeil}
+REGELN
+  - Knapp: ein bis zwei Sätze, die Lehrperson überfliegt das im Unterricht.
+  - Erfinde keine Aufgabennummern, LA-Codes oder Slidezahlen.
+  - Gib eine Dauer in Minuten an (5 bis 45).
+${zeile.typ === "einstieg" ? "  - Nenne die gewählte Methode am Anfang des Textes («Think-Pair-Share: …»).\n" : ""}
+Antworte AUSSCHLIESSLICH mit JSON:
+{"titel":"kurzer Titel","text":"ein bis zwei Sätze","minuten":10${
+    zeile.typ === "einstieg" ? ',"methode":"<schluessel>"' : ""
+  }}`;
+
+  // Höhere Temperatur als beim ganzen Ablauf: hier ist Abwechslung der Zweck.
+  const antwort = await callAI(prompt, 0.9);
+  if (!antwort.success) return { ok: false, fehler: antwort.error };
+
+  const neu = parseJsonFromAI<KiSchritt>(antwort.content);
+  const titel = (neu?.titel ?? neu?.text ?? "").trim();
+  if (!neu || !titel) {
+    return { ok: false, fehler: "Die KI hat keinen verwertbaren Schritt geliefert." };
+  }
+
+  // Der Schlüssel muss in der Bibliothek stehen, sonst gilt der bisherige.
+  const geantwortet = String(neu.methode ?? "").trim().toLowerCase();
+  const methodeSchluessel =
+    zeile.typ === "einstieg"
+      ? (gewaehlt?.schluessel ??
+        methoden.find((m) => m.schluessel.toLowerCase() === geantwortet)
+          ?.schluessel ??
+        zeile.methodeSchluessel)
+      : zeile.methodeSchluessel;
+
+  const minuten = plausibleMinuten(neu.minuten);
+
+  await db
+    .update(sequenzAblauf)
+    .set({
+      titel: titel.slice(0, 300),
+      text: neu.text && neu.text.trim() !== titel ? neu.text.trim() : null,
+      // Eine von Hand gesetzte Dauer bleibt: sie ist eine Entscheidung, der
+      // Text nicht.
+      dauerMinuten:
+        zeile.dauerQuelle === "person" ? zeile.dauerMinuten : minuten,
+      dauerQuelle:
+        zeile.dauerQuelle === "person"
+          ? "person"
+          : minuten !== null
+            ? "ki"
+            : null,
+      methodeSchluessel,
+    })
+    .where(eq(sequenzAblauf.id, zeilenId));
+
+  revalidatePath(`/sequenzen/${zeile.sequenzId}`);
+  return { ok: true };
+}
+
+/**
+ * Die Methode am Einstieg von Hand setzen.
+ *
+ * Der Text bleibt stehen — er beschreibt noch die alte Methode. Genau deshalb
+ * steht der Knopf «Schritt neu erzeugen» daneben: die Wahl ist das eine, die
+ * Formulierung das andere.
+ */
+export async function setzeAblaufMethode(
+  bId: string,
+  zeilenId: string,
+  methodeSchluessel: string | null
+) {
+  if (!(await eigeneAblaufZeile(bId, zeilenId))) return;
+
+  if (methodeSchluessel !== null) {
+    const bekannt = (await wirksameMethoden(bId)).some(
+      (m) => m.schluessel === methodeSchluessel
+    );
+    if (!bekannt) return;
+  }
+
+  const [z] = await db
+    .update(sequenzAblauf)
+    .set({ methodeSchluessel })
+    .where(eq(sequenzAblauf.id, zeilenId))
+    .returning({ sequenzId: sequenzAblauf.sequenzId });
+
+  if (z) revalidatePath(`/sequenzen/${z.sequenzId}`);
 }

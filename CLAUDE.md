@@ -851,6 +851,32 @@ gewählten Schlüssel zurück; `sequenz_ablauf.methode_schluessel` hält ihn fes
 - Der Schlüssel statt der Zeilen-ID: die eigene Fassung einer Methode ist
   dieselbe Methode.
 
+### Einzelne Schritte neu erzeugen
+
+Das Festzurren beantwortet «alles **ausser** diesem hier neu», nicht «nur
+diesen einen». Wer am Einstieg feilte, musste zehn Zeilen sperren, erzeugen,
+wieder lösen — und bekam dabei den Rest der Planung neu geschrieben, obwohl er
+eine Zeile meinte. `erzeugeSchritt()` ersetzt deshalb genau eine Zeile.
+
+- **Nur eigene Schritte.** Eine Aufgabe aus dem Material ist eine Tatsache,
+  keine Formulierung; Fakten werden nicht gewürfelt.
+- Der Prompt zeigt den **ganzen Ablauf** mit einer Markierung an der Stelle,
+  die ersetzt wird, dazu den bisherigen Text mit der Auflage, etwas anderes
+  daraus zu machen. Temperatur 0.9 statt 0.6 — hier ist Abwechslung der Zweck.
+- Eine von Hand gesetzte Dauer (`dauerQuelle = "person"`) überlebt; sie ist
+  eine Entscheidung, der Text nicht.
+
+**Die Methode am Einstieg ist wählbar.** Ein Select an der Zeile setzt sie
+direkt (`setzeAblaufMethode()`); der Text bleibt dabei stehen, weil er noch die
+alte Methode beschreibt — dafür steht «Schritt neu erzeugen» daneben.
+
+**Abwechslung beim Erzeugen:** Die Methodenliste geht **gemischt** in den
+Prompt, und die aktuell am Einstieg stehende Methode wird ausdrücklich
+ausgeschlossen. In fester Reihenfolge griff das Modell zuverlässig zur ersten
+passenden — dieselbe Sequenz zweimal erzeugt ergab zweimal dieselbe Methode.
+Eine **gesperrte** Einstiegszeile wird dabei nicht gemieden: eine festgezurrte
+Methode ist eine Entscheidung.
+
 ### Einstieg ausarbeiten
 
 `src/lib/einstieg.ts`, aufgerufen über einen Knopf an der Einstiegszeile.
