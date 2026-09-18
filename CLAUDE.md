@@ -554,6 +554,14 @@ Gruppenpuzzle, die Klasse ist unruhig», «diese Aufgabe erst am Schluss».
   Anweisung entstanden ist.
 - `uebernehmeAblauf()` kopiert die Kommentare **nicht** — wie Fortschritt und
   Notizen bleiben sie pro Klasse.
+- **Kopiert wird dagegen alles, was zur Planung gehört:** Text, Dauer, Methode
+  am Einstieg und das ausgearbeitete Einstiegspaket. Die Dauer fehlte lange;
+  die übernehmende Klasse stand dann ohne Zeitbudget da («0 min · 8 Schritte
+  ohne Zeitangabe») und bekam keine Schnittlinie. Ohne die Methode fand
+  «Einstieg ausarbeiten» dort nichts vor.
+- **`rueckstandKw` wird bewusst nicht kopiert.** Was in der einen Klasse
+  liegengeblieben ist, kann in der anderen planmässig anstehen; den wahren
+  Rückstand rechnet die Zielsequenz selbst.
 
 Migration: `npx tsx src/db/migrate-ablauf-hinweise.ts`
 

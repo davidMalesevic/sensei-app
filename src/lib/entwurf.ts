@@ -11,7 +11,13 @@ import "server-only";
  */
 
 import { db } from "@/db";
-import { sequenz, sequenzAblauf, klasse, type AblaufHinweis } from "@/db/schema";
+import {
+  einstiegPaket,
+  sequenz,
+  sequenzAblauf,
+  klasse,
+  type AblaufHinweis,
+} from "@/db/schema";
 import { and, asc, count, desc, eq, gte, isNotNull, lte, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { callAI, parseJsonFromAI } from "@/lib/ai";
@@ -1483,6 +1489,13 @@ export async function uebernehmeAblauf(
     return { ok: false, fehler: "Die Quellsequenz hat keinen Ablauf." };
   }
 
+  // Der ausgearbeitete Einstieg gehört zur Planung, nicht zum Fortschritt —
+  // er wird deshalb mitgegeben. Kommentare, Übertrag und Notizen bleiben pro
+  // Klasse; das Paket ist Unterrichtsmaterial und für beide dasselbe.
+  const paket = await db.query.einstiegPaket.findFirst({
+    where: eq(einstiegPaket.sequenzId, quelleId),
+  });
+
   await db.delete(sequenzAblauf).where(eq(sequenzAblauf.sequenzId, zielId));
   await db.insert(sequenzAblauf).values(
     quelle.map((z, i) => ({
@@ -1497,8 +1510,37 @@ export async function uebernehmeAblauf(
       refMaterialId: z.refMaterialId,
       refSeiteVon: z.refSeiteVon,
       refSeiteBis: z.refSeiteBis,
+      // Die Dauer fehlte hier: die übernommene Klasse stand ohne Zeitbudget
+      // da, «0 min · 8 Schritte ohne Zeitangabe», und bekam keine
+      // Schnittlinie. Sie gehört zum Ablauf wie der Text.
+      dauerMinuten: z.dauerMinuten,
+      dauerQuelle: z.dauerQuelle,
+      // Ohne die Methode fand «Einstieg ausarbeiten» in der Zielklasse
+      // nichts vor, was auszuarbeiten wäre.
+      methodeSchluessel: z.methodeSchluessel,
+      // `rueckstandKw` bleibt bewusst weg: was in der einen Klasse
+      // liegengeblieben ist, kann in der anderen planmässig anstehen. Den
+      // wahren Rückstand rechnet die Zielsequenz ohnehin selbst.
     }))
   );
+
+  if (paket) {
+    const kopie = {
+      sequenzId: zielId,
+      methodeSchluessel: paket.methodeSchluessel,
+      methodeName: paket.methodeName,
+      dauerMinuten: paket.dauerMinuten,
+      parameter: paket.parameter,
+      zusatzwuensche: paket.zusatzwuensche,
+      inhalt: paket.inhalt,
+      modell: paket.modell,
+      erzeugtAm: paket.erzeugtAm,
+    };
+    await db
+      .insert(einstiegPaket)
+      .values(kopie)
+      .onConflictDoUpdate({ target: einstiegPaket.sequenzId, set: kopie });
+  }
 
   await db
     .update(sequenz)
