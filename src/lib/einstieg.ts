@@ -36,6 +36,7 @@ import { pdfToText } from "@/lib/dokument-text";
 import { getKWFromDateString } from "@/lib/kw";
 import { ladeBibliothek, wirksameMethoden } from "@/lib/methoden";
 import { parameterWerte, rendereVorlage } from "@/lib/methoden-vorlage";
+import { leseDaten } from "@/lib/einstieg-daten";
 import { getOffenenStoff } from "@/lib/rueckstand";
 import { holeVorwissen } from "@/lib/vorwissen";
 import type { StoffBlock } from "@/lib/modulbaum";
@@ -461,11 +462,26 @@ export async function arbeiteEinstiegAus(
 
     const geparst = parseJsonFromAI<unknown>(antwort.content);
     const geprueft = pruefePaket(geparst);
-    if ("ok" in geprueft) {
-      inhalt = geprueft.ok;
-      break;
+    if ("fehler" in geprueft) {
+      letzterFehler = geprueft.fehler;
+      continue;
     }
-    letzterFehler = geprueft.fehler;
+
+    // Hat die Methode ein Schema für `daten_json`, muss auch etwas
+    // Brauchbares darin stehen: aus diesen Daten zeichnet Sensei das Gitter,
+    // die Karten, das Diagramm. Fehlen sie, bleibt von der Methode nur ein
+    // Text übrig — genau das, was sie nicht sein soll.
+    if (methode.datenJsonSchema) {
+      const daten = leseDaten(methode.schluessel, geprueft.ok.daten_json);
+      if (!daten) {
+        letzterFehler =
+          "«daten_json» fehlt oder passt nicht zum vorgegebenen Schema. Gib es als gültigen JSON-String genau nach Schema zurück.";
+        continue;
+      }
+    }
+
+    inhalt = geprueft.ok;
+    break;
   }
 
   if (!inhalt) {

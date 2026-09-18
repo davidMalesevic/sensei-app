@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { InlineLoading } from "@/components/ui/loading";
 import { Notification } from "@/components/ui/notification";
 import { Markdown } from "@/components/markdown";
+import { grafikLabel } from "./einstieg/grafik";
 import type { PaketInhalt } from "@/lib/einstieg";
 import { arbeiteEinstiegAus, loeschePaket } from "../einstieg-actions";
 
@@ -101,6 +102,9 @@ export function EinstiegPaket({
   }
 
   const i = paket.inhalt;
+  // Gitter, Karten und Diagramme stehen in der Ansicht zum Austeilen — hier
+  // genügt der Hinweis, dass es sie gibt.
+  const grafik = grafikLabel(paket.methodeSchluessel, i.daten_json);
   const fuerLernende = i.materialien.filter((m) => m.fuer !== "lehrperson");
   const fuerLehrperson = i.materialien.filter((m) => m.fuer === "lehrperson");
 
@@ -133,6 +137,7 @@ export function EinstiegPaket({
         <span className="type-helper-02 text-text-helper">
           {i.dauer_minuten || paket.dauerMinuten} min · {i.sozialform} ·{" "}
           {i.materialien.length} Materialien
+          {grafik && ` · ${grafik}`}
         </span>
         <span className="ml-auto flex items-center gap-px">
           <Button
@@ -233,6 +238,12 @@ export function EinstiegPaket({
           <Feld titel="Was zu erwarten ist">{i.erwartungshorizont}</Feld>
           <Feld titel="Differenzierung">{i.differenzierung}</Feld>
           <Feld titel="Anschluss">{i.anschluss}</Feld>
+
+          {grafik && (
+            <p className="type-helper-02 text-text-helper">
+              Dazu gehört ein {grafik} — in der Ansicht zum Austeilen.
+            </p>
+          )}
 
           <p className="type-helper-02 text-text-helper">
             Von der KI erzeugt am{" "}

@@ -9,6 +9,7 @@ import { getSequenzById } from "../../actions";
 import { holePaket } from "../../einstieg-actions";
 import { PrintButton } from "../drucken/print-button";
 import { Beamer } from "./beamer";
+import { Grafik } from "./grafik";
 
 /**
  * Der ausgearbeitete Einstieg zum Austeilen und Projizieren.
@@ -129,6 +130,13 @@ export default async function EinstiegPage({
           />
         </section>
       ))}
+
+      {/* Was die Methode an Daten mitbringt: Gitter, Karten, Diagramm. */}
+      <Grafik
+        schluessel={paket.methodeSchluessel}
+        datenJson={i.daten_json}
+        sequenzId={id}
+      />
 
       {/* Alles ab hier ist für die Lehrperson — bewusst auf eigenen Seiten,
           damit es nicht versehentlich mit ausgeteilt wird. */}
