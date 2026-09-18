@@ -22,6 +22,7 @@ Anforderungen und Begründungen stehen in `erstellungsprozess.md`.
 - **@carbon/icons-react** für Icons (`<Icon size={16} />`, nicht `className="h-4 w-4"`)
 - **IBM Plex Sans / IBM Plex Mono** über `next/font/google`
 - **unpdf** für PDF-Textextraktion, **fflate** für den .xlsx-Export
+- **mustache** für die Prompt-Vorlagen der Methodenbibliothek
 - **KI**: Ollama Cloud API (OpenAI-kompatibel)
 - **Anmeldung**: eigene Sessions (scrypt + Cookie), Daten pro Benutzer getrennt
 
@@ -79,7 +80,7 @@ legt einen eigenen an (`benutzer.bildungsplan_id`).
   `"use server"`-Datei.** Er nimmt die Benutzer-ID als ersten Parameter, damit
   der Nachtlauf sie ohne Session hereinreichen kann. Läge er in einer
   Action-Datei, könnte jeder Browser ihn mit einer fremden ID aufrufen.
-  Gleiches gilt für `src/lib/uebertrag.ts`.
+  Gleiches gilt für `src/lib/uebertrag.ts` und `src/lib/einstieg.ts`.
 - Der **Nachtlauf** (`/api/entwuerfe/nacht`) läuft jetzt **pro Konto** in einer
   Schleife; ein Fehler in einem Konto reisst die übrigen nicht mit.
 
@@ -239,6 +240,7 @@ bestehen, tragen aber Carbon-Werte. Daneben stehen die Carbon-eigenen Rollen:
 | `loading.tsx` | Loading / Inline Loading | rotierender Ring, 690 ms linear |
 | `page-header.tsx` | Page Header, Breadcrumb | dazu `SectionHeader` und `DataItem` |
 | `structured-list.tsx` | Structured List | für Listen, die keine Tabelle sind |
+| `switch.tsx` | Toggle (klein) | 32×16 px, grün ein; als `type="submit"` in einer Form Action |
 | `dialog.tsx` | Modal | Fuss: randlose Knöpfe, 64px hoch, teilen sich die Breite |
 | `input` / `textarea` / `select` | Text Input, Text Area, Dropdown | gefüllte Fläche, eine Linie unten |
 
@@ -758,10 +760,10 @@ Gespräch zum Thema». Sensei kennt den Stoff — es hat ihn nur nie hergezeigt.
   «Automatisierung im Betrieb» stand bei EDB24A zweimal hintereinander.
   Modulübergreifend abgefragt, denn eine Methode nutzt sich über Module hinweg ab.
 
-Dazu im Prompt ein **Methodenstrauss** (Think-Pair-Share, Plenumsdiskussion,
-Partnerinterview, Zuordnungsspiel, Wandtafelfussball, Blitzlicht, Fehlersuche,
-Placemat, Museumsrundgang, Ranking, Kartenabfrage — andere ausdrücklich
-erlaubt) und **vier Ankerpunkte**, die von Woche zu Woche wechseln sollen:
+Dazu im Prompt die **Methoden aus der Bibliothek** — bis 09/2026 war das eine
+feste Liste im Code («Methodenstrauss»), jetzt kommen sie aus `/methoden` und
+lassen sich ein- und ausschalten (siehe *Methodenbibliothek*) — und **vier
+Ankerpunkte**, die von Woche zu Woche wechseln sollen:
 
 | Anker | Der Einstieg knüpft an … |
 |---|---|
@@ -771,8 +773,10 @@ erlaubt) und **vier Ankerpunkte**, die von Woche zu Woche wechseln sollen:
 | Stolpersteine | was letzte Woche strittig oder schwierig war |
 
 Die KI nennt die gewählte Methode am Anfang des Textes («Think-Pair-Share:
-…»). Das ist kein Schmuck: der nächste Lauf liest sie unter «zuletzt
-verwendet» wieder und weiss, was er nicht wiederholen soll.
+…») und gibt zusätzlich deren **Schlüssel** zurück, der an der Zeile stehen
+bleibt (`sequenz_ablauf.methode_schluessel`). Das ist kein Schmuck: der
+nächste Lauf liest ihn unter «zuletzt verwendet» wieder und weiss, was er
+nicht wiederholen soll — am Text allein musste er das früher erraten.
 
 **Der Einstieg wird so konkret, wie der Übertrag gepflegt ist.** Steht dort
 «nichts abgehakt», bleibt nur das Wochenziel als Anker; mit abgehakten
@@ -1195,8 +1199,29 @@ ssh -i ~/.ssh/id_ed25519_menuplan root@159.195.241.246 \
 weiter das alte Image. Nach dem Deploy verifizieren, z.B. per
 `curl -s https://sensei.maelu.fun/... | grep <neuer Text>`.
 
-Schema-Änderungen sind durch den SSH-Tunnel meist schon in der Produktions-DB,
-bevor deployt wird — das Migrations-Script muss dort nicht nochmals laufen.
+### Migrationen auf der Produktion
+
+**Die Migration läuft dort nicht nebenbei mit.** Der Satz «steckt durch den
+Tunnel ohnehin schon drin» galt, solange `.env.local` auf die Produktion
+zeigte; seit August 2026 zeigt es auf die **Testinstanz**. Eine Migration
+trifft also zuerst nur die Testdatenbank.
+
+Der Tunnel auf Port 5432 hilft auch nicht weiter: **die Produktionsdatenbank
+hat ein anderes Passwort** als die Testdatenbank, das Script scheitert mit
+`password authentication failed`. Ausgeführt wird deshalb direkt im Container,
+dort braucht es keines:
+
+```bash
+ssh sensei 'cd /opt/sensei-app && docker compose exec -T db psql -U sensei -d sensei -v ON_ERROR_STOP=1' <<'SQL'
+ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...;
+SQL
+```
+
+**Reihenfolge: erst die Migration, dann der Deploy.** Umgekehrt sucht der neue
+Code eine Spalte, die es noch nicht gibt, und die betroffene Seite bricht ab.
+Weil die Scripts idempotent sind (`IF NOT EXISTS`), schadet ein zweiter Lauf
+nichts — das SQL aus `src/db/migrate-*.ts` lässt sich so eins zu eins
+übernehmen.
 
 Auf dem Server ausserhalb des Repos:
 
@@ -1232,6 +1257,7 @@ src/
 │   │   ├── actions.ts            # nur noch Lesen, Löschen, Notiz
 │   │   ├── entwurf-actions.ts    # dünne Hüllen um lib/entwurf.ts
 │   │   ├── uebertrag-actions.ts  # Übertrag + offene Überträge
+│   │   ├── einstieg-actions.ts   # Hüllen um lib/einstieg.ts
 │   │   └── [id]/                 # eine Ansicht, keine Umschaltung
 │   │       ├── context-header.tsx
 │   │       ├── stand-section.tsx        # Übertrag der Vorwoche
@@ -1239,11 +1265,14 @@ src/
 │   │       ├── ablauf-section.tsx       # das Arbeitsergebnis, bearbeitbar
 │   │       ├── geschwister-section.tsx  # Parallelklassen
 │   │       ├── wochenstoff-section.tsx  # Fakten aus dem Modulbaum
+│   │       ├── einstieg-paket.tsx       # der ausgearbeitete Einstieg
+│   │       ├── einstieg/                # Ansicht zum Austeilen + Beamer
 │   │       ├── uebertrag-section.tsx
 │   │       └── notizen-section.tsx
 │   ├── bildungsplan/             # HKB/HK, Module, Modulplan, Aufgabenbaum
 │   └── materialien/              # Material-Übersicht + KI-Task-Extraktion
 │   ├── methoden/                 # Methoden zur Vorwissensaktivierung
+│   │                             #   (Liste, Detail, Bearbeiten, Einlesen)
 │   ├── (auth)/                   # Anmelden, Einladung, Passwort-Link
 │   │                             #   (ohne UI Shell, siehe Proxy-Header)
 │   ├── resultate/                # Smartlearn-Abgaben auswerten (Versuch)
@@ -1252,6 +1281,7 @@ src/
 ├── components/
 │   ├── ui/                       # Primitives, nach Carbon-Spezifikation
 │   ├── shell/ui-shell.tsx        # Carbon UI Shell: Kopfleiste + SideNav
+│   ├── markdown.tsx              # KI-Markdown darstellen (ohne HTML einzufügen)
 │   ├── delete-button.tsx         # Löschen über ein Carbon Danger-Modal
 │   └── sortable-table-head.tsx   # sortierbare Kopfzelle einer DataTable
 ├── lib/

@@ -64,6 +64,27 @@ Modul in Parallelklassen. Einmal planen, dann übernehmen; Fortschritt und
 Notizen bleiben pro Klasse getrennt, damit sichtbar wird, wenn die Klassen
 auseinanderlaufen.
 
+### Methoden und ausgearbeitete Einstiege
+
+62 Methoden zur Aktivierung des Vorwissens liegen als Bibliothek in der App
+(`/methoden`), jede mit ihrer eigenen Anweisung an die KI. Der Generator wählt
+den Einstieg daraus statt aus einer Liste im Code — und wer eine bestimmte
+Methode im Kopf hat, wählt sie direkt an der Ablaufzeile.
+
+Die Bibliothek gehört niemandem: geteilt wie der Bildungsplan. Wer eine
+Methode anpasst, bekommt eine eigene Fassung für sein Konto; ausschalten lässt
+sich jede, was ausgeschaltet ist, plant der Generator nicht ein.
+
+Aus einer Methode entsteht auf Knopfdruck ein ganzer **Einstieg**: Ablauf mit
+Sozialformen und Minuten, projizierbarer Arbeitsauftrag, Arbeitsblatt,
+Auswertungshilfe, Erwartungshorizont, Differenzierung. Zum Austeilen gibt es
+eine eigene Ansicht — Material für die Lernenden zuerst, alles für die
+Lehrperson hinter einem Seitenumbruch.
+
+**Einzelne Schritte lassen sich neu erzeugen**, ohne die übrige Planung
+anzurühren; Aufgaben aus dem Material nicht: eine Aufgabennummer ist eine
+Tatsache, keine Formulierung.
+
 ### Vorbereitungsdurchgang
 
 Ein Cron auf dem Server erzeugt die Entwürfe im Voraus. **Wann das geschieht,
@@ -100,7 +121,7 @@ Einmal-Link, die betroffene Person setzt ihr Passwort selbst.
 | Sprache | TypeScript, React 19 |
 | Oberfläche | IBM Carbon Design System als Token-Schicht über Tailwind v4 und shadcn/ui v4 (`@base-ui/react`) |
 | Datenbank | PostgreSQL 17 mit Drizzle ORM |
-| KI | Ollama Cloud (OpenAI-kompatibel) |
+| KI | Ollama Cloud (OpenAI-kompatibel), Prompt-Vorlagen mit Mustache |
 | Betrieb | Docker Compose auf einem Netcup-VPS, Nginx, Let's Encrypt |
 
 Die Oberfläche folgt Carbon, benutzt aber **nicht** `@carbon/react`: diese

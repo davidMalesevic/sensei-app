@@ -162,6 +162,13 @@ verlinken ins Material. Vorwissensaktivierung, Praxisbezug und Methodik sind
 Der Unterschied wird im Cockpit **markiert**. Versuchsweise — falls sich die
 Markierung als Lärm erweist, fliegt sie wieder raus.
 
+*Nachtrag 09/2026:* Die Vorwissensaktivierung ist inzwischen kein freier
+Vorschlag mehr, sondern eine **Methode aus der Bibliothek** (`/methoden`, 62
+Stück mit eigener Anweisung an die KI). Der Generator wählt eine davon, die
+Lehrperson kann sie wechseln, und auf Knopfdruck entsteht daraus ein ganzer
+Einstieg mit Arbeitsauftrag und Material. Siehe *Methodenbibliothek* in
+`CLAUDE.md`.
+
 ## 6. Interaktionen
 
 ### 6.1 Mittwoch-Durchgang
@@ -241,8 +248,14 @@ Nach Hebelwirkung, nicht nach technischer Bequemlichkeit:
 
 ## 9. Offene Punkte
 
+Stand 09/2026 — was davon erledigt ist, steht dabei. Der Rest dieses Dokuments
+bleibt als Beschluss von damals stehen.
+
 - Modularbeitspläne liegen bisher nur für einen Teil der 6 Module vor.
   Ohne Modulplan gibt es keine KW→Block-Zuordnung — Fallback nötig.
-- Nachtlauf braucht einen Scheduler im Docker-Compose (Cron-Container oder
-  In-App-Scheduler).
-- Slidezuordnung Block→Seitenbereich: einmalige Pflege pro Modul, UI noch offen.
+  *Teilweise gelöst:* Modul 219 liegt von Hand im Seed; ohne Plan bricht die
+  Erzeugung mit klarer Meldung ab, statt eine Lektion zu erfinden.
+- ~~Nachtlauf braucht einen Scheduler im Docker-Compose~~ — **erledigt:** Cron
+  des Hosts, stündlich, Zeitpunkt pro Konto einstellbar.
+- ~~Slidezuordnung Block→Seitenbereich: UI noch offen~~ — **erledigt:** am Block
+  im Bildungsplan, Material trägt zusätzlich ein Block-Etikett.
