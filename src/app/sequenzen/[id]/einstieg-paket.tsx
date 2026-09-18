@@ -241,7 +241,7 @@ export function EinstiegPaket({
 
           {grafik && (
             <p className="type-helper-02 text-text-helper">
-              Dazu gehört ein {grafik} — in der Ansicht zum Austeilen.
+              Dazu gehört: {grafik} — zu sehen in der Ansicht zum Austeilen.
             </p>
           )}
 

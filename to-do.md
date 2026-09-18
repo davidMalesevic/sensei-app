@@ -17,7 +17,8 @@
     * Teil 1: Bibliothek, Bereich `/methoden`, eigene Fassungen, Ein/Aus, Einlesen durch Admins.
     * Teil 2: Methodenwahl im Generator, «Einstieg ausarbeiten» samt Ansicht zum Austeilen und Beamer, Markdown-Darstellung.
     * Nachgezogen: Methodenliste gemischt + aktuelle Methode ausgeschlossen (sonst kam zweimal dieselbe), Methode an der Zeile wählbar, einzelne Schritte neu erzeugen.
-    * **Offen — Teil 3:** Visualisierungen aus `daten_json` (Mindmap, Begriffsnetz, Advance Organizer/Mermaid, Kreuzworträtsel, Memory, Tabu, Jeopardy, Escape-Room) und der Kahoot-Export (.xlsx).
+    * Teil 3: Visualisierungen aus `daten_json` (Mindmap, Begriffsnetz, Advance Organizer/Mermaid, Kreuzworträtsel mit eigenem Gittergenerator, Memory, Tabu, Jeopardy, Escape-Room, Listenformate) und der Kahoot-Export (.xlsx). Erledigt 18.09.2026.
+    * **Noch zu prüfen:** ob Kahoot die erzeugte .xlsx tatsächlich annimmt — das lässt sich nur dort ausprobieren.
 
 
 # done

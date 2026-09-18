@@ -855,6 +855,39 @@ gewählten Schlüssel zurück; `sequenz_ablauf.methode_schluessel` hält ihn fes
 - Der Schlüssel statt der Zeilen-ID: die eigene Fassung einer Methode ist
   dieselbe Methode.
 
+### Grafiken aus `daten_json`
+
+Zwölf der 62 Methoden liefern neben den Texten eine Datenstruktur. Die KI
+liefert **nur die Daten**, gezeichnet wird in `src/app/sequenzen/[id]/einstieg/grafik/`:
+
+| Methode | Was daraus wird |
+|---|---|
+| `mindmap` | Baum als SVG, serverseitig gezeichnet |
+| `concept_map` | Begriffe auf einem Kreis, beschriftete Kanten; Fehlverbindungen nur für die Lehrperson |
+| `advance_organizer` | Mermaid-Diagramm, **erst bei Bedarf nachgeladen** |
+| `kreuzwortraetsel` | echtes Gitter, siehe unten |
+| `memory`, `tabu` | Karten zum Ausschneiden (`break-inside-avoid`) |
+| `jeopardy` | Brett zum Aufdecken, gedruckt die vollständige Tabelle |
+| `stimmt_stimmt_nicht`, `quiz_digital`, `vortest`, `diagnostische_mc`, `escape_room` | Listen mit getrennter Lösung |
+
+- **`leseDaten()` prüft von Hand gegen dieselbe Form wie `daten_json_schema`.**
+  Was nicht passt, fällt weg, statt halb dargestellt zu werden — eine Karte
+  ohne Begriff ist im Unterricht schlimmer als keine Karte.
+- **Die Ausarbeitung fragt nach**, wenn eine Methode ein Schema hat und
+  `daten_json` fehlt oder nicht passt. Sonst bliebe von der Methode nur Text.
+- Das **Kreuzworträtsel-Gitter** rechnet `src/lib/kreuzwortraetsel.ts`: längstes
+  Wort in die Mitte, jedes weitere an den besten Kreuzungspunkt, kein
+  Backtracking, aber **deterministisch** — sonst sähe der zweite Ausdruck
+  anders aus als der erste. Wörter ohne Kreuzung werden ausgewiesen, nicht
+  verschwiegen. Ein Sprachmodell kann keine Buchstaben zählen; ein Gitter, das
+  es beschreibt, geht beim Nachrechnen fast nie auf.
+- **Kahoot-Export:** `/api/einstieg/<sequenzId>/kahoot` schreibt die Quizfragen
+  als .xlsx (`src/lib/kahoot.ts`, mit `fflate` — eine Tabellendatei ist ein ZIP
+  mit XML). Kahoot liest ab Zeile 9, Spalte B die Frage, C–F die Antworten, G
+  das Zeitlimit, H die Nummern der richtigen Antworten (**ab 1**, das Schema
+  der Bibliothek zählt ab 0). Zeitlimits werden auf die erlaubten Werte
+  gezogen. Der Route Handler prüft die Sitzung selbst und antwortet mit 401.
+
 ### Einzelne Schritte neu erzeugen
 
 Das Festzurren beantwortet «alles **ausser** diesem hier neu», nicht «nur

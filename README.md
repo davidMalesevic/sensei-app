@@ -81,6 +81,11 @@ Auswertungshilfe, Erwartungshorizont, Differenzierung. Zum Austeilen gibt es
 eine eigene Ansicht — Material für die Lernenden zuerst, alles für die
 Lehrperson hinter einem Seitenumbruch.
 
+Zwölf Methoden liefern zusätzlich Daten, aus denen Sensei zeichnet: Mindmap,
+Begriffsnetz, Übersichtsdiagramm, Karten zum Ausschneiden, ein Jeopardy-Brett
+und ein Kreuzworträtsel mit echtem Gitter. Quizfragen gibt es als Datei zum
+Import in Kahoot.
+
 **Einzelne Schritte lassen sich neu erzeugen**, ohne die übrige Planung
 anzurühren; Aufgaben aus dem Material nicht: eine Aufgabennummer ist eine
 Tatsache, keine Formulierung.
